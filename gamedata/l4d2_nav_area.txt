@@ -1,0 +1,43 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Addresses"
+		{
+			"TheCount"
+			{
+				"linux"
+				{
+					"signature"	"nav_update_lighting"
+					"read"		"17"
+				}
+			}
+		}
+
+		"Offsets"
+		{
+			"TerrorNavArea::ScriptGetSpawnAttributes"
+			{
+				"linux"		"300"
+			}
+			"CTerrorPlayer::GetFlowDistance::m_flow"
+			{
+				"linux"		"340"
+			}
+		}
+	
+		"Signatures"
+		{
+			"nav_update_lighting"
+			{
+				"library"	"server"
+				"linux"		"@_ZL19nav_update_lightingRK8CCommand"
+			}
+			"TerrorNavArea::FindRandomSpot"
+			{
+				"library"	"server"
+				"linux"		"@_ZNK13TerrorNavArea14FindRandomSpotEv"
+			}
+		}
+	}
+}
