@@ -1,5 +1,3 @@
-## 不支持 Windows
-
 ## 基础插件、依赖
 
 - [SourceMod 1.11](https://www.sourcemod.net/downloads.php?branch=dev)
@@ -14,3 +12,8 @@
 - [Accelerator](https://forums.alliedmods.net/showthread.php?t=277703)
 - [nativevotes](https://github.com/sapphonie/sourcemod-nativevotes-updated)
 - [l4d2_weapons](https://github.com/raziEiL/l4d2_weapons)
+
+## 其他
+
+- 不支持 Windows
+- [Steam 主页](https://steamcommunity.com/profiles/76561198086366224/)
