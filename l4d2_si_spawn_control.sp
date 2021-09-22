@@ -22,6 +22,7 @@
 #define SPITTER	4
 #define JOCKEY	5
 #define CHARGER	6
+#define TANK	8
 #define NUMBER_OF_ATTEMPTS 30
 
 static const char g_sSpecialName[][] =
@@ -357,12 +358,12 @@ public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadca
 		int userid = event.GetInt("userid");
 		int client = GetClientOfUserId(userid);
 
-		if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3 && IsFakeClient(client))
+		if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3)
 		{
 			int iZombieClass = GetZombieClass(client);
 			switch (iZombieClass)
 			{
-				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
+				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER, TANK:
 				{
 					delete g_hKillSITimer[client];
 					SpecialDeathSpawn(g_fSpawnTime);
@@ -436,7 +437,7 @@ void SpawnSpecial()
 				if (!bFindSpawnPos || !bSpawnSuccess)
 				{
 					LogToFileEx_Debug("产生特感失败, 重新产生, bFindSpawnPos: %b, bSpawnSuccess: %b", bFindSpawnPos, bSpawnSuccess);
-					CreateTimer(0.5, ReSpawnSpecial_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
+					CreateTimer(1.0, ReSpawnSpecial_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 				}
 			}
 			else LogToFileEx_Debug("寻找产生特感类型失败, 不再产生, iSpawnClass: %i, 当前类型特感数量和限制: %i/%i", iSpawnClass, GetSICountByClass(iSpawnClass), GetSpecialLimit(iSpawnClass));
@@ -715,7 +716,7 @@ int FindSpawnClass()
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
 		{
 			switch (GetZombieClass(i))
 			{
@@ -962,18 +963,16 @@ int GetSICountByClass(int iZombieClass)
 	return iCount;
 }
 
-//本插件不处理真实特感玩家，如果有真实特感玩家可能会超出本插件限制的最大特感数。
-//同样，也不处理Tank和witch。
 int GetAliveSpecialsTotal() 
 {
 	int iCount;
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
 		{
 			switch (GetZombieClass(i))
 			{
-				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
+				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER, TANK:
 				{
 					iCount++;
 				}
