@@ -11,7 +11,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 char g_sLogPath[PLATFORM_MAX_PATH], g_sConfigPath[PLATFORM_MAX_PATH];
 bool g_bFinalMap, g_bOfficialMap;
@@ -42,10 +42,10 @@ enum
 //https://github.com/raziEiL/l4d2_weapons/blob/master/scripting/include/l4d2_weapons.inc
 static const char g_sItems[][][] = 
 {
-	{"1",	"true",		"false",	"weapon_first_aid_kit",				"models/w_models/weapons/w_eq_medkit.mdl"},					//0 急救包
-	{"1",	"true",		"false",	"weapon_pain_pills",				"models/w_models/weapons/w_eq_painpills.mdl"},				//1 止痛药
-	{"1",	"true",		"false",	"weapon_adrenaline",				"models/w_models/weapons/w_eq_adrenaline.mdl"},				//2 肾上腺素
-	{"1",	"true",		"false",	"weapon_defibrillator",				"models/w_models/weapons/w_eq_defibrillator.mdl"},			//3 电击除颤器
+	{"1",	"true",		"true",		"weapon_first_aid_kit",				"models/w_models/weapons/w_eq_medkit.mdl"},					//0 急救包
+	{"1",	"true",		"true",		"weapon_pain_pills",				"models/w_models/weapons/w_eq_painpills.mdl"},				//1 止痛药
+	{"1",	"true",		"true",		"weapon_adrenaline",				"models/w_models/weapons/w_eq_adrenaline.mdl"},				//2 肾上腺素
+	{"1",	"true",		"true",		"weapon_defibrillator",				"models/w_models/weapons/w_eq_defibrillator.mdl"},			//3 电击除颤器
 	{"1",	"true",		"true",		"weapon_molotov",					"models/w_models/weapons/w_eq_molotov.mdl"},				//4 燃烧瓶
 	{"1",	"true",		"true",		"weapon_pipe_bomb",					"models/w_models/weapons/w_eq_pipebomb.mdl"},				//5 土制炸弹
 	{"1",	"true",		"true",		"weapon_vomitjar",					"models/w_models/weapons/w_eq_bile_flask.mdl"},				//6 胆汁瓶
@@ -66,8 +66,8 @@ static const char g_sItems[][][] =
 	{"1",	"false",	"false",	"weapon_sniper_scout",				"models/w_models/weapons/w_sniper_scout.mdl"},				//21 鸟狙
 	{"1",	"false",	"false",	"weapon_smg_mp5",					"models/w_models/weapons/w_smg_mp5.mdl"},					//22 MP5
 	{"1",	"false",	"false",	"weapon_rifle_sg552",				"models/w_models/weapons/w_rifle_sg552.mdl"},				//23 SG552
-	{"1",	"true",		"true",		"weapon_grenade_launcher",			"models/w_models/weapons/w_grenade_launcher.mdl"},			//24 榴弹发射器	
-	{"1",	"true",		"true",		"weapon_rifle_m60",					"models/w_models/weapons/w_m60.mdl"},						//25 M60
+	{"1",	"true",		"false",	"weapon_grenade_launcher",			"models/w_models/weapons/w_grenade_launcher.mdl"},			//24 榴弹发射器	
+	{"1",	"true",		"false",	"weapon_rifle_m60",					"models/w_models/weapons/w_m60.mdl"},						//25 M60
 	{"1",	"true",		"false",	"weapon_chainsaw",					"models/weapons/melee/w_chainsaw.mdl"},						//26 电锯
 
 	{"2",	"false",	"false",	"weapon_gascan",					"models/props_junk/gascan001a.mdl"},						//27 汽油箱
@@ -107,7 +107,9 @@ public void OnPluginStart()
 	HookEvent("round_start", Event_RoundStart_C4, EventHookMode_PostNoCopy);
 	HookEvent("map_transition", Event_MapTransition, EventHookMode_PostNoCopy);
 
-	RegAdminCmd("sm_item_test", Item_Test, ADMFLAG_ROOT);
+	RegAdminCmd("sm_limit_item", Cmd_LimitItems, ADMFLAG_ROOT);
+	RegAdminCmd("sm_spawn_item", Cmd_SpawnItem, ADMFLAG_ROOT);
+	RegAdminCmd("sm_spawn_all_item", Cmd_SpawnAllItem, ADMFLAG_ROOT);
 
 	Initialization();
 }
@@ -638,11 +640,6 @@ public Action SpawnGun_Timer(Handle timer)
 	}
 }
 
-public Action Item_Test(int client, int args)
-{
-	ProcessEntity();
-	LimitItem();
-}
 
 char CurrentMap()
 {
@@ -678,13 +675,21 @@ int SpawnItem(const char[] sItemName, const float fPos[3], float fAng[3] = {0.0,
 				DispatchKeyValue(iEntIndex, "rendermode", "3");
 				DispatchKeyValue(iEntIndex, "disableshadows", "1");
 
+				if (iItemNum == 24 || iItemNum == 25)
+				{
+					DispatchKeyValue(iEntIndex, "count", "1");
+				}
+
 				if (bHasCount)
 				{
 					switch (iItemNum)
 					{
-						case 24, 25:
+						case 0, 1, 2, 3:
 						{
-							DispatchKeyValue(iEntIndex, "count", "1");
+							DataPack hPack = new DataPack();
+							hPack.WriteCell(iEntIndex);
+							hPack.WriteCell(iCount);
+							RequestFrame(SetCount_OnNextFrame, hPack);
 						}
 						default:
 						{
@@ -707,7 +712,7 @@ int SpawnItem(const char[] sItemName, const float fPos[3], float fAng[3] = {0.0,
 						case 22:		iAmmo = FindConVar("ammo_smg_max").IntValue;
 						case 23:		iAmmo = FindConVar("ammo_assaultrifle_max").IntValue;
 					}
-					if (iAmmo > 0) SetEntProp(iEntIndex, Prop_Send, "m_iExtraPrimaryAmmo", iAmmo, 4);
+					if (iAmmo > 0) SetEntProp(iEntIndex, Prop_Send, "m_iExtraPrimaryAmmo", iAmmo);
 				}
 
 				SetEntityMoveType(iEntIndex, MOVETYPE_NONE);
@@ -742,6 +747,16 @@ int SpawnItem(const char[] sItemName, const float fPos[3], float fAng[3] = {0.0,
 	return iEntIndex;
 }
 
+// 为什么医疗物品 DispatchKeyValue count 无效??
+public void SetCount_OnNextFrame(DataPack hPack)
+{
+	hPack.Reset();
+	int iEntIndex = hPack.ReadCell();
+	int iCount = hPack.ReadCell();
+	delete hPack;
+	SetEntProp(iEntIndex, Prop_Data, "m_itemCount", iCount);
+}
+
 void GiveItemByName(int client, const char[] sName)
 {
 	CheatCommand(client, "give", sName);
@@ -762,6 +777,51 @@ void StrToLowerCase(char[] str)
 	{
 		str[i] = CharToLower(str[i]);
 	}
+}
+
+public Action Cmd_LimitItems(int client, int args)
+{
+	ProcessEntity();
+	LimitItem();
+}
+
+public Action Cmd_SpawnItem(int client, int args)
+{
+	if (args == 2)
+	{
+		char sItemName[64];
+		GetCmdArg(1, sItemName, sizeof(sItemName));
+
+		float fPos[3];
+		GetClientEyePosition(client, fPos);
+
+		char sCount[4];
+		GetCmdArg(2, sCount, sizeof(sCount));
+		int iCount = StringToInt(sCount);
+
+		SpawnItem(sItemName, fPos, _, iCount);
+	}
+	else PrintToChat(client, "使用 sm_spawn_item <物品名字> <数量>");
+}
+
+public Action Cmd_SpawnAllItem(int client, int args)
+{
+	if (args == 1)
+	{
+		float fPos[3];
+		GetClientEyePosition(client, fPos);
+
+		char sCount[4];
+		GetCmdArg(1, sCount, sizeof(sCount));
+		int iCount = StringToInt(sCount);
+
+		for (int i = 0; i < sizeof(g_sItems); i++)
+		{
+			SpawnItem(g_sItems[i][ITEM_NAME], fPos, _, iCount);
+			fPos[0] += 50.0;
+		}
+	}
+	else PrintToChat(client, "使用 sm_spawn_all_item <数量>");
 }
 
 stock void LogToFileEx_Debug(const char[] format, any ...)
