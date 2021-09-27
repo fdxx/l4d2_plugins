@@ -11,7 +11,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.0.5"
+#define VERSION "2.0.6"
 
 #define GAMEDATA "l4d2_nav_area"
 #define MAX_VALID_POS 3000
@@ -649,7 +649,7 @@ public bool TraceFilter(int entity, int contentsMask)
 		return false;
 	}
 	
-	static char sEntClassName[256];
+	static char sEntClassName[16];
 	if (GetEdictClassname(entity, sEntClassName, sizeof(sEntClassName)))
 	{
 		if (strcmp(sEntClassName, "infected", false) == 0 || strcmp(sEntClassName, "witch", false) == 0 || strcmp(sEntClassName, "prop_physics", false) == 0)
