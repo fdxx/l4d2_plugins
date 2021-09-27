@@ -11,7 +11,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.0.6"
+#define VERSION "2.0.7"
 
 #define GAMEDATA "l4d2_nav_area"
 #define MAX_VALID_POS 3000
@@ -1020,9 +1020,9 @@ public Action L4D_OnGetScriptValueInt(const char[] key, int &retVal)
 public Action kickbot(Handle timer, int userid)
 {
 	int client = GetClientOfUserId(userid);
-	if (IsClientInGame(client) && (!IsClientInKickQueue(client)))
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && IsFakeClient(client))
 	{
-		if (IsFakeClient(client)) KickClient(client);
+		if (!IsClientInKickQueue(client)) KickClient(client);
 	}
 }
 
