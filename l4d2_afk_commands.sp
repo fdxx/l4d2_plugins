@@ -6,7 +6,7 @@
 #include <left4dhooks>
 #include <multicolors>
 
-#define VERSION "2.6"
+#define VERSION "2.7"
 
 ConVar CvarAFKDelay, CvarBlockIdle;
 float g_fAFKDelay;
@@ -114,7 +114,7 @@ public Action JoinSurvivor(int client, int args)
 {
 	if (IsRealClient(client) && GetClientTeam(client) != 2)
 	{
-		int bot = GetAnyRandomBot();
+		int bot = GetSurBot();
 		if (bot >= 1)
 		{
 			ChangeClientTeam(client, 0);
@@ -157,11 +157,12 @@ bool IsRealClient(int client)
 	return (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client));
 }
 
-int GetAnyRandomBot()
+int GetSurBot()
 {
-	int client;
+	int bot;
 
-	ArrayList aClients = new ArrayList();
+	ArrayList aAliveBots = new ArrayList();
+	ArrayList aDeadBots = new ArrayList();
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -169,19 +170,26 @@ int GetAnyRandomBot()
 		{
 			if (!HasIdlePlayer(i))
 			{
-				aClients.Push(i);
+				if (IsPlayerAlive(i)) aAliveBots.Push(i);
+				else aDeadBots.Push(i);
 			}
 		}
 	}
 
-	if (aClients.Length > 0)
+	// 活着的Bot优先
+	if (aAliveBots.Length > 0)
 	{
-		client = aClients.Get(GetRandomInt(0, aClients.Length - 1));
+		bot = aAliveBots.Get(GetRandomInt(0, aAliveBots.Length - 1));
+	}
+	else if (aDeadBots.Length > 0)
+	{
+		bot = aDeadBots.Get(GetRandomInt(0, aDeadBots.Length - 1));
 	}
 	
-	delete aClients;
+	delete aAliveBots;
+	delete aDeadBots;
 
-	return client;
+	return bot;
 }
 
 bool HasIdlePlayer(int iBot)
