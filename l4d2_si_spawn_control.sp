@@ -11,7 +11,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.0.7"
+#define VERSION "2.1"
 
 #define GAMEDATA "l4d2_nav_area"
 #define MAX_VALID_POS 3000
@@ -33,7 +33,7 @@ static const char g_sSpecialName[][] =
 ConVar CvarHunterLimit, CvarJockeyLimit, CvarSmokerLimit, CvarBoomerLimit, CvarSpitterLimit, CvarChargerLimit, CvarMaxSILimit;
 ConVar CvarSpawnTime, CvarFirstSpawnTime, CvarKillSITime;
 ConVar CvarBlockSpawn;
-ConVar CvarRadicalSpawn, CvarNormalSpawnRange, CvarRadicalSpawnDist;
+ConVar CvarRadicalSpawn, CvarNormalSpawnRange;
 
 int g_iHunterLimit, g_iJockeyLimit, g_iSmokerLimit, g_iBoomerLimit, g_iSpitterLimit, g_iChargerLimit, g_iMaxSILimit;
 float g_fSpawnTime, g_fFirstSpawnTime, g_fKillSITime;
@@ -55,7 +55,13 @@ Handle g_hSDKFindRandomSpot;
 int g_iSpawnAttributesOffset, g_iFlowDistanceOffset, g_iNavAreaCount;
 Address g_pTheNavAreas;
 
-ArrayList g_aClientsArray;
+ArrayList g_aClientsArray, g_aSurPosData;
+
+enum struct g_esSurPosData
+{
+	float fPos[3];
+	float fFlow;
+}
 
 //https://github.com/KitRifty/sourcepawn-navmesh/blob/master/addons/sourcemod/scripting/include/navmesh.inc
 //https://developer.valvesoftware.com/wiki/List_of_L4D_Series_Nav_Mesh_Attributes:zh-cn
@@ -150,9 +156,7 @@ public Plugin myinfo =
 {
 	name = "L4D2 Special infected spawn control",
 	author = "fdxx",
-	description = "",
 	version = VERSION,
-	url = ""
 };
 
 public void OnPluginStart()
@@ -174,10 +178,9 @@ public void OnPluginStart()
 	CvarBlockSpawn = CreateConVar("l4d2_si_spawn_control_block_other_si_spawn", "1", "阻止本插件以外的特感产生 (通过L4D_OnSpawnSpecial限制)", FCVAR_NONE, true, 0.0, true, 1.0);
 
 	//阴间找位对服务器性能要求比较高，谨慎使用
-	CvarRadicalSpawn = CreateConVar("l4d2_si_spawn_control_radical_spawn", "0", "开启特感阴间找位", FCVAR_NONE, true, 0.0, true, 1.0);
+	CvarRadicalSpawn = CreateConVar("l4d2_si_spawn_control_radical_spawn", "0", "开启特感阴间找位, 将会在距离生还者最近的地方产生", FCVAR_NONE, true, 0.0, true, 1.0);
 	CvarNormalSpawnRange = CreateConVar("l4d2_si_spawn_control_spawn_range_normal", "1500", "普通特感产生范围，从1到这个范围随机产生", FCVAR_NONE, true, 1.0);
-	CvarRadicalSpawnDist = CreateConVar("l4d2_si_spawn_control_spawn_dist_radical", "1700.0", "阴间特感找位距离, 将会在距离生还者最近的地方产生", FCVAR_NONE, true, 1.0);
-
+	
 	GetCvars();
 
 	CvarHunterLimit.AddChangeHook(ConVarChanged);
@@ -194,7 +197,6 @@ public void OnPluginStart()
 
 	CvarRadicalSpawn.AddChangeHook(ConVarChanged);
 	CvarNormalSpawnRange.AddChangeHook(ConVarChanged);
-	CvarRadicalSpawnDist.AddChangeHook(ConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("round_end", Event_RoundEnd, EventHookMode_PostNoCopy);
@@ -213,6 +215,7 @@ public void OnPluginStart()
 	TweakSettings();
 
 	g_aClientsArray = new ArrayList();
+	g_aSurPosData = new ArrayList(sizeof(g_esSurPosData));
 }
 
 public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -246,7 +249,6 @@ void GetCvars()
 
 	g_bRadicalSpawn = CvarRadicalSpawn.BoolValue;
 	g_iNormalSpawnRange = CvarNormalSpawnRange.IntValue;
-	g_fSpawnDist = CvarRadicalSpawnDist.FloatValue;
 }
 
 public void OnConfigsExecuted()
@@ -314,6 +316,7 @@ void Reset()
 
 	g_iSpawnTimerNum = 0;
 	g_bCanSpawn = false;
+	g_fSpawnDist = 1500.0;
 }
 
 public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
@@ -322,7 +325,7 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 
 	delete g_hFirstSpawnSITimer;
 	g_hFirstSpawnSITimer = CreateTimer(g_fFirstSpawnTime, FirstSpawnSI_Timer);
-
+	
 	return Plugin_Continue;
 }
 
@@ -421,6 +424,11 @@ void SpawnSpecial()
 				if (g_bRadicalSpawn && g_iNavAreaCount > 0)
 				{
 					bFindSpawnPos = GetSpawnPosByNavArea(fSpawnPos);
+					if (!bFindSpawnPos)
+					{
+						g_fSpawnDist = 1500.0;
+						//LogToFileEx(g_sLogPath, "找位失败，暂时重置g_fSpawnDist");
+					}
 				}
 				else
 				{
@@ -463,7 +471,8 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 	bFindValidPos = false;
 	iPosCount = 0;
 	iValidPosCount = 0;
-	
+	GetSurPos();
+
 	for (int i = 1; i < g_iNavAreaCount; i++)
 	{
 		pThisArea = view_as<Address>(LoadFromAddress(g_pTheNavAreas + view_as<Address>(i * 4), NumberType_Int32));
@@ -475,26 +484,22 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 				if (0.0 < fThisFlowDist < g_fMapMaxFlowDist)
 				{
 					pThisArea.GetSpawnPos(fThisSpawnPos);
-					if (IsNearTheSur(fThisFlowDist, fThisSpawnPos, fThisDist))
+					if (IsNearAndInvisible(fThisFlowDist, fThisSpawnPos, fThisDist))
 					{
 						iPosCount++;
-						if (!IsSurVisible(fThisSpawnPos))
+						if (!IsWillStuck(fThisSpawnPos))
 						{
-							if (!IsWillStuck(fThisSpawnPos))
+							if (iValidPosCount < MAX_VALID_POS)
 							{
-								if (iValidPosCount < MAX_VALID_POS)
-								{
-									fSpawnData[iValidPosCount][0] = fThisSpawnPos[0];
-									fSpawnData[iValidPosCount][1] = fThisSpawnPos[1];
-									fSpawnData[iValidPosCount][2] = fThisSpawnPos[2];
-									fSpawnData[iValidPosCount][3] = fThisDist;
-									iValidPosCount++;
-								}
-								else LogError("超出 MAX_VALID_POS 最大限制");
+								fSpawnData[iValidPosCount][0] = fThisSpawnPos[0];
+								fSpawnData[iValidPosCount][1] = fThisSpawnPos[1];
+								fSpawnData[iValidPosCount][2] = fThisSpawnPos[2];
+								fSpawnData[iValidPosCount][3] = fThisDist;
+								iValidPosCount++;
 							}
-							//else LogToFileEx_Debug("无效点位，会卡住(%.0f %.0f %.0f)", fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
+							else LogError("超出 MAX_VALID_POS 最大限制");
 						}
-						//else LogToFileEx_Debug("无效点位，会被看见(%.0f %.0f %.0f)", fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
+						//else LogToFileEx_Debug("无效点位，会卡住(%.0f %.0f %.0f)", fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
 					}
 				}
 			}
@@ -517,6 +522,10 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 		fSpawnPos[0] = fSpawnData[iNum][0];
 		fSpawnPos[1] = fSpawnData[iNum][1];
 		fSpawnPos[2] = fSpawnData[iNum][2];
+
+		//将找位距离设置为最后产生的距离再增加一点
+		g_fSpawnDist = fSpawnData[iNum][3] + 400.0;
+		//PrintToServer("fSpawnData[%i][3] = %.1f, g_fSpawnDist = %.1f", iNum, fSpawnData[iNum][3], g_fSpawnDist);
 
 		bFindValidPos = true;
 	}
@@ -542,63 +551,43 @@ bool IsValidFlags(int iFlags)
 	return false;
 }
 
-bool IsNearTheSur(const float fAreaFlow, const float fAreaSpawnPos[3], float &fDist)
+void GetSurPos()
 {
-	static float fSurPos[3];
+	g_aSurPosData.Clear();
+	static g_esSurPosData SurPosData;
 
-	for (int client = 1; client <= MaxClients; client++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client) && !GetEntProp(client, Prop_Send, "m_isIncapacitated"))
+		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
 		{
-			// L4D2_NavAreaTravelDistance 在循环里面大量使用会导致服务器奔溃
-			// fAreaFlow 在某些特殊点位获取不正确，因此使用 GetVectorDistance 和 L4D2Direct_GetFlowDistance 双重判断
+			GetClientEyePosition(i, SurPosData.fPos);
+			SurPosData.fFlow = L4D2Direct_GetFlowDistance(i);
+			g_aSurPosData.PushArray(SurPosData);
+		}
+	}
+}
 
-			GetClientAbsOrigin(client, fSurPos);
-			fDist = GetVectorDistance(fSurPos, fAreaSpawnPos);
+bool IsNearAndInvisible(const float fAreaFlow, const float fAreaSpawnPos[3], float &fDist)
+{
+	static float fTargetPos[3];
+	static g_esSurPosData SurPosData;
+
+	for (int i = 0; i < g_aSurPosData.Length; i++)
+	{
+		g_aSurPosData.GetArray(i, SurPosData);
+		if (FloatAbs(fAreaFlow - SurPosData.fFlow) <= g_fSpawnDist)
+		{
+			fDist = GetVectorDistance(SurPosData.fPos, fAreaSpawnPos);
 			if (fDist <= g_fSpawnDist)
 			{
-				if (FloatAbs(fAreaFlow - L4D2Direct_GetFlowDistance(client)) <= g_fSpawnDist)
+				fTargetPos[0] = fAreaSpawnPos[0];
+				fTargetPos[1] = fAreaSpawnPos[1];
+				fTargetPos[2] = fAreaSpawnPos[2] + 62.0; //眼睛位置
+
+				if (!IsVisible(SurPosData.fPos, fTargetPos))
 				{
 					return true;
 				}
-			}
-		}
-	}
-	return false;
-}
-
-//实际上浮点也可以正确排序。
-public int SortAscendingByDist(int[] x, int[] y, const int[][] array, Handle hndl)
-{
-	if (x[3] < y[3]) return -1;
-	else if (x[3] > y[3]) return 1;
-	else return 0;
-}
-
-stock void CheckArray(const float[][] fArray, int size)
-{
-	for (int i; i < size; i++)
-	{
-		LogToFileEx_Debug("fArray[%i][3] = %f", i, fArray[i][3]);
-	}
-}
-
-bool IsSurVisible(const float fPos[3])
-{
-	static float fTargetPos[3], fSurPos[3];
-
-	fTargetPos[0] = fPos[0];
-	fTargetPos[1] = fPos[1];
-	fTargetPos[2] = fPos[2] + 62.0; //眼睛位置
-
-	for (int client = 1; client <= MaxClients; client++)
-	{
-		if (IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client))
-		{
-			GetClientEyePosition(client, fSurPos);
-			if (IsVisible(fSurPos, fTargetPos))
-			{
-				return true;
 			}
 		}
 	}
@@ -684,6 +673,22 @@ public bool TraceFilter_Stuck(int entity, int contentsMask)
 		return false;
 	}
 	return true;
+}
+
+//实际上浮点也可以正确排序。
+public int SortAscendingByDist(int[] x, int[] y, const int[][] array, Handle hndl)
+{
+	if (x[3] < y[3]) return -1;
+	else if (x[3] > y[3]) return 1;
+	else return 0;
+}
+
+stock void CheckArray(const float[][] fArray, int size)
+{
+	for (int i; i < size; i++)
+	{
+		LogToFileEx_Debug("fArray[%i][3] = %f", i, fArray[i][3]);
+	}
 }
 
 int GetRandomSurvivor()
@@ -903,41 +908,36 @@ public Action ShowSIHud_Timer(Handle timer, int client)
 {
 	if (g_bShowSIhud[client] && IsRealClient(client) && IsAdminClient(client))
 	{
-		Handle Hud = CreatePanel();
-		SetPanelTitle(Hud, "特感Hud");
-		DrawPanelText(Hud, "__________");
+		char sBuffer[64];
+		Panel panel = new Panel();
 
-		char SmokerHud[64];
-		Format(SmokerHud, sizeof(SmokerHud), "Smoker数量: %i", GetSICountByClass(SMOKER));
-		DrawPanelText(Hud, SmokerHud);
+		panel.SetTitle("特感面板");
+		panel.DrawText("__________");
 
-		char BoomerHud[64];
-		Format(BoomerHud, sizeof(BoomerHud), "Boomer数量: %i", GetSICountByClass(BOOMER));
-		DrawPanelText(Hud, BoomerHud);
+		FormatEx(sBuffer, sizeof(sBuffer), "Smoker数量: %i", GetSICountByClass(SMOKER));
+		panel.DrawText(sBuffer);
 
-		char HunterHud[64];
-		Format(HunterHud, sizeof(HunterHud), "Hunter数量: %i", GetSICountByClass(HUNTER));
-		DrawPanelText(Hud, HunterHud);
+		FormatEx(sBuffer, sizeof(sBuffer), "Boomer数量: %i", GetSICountByClass(BOOMER));
+		panel.DrawText(sBuffer);
 
-		char SpitterHud[64];
-		Format(SpitterHud, sizeof(SpitterHud), "Spitter数量: %i", GetSICountByClass(SPITTER));
-		DrawPanelText(Hud, SpitterHud);
+		FormatEx(sBuffer, sizeof(sBuffer), "Hunter数量: %i", GetSICountByClass(HUNTER));
+		panel.DrawText(sBuffer);
 
-		char JockeyHud[64];
-		Format(JockeyHud, sizeof(JockeyHud), "Jockey数量: %i", GetSICountByClass(JOCKEY));
-		DrawPanelText(Hud, JockeyHud);
+		FormatEx(sBuffer, sizeof(sBuffer), "Spitter数量: %i", GetSICountByClass(SPITTER));
+		panel.DrawText(sBuffer);
 
-		char ChargerHud[64];
-		Format(ChargerHud, sizeof(ChargerHud), "Charger数量: %i", GetSICountByClass(CHARGER));
-		DrawPanelText(Hud, ChargerHud);
+		FormatEx(sBuffer, sizeof(sBuffer), "Jockey数量: %i", GetSICountByClass(JOCKEY));
+		panel.DrawText(sBuffer);
 
-		char MaxSIHud[64];
-		Format(MaxSIHud, sizeof(MaxSIHud), "全部特感数量: %i", GetAliveSpecialsTotal());
-		DrawPanelText(Hud, MaxSIHud);
+		FormatEx(sBuffer, sizeof(sBuffer), "Charger数量: %i", GetSICountByClass(CHARGER));
+		panel.DrawText(sBuffer);
 
-		SendPanelToClient(Hud, client, NullMenuHandler, 2);
-		CloseHandle(Hud);
+		FormatEx(sBuffer, sizeof(sBuffer), "全部特感数量: %i", GetAliveSpecialsTotal());
+		panel.DrawText(sBuffer);
 
+		panel.Send(client, NullMenuHandler, 1);
+		delete panel;
+		
 		return Plugin_Continue;
 	}
 	else
@@ -1082,6 +1082,9 @@ public Action Cmd_CvarPrint(int client, int args)
 {
 	ReplyToCommand(client, "--------------");
 	ReplyToCommand(client, "L4D2 Special infected spawn control Cvar:");
+	char sVer[12];
+	FindConVar("l4d2_si_spawn_control_version").GetString(sVer, sizeof(sVer));
+	ReplyToCommand(client, "l4d2_si_spawn_control_version = %s", sVer);
 	ReplyToCommand(client, "l4d2_si_spawn_control_hunter_limit = %i", FindConVar("l4d2_si_spawn_control_hunter_limit").IntValue);
 	ReplyToCommand(client, "l4d2_si_spawn_control_jockey_limit = %i", FindConVar("l4d2_si_spawn_control_jockey_limit").IntValue);
 	ReplyToCommand(client, "l4d2_si_spawn_control_smoker_limit = %i", FindConVar("l4d2_si_spawn_control_smoker_limit").IntValue);
@@ -1095,7 +1098,6 @@ public Action Cmd_CvarPrint(int client, int args)
 	ReplyToCommand(client, "l4d2_si_spawn_control_block_other_si_spawn = %i", FindConVar("l4d2_si_spawn_control_block_other_si_spawn").IntValue);
 	ReplyToCommand(client, "l4d2_si_spawn_control_radical_spawn = %b", FindConVar("l4d2_si_spawn_control_radical_spawn").BoolValue);
 	ReplyToCommand(client, "l4d2_si_spawn_control_spawn_range_normal = %i", FindConVar("l4d2_si_spawn_control_spawn_range_normal").IntValue);
-	ReplyToCommand(client, "l4d2_si_spawn_control_spawn_dist_radical = %.1f", FindConVar("l4d2_si_spawn_control_spawn_dist_radical").FloatValue);
 	ReplyToCommand(client, "--------------");
 }
 

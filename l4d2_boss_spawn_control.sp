@@ -12,7 +12,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.0.5"
+#define VERSION "2.1"
 
 #define GAMEDATA "l4d2_nav_area"
 #define BOSS_SURVIVOR_SAFE_DISTANCE 2200.0	//boss和生还者之间的安全距离(考虑Flow转换)
@@ -25,8 +25,6 @@ ConVar CvarTankSpawnEnable, CvarWitchSpawnEnable;
 ConVar CvarBlockTankSpawn, CvarBlockWitchSpawn;
 bool g_bTankSpawnEnable, g_bWitchSpawnEnable;
 bool g_bBlockTankSpawn, g_bBlockWitchSpawn;
-
-int g_iTankCount, g_iWitchCount;
 
 float g_fTankSpawnFlow, g_fWitchSpawnFlow;
 float g_fTankSpawnPos[3], g_fWitchSpawnPos[3];
@@ -404,11 +402,9 @@ void Reset()
 	g_bLeftSafeArea = false;
 
 	delete g_hTankFlowCheckTimer;
-	g_iTankCount = 0;
 	g_bCanSpawnTank = false;
 
 	delete g_hWitchFlowCheckTimer;
-	g_iWitchCount = 0;
 	g_bCanSpawnWitch = false;
 
 	g_bStaticTankMap = true;
@@ -565,39 +561,22 @@ void PrintBossflow()
 
 public Action L4D_OnSpawnTank(const float vecPos[3], const float vecAng[3])
 {
-	if (g_bTankSpawnEnable)
+	if (!g_bCanSpawnTank && g_bBlockTankSpawn && !g_bStaticTankMap)
 	{
-		if (!g_bCanSpawnTank && g_bBlockTankSpawn && !g_bStaticTankMap)
-		{
-			//LogToFileEx_Debug("不是本插件允许产生的Tank, 已阻止");
-			return Plugin_Handled;
-		}
-
-		EmitSoundToAll("ui/pickup_secret01.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.8);
-		CPrintToChatAll("{red}[{default}!{red}] {olive}Tank {default}has spawned!");
-
-		g_iTankCount++;
-		//LogToFileEx_Debug("已产生Tank %i 个", g_iTankCount);
-
-		return Plugin_Continue;
+		return Plugin_Handled;
 	}
+
+	EmitSoundToAll("ui/pickup_secret01.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.8);
+	CPrintToChatAll("{red}[{default}!{red}] {olive}Tank {default}has spawned!");
+
 	return Plugin_Continue;
 }
 
 public Action L4D_OnSpawnWitch(const float vecPos[3], const float vecAng[3])
 {
-	if (g_bWitchSpawnEnable)
+	if (!g_bCanSpawnWitch && g_bBlockWitchSpawn && !g_bStaticWitchMap)
 	{
-		if (!g_bCanSpawnWitch && g_bBlockWitchSpawn && !g_bStaticWitchMap)
-		{
-			//LogToFileEx_Debug("不是本插件允许产生的Witch, 已阻止");
-			return Plugin_Handled;
-		}
-
-		g_iWitchCount++;
-		//LogToFileEx_Debug("已产生Witch %i 个", g_iWitchCount);
-
-		return Plugin_Continue;
+		return Plugin_Handled;
 	}
 	return Plugin_Continue;
 }
@@ -613,41 +592,38 @@ public Action ShowFlowHud_Timer(Handle timer, int client)
 {
 	if (g_bShowFlow[client] && IsRealClient(client) && IsAdminClient(client))
 	{
-		Handle FlowHud = CreatePanel();
-		SetPanelTitle(FlowHud, "Flow Hud");
-		DrawPanelText(FlowHud, "----------");
+		char sBuffer[64];
+		Panel panel = new Panel();
 
-		char sCurrentFlow[64];
-		int iSurvivorMaxFlow = RoundToNearest(fSurMaxFlow() * 100.0);
-		Format(sCurrentFlow, sizeof(sCurrentFlow), "Current: %i%%", iSurvivorMaxFlow);
-		DrawPanelText(FlowHud, sCurrentFlow);
+		panel.SetTitle("Flow Hud");
+		panel.DrawText("__________");
+
+		FormatEx(sBuffer, sizeof(sBuffer), "Current: %i%%", RoundToNearest(fSurMaxFlow() * 100.0));
+		panel.DrawText(sBuffer);
 
 		if (g_bTankSpawnEnable)
 		{
 			if (g_fTankSpawnFlow > 0.0)
 			{
-				char sTankFlow[64];
-				int iTankSpawnFlow = RoundToNearest(g_fTankSpawnFlow * 100.0);
-				Format(sTankFlow, sizeof(sTankFlow), "Tank: %i%%", iTankSpawnFlow);
-				DrawPanelText(FlowHud, sTankFlow);
+				FormatEx(sBuffer, sizeof(sBuffer), "Tank: %i%%", RoundToNearest(g_fTankSpawnFlow * 100.0));
+				panel.DrawText(sBuffer);
 			}
-			else DrawPanelText(FlowHud, "Tank: None");
+			else panel.DrawText("Tank: None");
 		}
 
 		if (g_bWitchSpawnEnable)
 		{
 			if (g_fWitchSpawnFlow > 0.0)
 			{
-				char sWitchFlow[64];
-				int iWitchSpawnFlow = RoundToNearest(g_fWitchSpawnFlow * 100.0);
-				Format(sWitchFlow, sizeof(sWitchFlow), "Witch: %i%%", iWitchSpawnFlow);
-				DrawPanelText(FlowHud, sWitchFlow);
+				FormatEx(sBuffer, sizeof(sBuffer), "Witch: %i%%", RoundToNearest(g_fWitchSpawnFlow * 100.0));
+				panel.DrawText(sBuffer);
 			}
-			else DrawPanelText(FlowHud, "Witch: None");
+			else panel.DrawText("Witch: None");
 		}
 
-		SendPanelToClient(FlowHud, client, NullMenuHandler, 2);
-		CloseHandle(FlowHud);
+		panel.Send(client, NullMenuHandler, 2);
+		delete panel;
+
 		return Plugin_Continue;
 	}
 	else
