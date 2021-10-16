@@ -11,7 +11,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.1"
+#define VERSION "2.2"
 
 #define GAMEDATA "l4d2_nav_area"
 #define MAX_VALID_POS 3000
@@ -427,7 +427,7 @@ void SpawnSpecial()
 					if (!bFindSpawnPos)
 					{
 						g_fSpawnDist = 1500.0;
-						//LogToFileEx(g_sLogPath, "找位失败，暂时重置g_fSpawnDist");
+						//LogToFileEx_Debug("找位失败，暂时重置g_fSpawnDist");
 					}
 				}
 				else
@@ -484,22 +484,25 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 				if (0.0 < fThisFlowDist < g_fMapMaxFlowDist)
 				{
 					pThisArea.GetSpawnPos(fThisSpawnPos);
-					if (IsNearAndInvisible(fThisFlowDist, fThisSpawnPos, fThisDist))
+					if (IsNearTheSur(fThisFlowDist, fThisSpawnPos, fThisDist))
 					{
 						iPosCount++;
-						if (!IsWillStuck(fThisSpawnPos))
+						if (!IsSurVisible(fThisSpawnPos))
 						{
-							if (iValidPosCount < MAX_VALID_POS)
+							if (!IsWillStuck(fThisSpawnPos))
 							{
-								fSpawnData[iValidPosCount][0] = fThisSpawnPos[0];
-								fSpawnData[iValidPosCount][1] = fThisSpawnPos[1];
-								fSpawnData[iValidPosCount][2] = fThisSpawnPos[2];
-								fSpawnData[iValidPosCount][3] = fThisDist;
-								iValidPosCount++;
+								if (iValidPosCount < MAX_VALID_POS)
+								{
+									fSpawnData[iValidPosCount][0] = fThisSpawnPos[0];
+									fSpawnData[iValidPosCount][1] = fThisSpawnPos[1];
+									fSpawnData[iValidPosCount][2] = fThisSpawnPos[2];
+									fSpawnData[iValidPosCount][3] = fThisDist;
+									iValidPosCount++;
+								}
+								else LogError("超出 MAX_VALID_POS 最大限制");
 							}
-							else LogError("超出 MAX_VALID_POS 最大限制");
+							//else LogToFileEx_Debug("无效点位，会卡住(%.0f %.0f %.0f)", fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
 						}
-						//else LogToFileEx_Debug("无效点位，会卡住(%.0f %.0f %.0f)", fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
 					}
 				}
 			}
@@ -525,7 +528,7 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 
 		//将找位距离设置为最后产生的距离再增加一点
 		g_fSpawnDist = fSpawnData[iNum][3] + 400.0;
-		//PrintToServer("fSpawnData[%i][3] = %.1f, g_fSpawnDist = %.1f", iNum, fSpawnData[iNum][3], g_fSpawnDist);
+		//LogToFileEx_Debug("fSpawnData[%i][3] = %.1f, g_fSpawnDist = %.1f", iNum, fSpawnData[iNum][3], g_fSpawnDist);
 
 		bFindValidPos = true;
 	}
@@ -567,9 +570,8 @@ void GetSurPos()
 	}
 }
 
-bool IsNearAndInvisible(const float fAreaFlow, const float fAreaSpawnPos[3], float &fDist)
+bool IsNearTheSur(const float fAreaFlow, const float fAreaSpawnPos[3], float &fDist)
 {
-	static float fTargetPos[3];
 	static g_esSurPosData SurPosData;
 
 	for (int i = 0; i < g_aSurPosData.Length; i++)
@@ -580,15 +582,28 @@ bool IsNearAndInvisible(const float fAreaFlow, const float fAreaSpawnPos[3], flo
 			fDist = GetVectorDistance(SurPosData.fPos, fAreaSpawnPos);
 			if (fDist <= g_fSpawnDist)
 			{
-				fTargetPos[0] = fAreaSpawnPos[0];
-				fTargetPos[1] = fAreaSpawnPos[1];
-				fTargetPos[2] = fAreaSpawnPos[2] + 62.0; //眼睛位置
-
-				if (!IsVisible(SurPosData.fPos, fTargetPos))
-				{
-					return true;
-				}
+				return true;
 			}
+		}
+	}
+	return false;
+}
+
+bool IsSurVisible(const float fAreaSpawnPos[3])
+{
+	static float fTargetPos[3];
+	static g_esSurPosData SurPosData;
+
+	fTargetPos[0] = fAreaSpawnPos[0];
+	fTargetPos[1] = fAreaSpawnPos[1];
+	fTargetPos[2] = fAreaSpawnPos[2] + 62.0; //眼睛位置
+
+	for (int i = 0; i < g_aSurPosData.Length; i++)
+	{
+		g_aSurPosData.GetArray(i, SurPosData);
+		if (IsVisible(SurPosData.fPos, fTargetPos))
+		{
+			return true;
 		}
 	}
 	return false;
@@ -605,7 +620,7 @@ bool IsVisible(const float fStartPos[3], const float fTargetPos[3])
 
 	//获取角度
 	MakeVectorFromPoints(fStartPos, fTargetPos, fVecbuffer);
-	GetVectorAngles(fVecbuffer, fAng); 
+	GetVectorAngles(fVecbuffer, fAng);
 	
 	//执行射线
 	hTrace = TR_TraceRayFilterEx(fStartPos, fAng, MASK_VISIBLE, RayType_Infinite, TraceFilter);
