@@ -5,7 +5,7 @@
 #include <sdkhooks>
 #include <multicolors>
 
-#define VERSION "1.7"
+#define VERSION "1.8"
 
 #define SMOKER	1
 #define BOOMER	2
@@ -373,7 +373,7 @@ public void Event_InfectedHurt(Event event, const char[] name, bool dontBroadcas
 		{
 			if (IsValidEntityIndex(iVictim))
 			{
-				char sClassName[256];
+				static char sClassName[6];
 				if (GetEdictClassname(iVictim, sClassName, sizeof(sClassName)))
 				{
 					if (strcmp(sClassName, "witch") != 0) g_iTotalDamage[iAttacker] += iDamage;
@@ -511,5 +511,29 @@ bool IsValidSur(int client)
 int GetZombieClass(int client)
 {
 	return GetEntProp(client, Prop_Send, "m_zombieClass");
+}
+
+
+enum struct esKillData
+{
+	int iKillSI;
+	int iKillCI;
+	int iDmg;
+}
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	CreateNative("L4D2_GetKillData", Native_GetKillData);
+	return APLRes_Success;
+}
+
+public any Native_GetKillData(Handle plugin, int numParams)
+{
+	int client =  GetNativeCell(1);
+	esKillData KillData;
+	KillData.iKillSI = g_iKillSICount[client];
+	KillData.iKillCI = g_iKillCICount[client];
+	KillData.iDmg = g_iTotalDamage[client];
+	SetNativeArray(2, KillData, sizeof(KillData));
 }
 
