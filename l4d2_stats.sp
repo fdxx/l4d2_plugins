@@ -2,8 +2,9 @@
 #pragma newdecls required
 
 #include <sourcemod>
+#include <regex>
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 #define KV_PATH "data/l4d2_stats.txt"
 
 Database g_Database;
@@ -27,7 +28,8 @@ enum QueryType
 	AddNewPlayerData = 3,
 	QuerySteamID = 4,
 	QueryPlayerData = 5,
-	SaveTop10Data = 6
+	SaveTop10Data = 6,
+	CreateTable = 7
 };
 
 enum
@@ -37,7 +39,8 @@ enum
 	FIELD_KILLSI = 2,
 	FIELD_KILLCI = 3,
 	FIELD_DMG = 4,
-	FIELD_PLAYTIME = 5
+	FIELD_PLAYTIME = 5,
+	FIELD_RANK = 6
 };
 
 public Plugin myinfo =
@@ -50,8 +53,8 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	CreateConVar("l4d2_stats_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-	
-	// 在configs/databases.cfg中设置mysql的用户和密码
+
+	// 在configs/databases.cfg中设置mysql的连接信息
 	Database.Connect(ConnectDatabase, "l4d2");
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
@@ -221,6 +224,8 @@ public Action Event_PlayerDisconnect(Event event, const char[] name, bool dontBr
 
 void DatabaseQuery(QueryType Type, int client = -1, DBPriority Priority = DBPrio_Normal)
 {
+	if (g_Database == null) ThrowError("g_Database == null");
+
 	char sSteamID[64], sQuery[512];
 	bool bGetSteamID;
 
@@ -269,13 +274,18 @@ void DatabaseQuery(QueryType Type, int client = -1, DBPriority Priority = DBPrio
 		{
 			if (bGetSteamID)
 			{
-				g_Database.Format(sQuery, sizeof(sQuery), "SELECT steamid, name, killsi, killci, totaldamage, playtime FROM l4d2_stats WHERE steamid = '%s'", sSteamID);
+				g_Database.Format(sQuery, sizeof(sQuery), "SELECT * FROM (SELECT steamid, name, killsi, killci, totaldamage, playtime, ROW_NUMBER() OVER(ORDER BY totaldamage DESC) AS rank_num FROM l4d2_stats) AS shit WHERE steamid = '%s'", sSteamID);
 			}
 		}
 
 		case SaveTop10Data:
 		{
 			g_Database.Format(sQuery, sizeof(sQuery), "SELECT steamid, name, killsi, killci, totaldamage, playtime FROM l4d2_stats ORDER BY totaldamage DESC LIMIT 0, 10");
+		}
+
+		case CreateTable:
+		{
+			g_Database.Format(sQuery, sizeof(sQuery), "CREATE TABLE IF NOT EXISTS l4d2_stats(steamid VARCHAR(64), name TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci, killsi INT, killci INT, totaldamage INT, playtime FLOAT, points INT, money INT, level INT, PRIMARY KEY (steamid))");
 		}
 	}
 
@@ -299,7 +309,7 @@ public void QueryCallback(Database db, DBResultSet results, const char[] error, 
 	{
 		switch (Type)
 		{
-			case UpdataKillData, UpdataTimeData, AddNewPlayerData:
+			case UpdataKillData, UpdataTimeData, AddNewPlayerData, CreateTable:
 			{
 			}
 
@@ -323,6 +333,9 @@ public void QueryCallback(Database db, DBResultSet results, const char[] error, 
 
 					results.FetchString(FIELD_NAME, sName, sizeof(sName));
 					FormatEx(sBuffer, sizeof(sBuffer), "名字: %s", sName);
+					panel.DrawText(sBuffer);
+
+					FormatEx(sBuffer, sizeof(sBuffer), "排名: 第 %i 名", results.FetchInt(FIELD_RANK));
 					panel.DrawText(sBuffer);
 
 					FormatEx(sBuffer, sizeof(sBuffer), "特感击杀数: %i 个", results.FetchInt(FIELD_KILLSI));
@@ -395,10 +408,12 @@ bool GetSteamID(int client, char sSteamID[64])
 {
 	if (GetClientAuthId(client, AuthId_Steam2, sSteamID, sizeof(sSteamID)))
 	{
-		if (strncmp(sSteamID, "STEAM_", 6) == 0)
-		{
-			return true;
-		}
+		static Regex regex;
+
+		if (regex == null)
+			regex = new Regex("STEAM_\\d:\\d:\\d+");
+
+		return regex.Match(sSteamID) == 1;
 	}
 	return false;
 }
@@ -406,15 +421,8 @@ bool GetSteamID(int client, char sSteamID[64])
 public void ConnectDatabase(Database db, const char[] error, any data)
 {
 	if (db == null) SetFailState("无法连接数据库: %s", error);
-	db.Query(Createdatabase, "CREATE TABLE IF NOT EXISTS l4d2_stats(steamid VARCHAR(64), name TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci, killsi INT, killci INT, totaldamage INT, playtime FLOAT, points INT, money INT, level INT, PRIMARY KEY (steamid))");
 	db.SetCharset("utf8mb4");
 	g_Database = db;
+	DatabaseQuery(CreateTable, _, DBPrio_High);
 }
 
-public void Createdatabase(Database db, DBResultSet results, const char[] error, any data)
-{
-	if (db == null || results == null)
-	{
-		SetFailState("创建数据库失败: %s", error);
-	}
-}
