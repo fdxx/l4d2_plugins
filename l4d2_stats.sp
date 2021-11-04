@@ -4,13 +4,12 @@
 #include <sourcemod>
 #include <regex>
 
-#define VERSION "0.2"
+#define VERSION "0.3"
 #define KV_PATH "data/l4d2_stats.txt"
 
 Database g_Database;
 bool g_bRoundEnd;
 
-// 需要 l4d2_kill_mvp 插件
 // sourcepawn不支持在native回调中直接中声明enum struct，使用any[]来接受enum struct
 // https://github.com/alliedmodders/sourcepawn/issues/547
 native void L4D2_GetKillData(int client, any[] SurKillData);
@@ -64,6 +63,14 @@ public void OnPluginStart()
 	HookEvent("finale_vehicle_leaving", Event_RoundEnd, EventHookMode_PostNoCopy);
 
 	RegConsoleCmd("sm_stats", Cmd_PlayerStats);
+}
+
+public void OnConfigsExecuted()
+{
+	if (FindConVar("l4d2_kill_mvp_version") == null)
+	{
+		SetFailState("Need l4d2_kill_mvp plugin");
+	}
 }
 
 public Action Cmd_PlayerStats(int client, int args)
