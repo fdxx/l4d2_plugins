@@ -6,7 +6,7 @@
 #include <sdktools>
 #include <left4dhooks>
 
-#define VERSION "1.4"
+#define VERSION "1.5"
 
 enum
 {
@@ -41,8 +41,8 @@ ArrayList g_aPlayedMap;
 bool g_bFirstMap, g_bFinalMap;
 int g_iMapID = -1;
 
-Handle g_hChangeLevel;
-Address g_pTheDirector;
+//Handle g_hChangeLevel;
+//Address g_pTheDirector;
 
 public Plugin myinfo =
 {
@@ -73,11 +73,11 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_set_next_map", CmdSetNextMap);
 
 	g_aPlayedMap = new ArrayList();
-	GetGameData();
+	//GetGameData();
 
 	AutoExecConfig(true, "l4d2_next_map");
 }
-
+/*
 void GetGameData()
 {
 	// https://forums.alliedmods.net/showthread.php?t=319156
@@ -99,7 +99,7 @@ void GetGameData()
 
 	delete hGamedata;
 }
-
+*/
 public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
@@ -114,18 +114,14 @@ void GetCvars()
 
 public void OnConfigsExecuted()
 {
-	static char sGameMode[64];
-	FindConVar("mp_gamemode").GetString(sGameMode, sizeof(sGameMode));
-
-	if ((strcmp(sGameMode, "coop", false) != 0) && (strcmp(sGameMode, "realism", false) != 0) && (strcmp(sGameMode, "community5", false) != 0))
+	if (!L4D2_IsGenericCooperativeMode())
 	{
-		SetFailState("不支持的游戏模式");
+		LogError("不支持的游戏模式");
 	}
 }
 
 public void OnMapStart()
 {
-	// 有必要延迟处理？
 	CreateTimer(1.0, OnMapStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
@@ -136,6 +132,8 @@ public Action OnMapStart_Timer(Handle timer)
 
 	SavePlayedMap();
 	SetNextMapID();
+
+	return Plugin_Handled;
 }
 
 void SavePlayedMap()
@@ -205,6 +203,7 @@ public Action Announce_Timer(Handle timer, int userid)
 			CPrintToChat(client, "{default}[{yellow}提示{default}] 下一张图%s: {blue}%s", (g_bRandomNextMap ? "(随机)" : ""), g_sMapsInfo[g_iMapID][MAP_TRANSLATE]);
 		}
 	}
+	return Plugin_Handled;
 }
 
 public void Event_FinaleWin(Event event, char[] name, bool dontBroadcast)
@@ -212,13 +211,13 @@ public void Event_FinaleWin(Event event, char[] name, bool dontBroadcast)
 	if (g_iMapID == -1)
 	{
 		LogMessage("获取下一张换图失败，更换到默认地图");
-		SDKCall(g_hChangeLevel, g_pTheDirector, g_sDefNextMap);
-		//ServerCommand("changelevel %s", g_sDefNextMap);
+		//SDKCall(g_hChangeLevel, g_pTheDirector, g_sDefNextMap);
+		ServerCommand("changelevel %s", g_sDefNextMap);
 	}
 	else
 	{
-		SDKCall(g_hChangeLevel, g_pTheDirector, g_sMapsInfo[g_iMapID][FIRST_MAP]);
-		//ServerCommand("changelevel %s", g_sMapsInfo[g_iMapID][FIRST_MAP]);
+		//SDKCall(g_hChangeLevel, g_pTheDirector, g_sMapsInfo[g_iMapID][FIRST_MAP]);
+		ServerCommand("changelevel %s", g_sMapsInfo[g_iMapID][FIRST_MAP]);
 		g_iMapID = -1;
 	}
 }
@@ -229,6 +228,7 @@ public Action CmdNextMap(int client, int args)
 	{
 		CPrintToChatAll("{default}[{yellow}提示{default}] 下一张图%s: {blue}%s", (g_bRandomNextMap ? "(随机)" : ""), g_sMapsInfo[g_iMapID][MAP_TRANSLATE]);
 	}
+	return Plugin_Handled;
 }
 
 public Action CmdSetNextMap(int client, int args)
@@ -243,6 +243,7 @@ public Action CmdSetNextMap(int client, int args)
 		else PrintToChat(client, "设置下一张地图失败");
 	}
 	else PrintToChat(client, "不是结局地图，无法设置");
+	return Plugin_Handled;
 }
 
 int FindMapId(const char[] sMapName, const int type)
@@ -257,7 +258,7 @@ int FindMapId(const char[] sMapName, const int type)
 	return -1;
 }
 
-char CurrentMap()
+char[] CurrentMap()
 {
 	static char sMapName[128];
 	GetCurrentMap(sMapName, sizeof(sMapName));
