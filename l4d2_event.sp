@@ -47,6 +47,7 @@ public Action Cmd_EventList(int client, int args)
 		}
 	}
 	else ReplyToCommand(client, "g_aEventName.Length <= 0");
+	return Plugin_Handled;
 }
 
 public Action Cmd_EventListenEnable(int client, int args)
@@ -58,6 +59,7 @@ public Action Cmd_EventListenEnable(int client, int args)
 		ReplyToCommand(client, "Event listen: Enable");
 	}
 	else ReplyToCommand(client, "Event listen: Disable");
+	return Plugin_Handled;
 }
 
 void SaveEvents()
@@ -111,9 +113,7 @@ public void EventHook_All(Event event, const char[] name, bool dontBroadcast)
 {
 	if (g_bEnable)
 	{
-		char sName[64];
-		event.GetName(sName, sizeof(sName));
-		PrintToChatAll("Trigger event: %s", sName);
-		LogToFileEx(g_sLogPath, "Trigger event: %s", sName);
+		PrintToChatAll("Trigger event: %s", name);
+		LogToFileEx(g_sLogPath, "Trigger event: %s", name);
 	}
 }
