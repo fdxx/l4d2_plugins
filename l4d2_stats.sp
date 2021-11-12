@@ -81,6 +81,8 @@ public Action Cmd_PlayerStats(int client, int args)
 	menu.AddItem("", "前十名");
 	menu.AddItem("", "自己");
 	menu.Display(client, 20);
+
+	return Plugin_Handled;
 }
 
 public int MenuCallback(Menu menu, MenuAction action, int param1, int param2)
@@ -114,6 +116,7 @@ public int MenuCallback(Menu menu, MenuAction action, int param1, int param2)
 							}
 						}
 						while (kv.GotoNextKey());
+						menuTop10.ExitBackButton = true;
 						menuTop10.Display(param1, 20);
 					}
 					delete kv;
@@ -126,6 +129,7 @@ public int MenuCallback(Menu menu, MenuAction action, int param1, int param2)
 			delete menu;
 		}
 	}
+	return 0;
 }
 
 public int MenuTop10Callback(Menu menu, MenuAction action, int param1, int param2)
@@ -177,7 +181,8 @@ public int MenuTop10Callback(Menu menu, MenuAction action, int param1, int param
 
 		case MenuAction_Cancel:
 		{
-			Cmd_PlayerStats(param1, 0);
+			if (param2 == MenuCancel_ExitBack)
+				Cmd_PlayerStats(param1, 0);
 		}
 
 		case MenuAction_End:
@@ -185,6 +190,7 @@ public int MenuTop10Callback(Menu menu, MenuAction action, int param1, int param
 			delete menu;
 		}
 	}
+	return 0;
 }
 
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -196,6 +202,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 public Action RoundStart_Timer(Handle timer)
 {
 	DatabaseQuery(SaveTop10Data, _, DBPrio_Low);
+	return Plugin_Continue;
 }
 
 public void OnClientPostAdminCheck(int client)
@@ -409,6 +416,7 @@ public int PanelCallback(Menu menu, MenuAction action, int param1, int param2)
 			Cmd_PlayerStats(param1, 0);
 		}
 	}
+	return 0;
 }
 
 bool GetSteamID(int client, char sSteamID[64])
