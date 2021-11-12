@@ -2,29 +2,35 @@
 #pragma newdecls required
 
 #include <sourcemod>
-#include <l4d2_weapons>
+#include <sdktools>
 
 ConVar CvarMelees;
-char g_sMelees[256];
+char g_sMelees[512];
 bool g_bMeleeSpawned;
 
-//https://github.com/raziEiL/l4d2_weapons/blob/master/scripting/include/l4d2_weapons.inc
-static const char l_sMeleeNames[][] =
+enum
 {
-	"fireaxe",			//斧头
-	"baseball_bat",		//棒球棒
-	"cricket_bat",		//球拍
-	"crowbar",			//撬棍
-	"frying_pan",		//平底锅
-	"golfclub",			//高尔夫球棍
-	"electric_guitar",	//吉他
-	"katana",			//武士刀
-	"machete",			//砍刀
-	"tonfa",			//警棍
-	"knife",			//小刀
+	MELEE_NAME,
+	MELEE_MODEL
+};
+
+// Thanks https://github.com/raziEiL/l4d2_weapons/blob/master/scripting/include/l4d2_weapons.inc
+static const char g_sMeleeList[][][] =
+{
+	{"fireaxe",			"models/weapons/melee/w_fireaxe.mdl"},			//斧头
+	{"baseball_bat",	"models/weapons/melee/w_bat.mdl"},				//棒球棒
+	{"cricket_bat",		"models/weapons/melee/w_cricket_bat.mdl"},		//球拍
+	{"crowbar",			"models/weapons/melee/w_crowbar.mdl"},			//撬棍
+	{"frying_pan",		"models/weapons/melee/w_frying_pan.mdl"},		//平底锅
+	{"golfclub",		"models/weapons/melee/w_golfclub.mdl"},			//高尔夫球棍
+	{"electric_guitar",	"models/weapons/melee/w_electric_guitar.mdl"},	//吉他
+	{"katana",			"models/weapons/melee/w_katana.mdl"},			//武士刀
+	{"machete",			"models/weapons/melee/w_machete.mdl"},			//砍刀
+	{"tonfa",			"models/weapons/melee/w_tonfa.mdl"},			//警棍
+	{"knife",			"models/w_models/weapons/w_knife_t.mdl"},		//小刀
 	// The Last Stand update
-	"pitchfork",		//草叉
-	"shovel",			//铁铲
+	{"pitchfork",		"models/weapons/melee/w_pitchfork.mdl"},		//草叉
+	{"shovel",			"models/weapons/melee/w_shovel.mdl"}			//铁铲
 };
 
 public Plugin myinfo =
@@ -32,7 +38,7 @@ public Plugin myinfo =
 	name = "Melee In The Saferoom",
 	author = "$atanic $pirit, N3wton, fdxx",
 	description = "Spawns melee weapons in the saferoom, at the start of each round.",
-	version = "0.2"
+	version = "0.3"
 }
 
 public void OnPluginStart()
@@ -60,8 +66,22 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 
 public void OnMapStart()
 {
-	L4D2Wep_PrecacheMeleeModels();
-	L4D2Wep_OnMapStart();
+	CreateTimer(0.1, PrecacheModel_Timer);
+}
+
+public Action PrecacheModel_Timer(Handle timer)
+{
+	for (int i = 0; i < sizeof(g_sMeleeList); i++)
+	{
+		if (!IsModelPrecached(g_sMeleeList[i][MELEE_MODEL]))
+		{
+			if (PrecacheModel(g_sMeleeList[i][MELEE_MODEL], true) <= 0)
+			{
+				LogError("[错误] %s 模型缓存错误", g_sMeleeList[i][MELEE_MODEL]);
+			}
+		}
+	}
+	return Plugin_Continue;
 }
 
 public Action SpawnMelee_Timer(Handle timer)
@@ -71,24 +91,18 @@ public Action SpawnMelee_Timer(Handle timer)
 		int client = GetInGameClient();
 		if (client > 0)
 		{
-			float vOrigin[3]; 
-			float vAngles[3];
-			GetClientAbsOrigin(client, vOrigin);
+			float fPos[3], fAng[3]; 
+			GetClientAbsOrigin(client, fPos);
 
-			vOrigin[2] += 20.0;
-			vAngles[0] = 90.0;
+			fPos[2] += 20.0;
+			fAng[0] = 90.0;
 
-			char sPieces[32][256];
-			int iNumPieces = ExplodeString(g_sMelees, ";", sPieces, sizeof(sPieces), sizeof(sPieces[]));
+			char sPieces[32][64];
+			int iNum = ExplodeString(g_sMelees, ";", sPieces, sizeof(sPieces), sizeof(sPieces[]));
 			
-			for (int p = 0; p < iNumPieces; p++)
+			for (int i = 0; i < iNum; i++)
 			{
-				int iMeleeID = L4D2Wep_MeleeNameToID(sPieces[p]);
-				if (iMeleeID != -1)
-				{
-					L4D2Wep_SpawnMelee_Ex(iMeleeID, vOrigin, vAngles);
-				}
-				else LogError("Melee name wrong!");
+				SpawnMelee(sPieces[i], fPos, fAng);
 			}
 
 			g_bMeleeSpawned = true;
@@ -111,20 +125,20 @@ int GetInGameClient()
 	return 0;
 }
 
-void L4D2Wep_SpawnMelee_Ex(int meleeID, const float vPos[3], const float vAng[3])
+void SpawnMelee(const char[] sName, const float fPos[3], const float fAng[3])
 {
-	float vOrigin[3];
-	float vAngles[3];
-	vOrigin = vPos;
-	vAngles = vAng;
-	
-	vOrigin[0] += (-10.0 + GetRandomFloat(0.0, 20.0));
-	vOrigin[1] += (-10.0 + GetRandomFloat(0.0, 20.0));
-	vOrigin[2] += GetRandomFloat(0.0, 10.0);
-	vAngles[1] = GetRandomFloat(0.0, 360.0);
+	float fNewPos[3], fNewAng[3];
 
-	int iMeleeSpawn = CreateEntityByName("weapon_melee");
-	DispatchKeyValue(iMeleeSpawn, "melee_script_name", l_sMeleeNames[meleeID]);
-	DispatchSpawn(iMeleeSpawn);
-	TeleportEntity(iMeleeSpawn, vOrigin, vAngles, NULL_VECTOR);
+	fNewPos = fPos;
+	fNewAng = fAng;
+
+	fNewPos[0] += (-10.0 + GetRandomFloat(0.0, 20.0));
+	fNewPos[1] += (-10.0 + GetRandomFloat(0.0, 20.0));
+	fNewPos[2] += GetRandomFloat(0.0, 10.0);
+	fNewAng[1] = GetRandomFloat(0.0, 360.0);
+
+	int iMelee = CreateEntityByName("weapon_melee");
+	DispatchKeyValue(iMelee, "melee_script_name", sName);
+	DispatchSpawn(iMelee);
+	TeleportEntity(iMelee, fNewPos, fNewAng, NULL_VECTOR);
 }
