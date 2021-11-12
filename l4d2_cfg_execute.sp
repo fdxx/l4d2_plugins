@@ -49,4 +49,6 @@ public Action ExecuteCfg_Timer(Handle timer)
 			}
 		}
 	}
+
+	return Plugin_Continue;
 }

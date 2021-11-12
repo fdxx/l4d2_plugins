@@ -25,10 +25,11 @@ public void OnConfigsExecuted()
 
 public Action ChangeMap_Timer(Handle timer)
 {
-    char sMapName[256];
-    if (GetCurrentMap(sMapName, sizeof(sMapName)) > 1)
-    {
-        ServerCommand("changelevel %s", sMapName);
-    }
-    else LogError("无法获取当前地图, 重置地图失败");
+	char sMapName[256];
+	if (GetCurrentMap(sMapName, sizeof(sMapName)) > 1)
+	{
+		ServerCommand("changelevel %s", sMapName);
+	}
+	else LogError("无法获取当前地图, 重置地图失败");
+	return Plugin_Continue;
 }

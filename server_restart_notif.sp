@@ -58,6 +58,7 @@ bool IsHavePlayer()
 public Action Cmd_CurTime(int client, int args)
 {
 	ReplyToCommand(client, "当前时间: %s, 小时: %i, 分钟: %i, 秒: %i", GetCurTime(), GetCurHour(), GetCurMinute(), GetCurSecond());
+	return Plugin_Handled;
 }
 
 int GetCurHour()
@@ -81,7 +82,7 @@ int GetCurSecond()
 	return StringToInt(sSecond);
 }
 
-char GetCurTime()
+char[] GetCurTime()
 {
 	static char sTime[32];
 	FormatTime(sTime, sizeof(sTime), "%T");

@@ -111,5 +111,6 @@ public Action curhostname(int client, int args)
 	char sName[256];
 	HostNameCvar.GetString(sName, sizeof(sName));
 	ReplyToCommand(client, "Name: %s", sName);
+	return Plugin_Handled;
 }
 

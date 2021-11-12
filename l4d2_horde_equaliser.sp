@@ -74,6 +74,7 @@ public Action RoundStart_Timer(Handle timer)
 	g_bAnnounceRemain = false;
 	g_bAnnounceStart = false;
 	g_bAnnounceEnd = false;
+	return Plugin_Continue;
 }
 
 public void OnMapStart()
@@ -156,7 +157,7 @@ int GetHordeLimit()
 	return 0;
 }
 
-char GetCurMap()
+char[] GetCurMap()
 {
 	char sMapName[128];
 	GetCurrentMap(sMapName, sizeof(sMapName));

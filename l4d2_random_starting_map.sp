@@ -42,6 +42,7 @@ public Action ChangeMap(Handle timer)
 		LogMessage("[随机启动地图] 成功切换到随机地图");
 	}
 	else LogMessage("[随机启动地图] 换图失败, 服务器还有真实玩家存在");
+	return Plugin_Continue;
 }
 
 bool HaveRealPlayer()

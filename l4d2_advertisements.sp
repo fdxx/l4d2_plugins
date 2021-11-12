@@ -30,7 +30,7 @@ public void OnPluginStart()
 	LoadAdvertisements();
 
 	CvarType = CreateConVar("l4d2_advertisements_type", "0", "0=顺序，1=随机", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarTime = CreateConVar("l4d2_advertisements_time", "300.0", "间隔时间", FCVAR_NONE, true, 0.1);
+	CvarTime = CreateConVar("l4d2_advertisements_time", "360.0", "间隔时间", FCVAR_NONE, true, 0.1);
 
 	GetCvars();
 
@@ -131,12 +131,15 @@ public Action Cmd_CheckAdList(int client, int args)
 			}
 		}
 	}
+
+	return Plugin_Handled;
 }
 
 public Action Cmd_AdReload(int client, int args)
 {
 	LoadAdvertisements();
 	Cmd_CheckAdList(0,0);
+	return Plugin_Handled;
 }
 
 void LoadAdvertisements()

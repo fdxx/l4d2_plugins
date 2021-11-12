@@ -33,6 +33,7 @@ public Action Cmd_VoteMap(int client, int args)
 		ShowVoteMenu(client);
 	}
 	else CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
+	return Plugin_Handled;
 }
 
 void ShowVoteMenu(int client)
@@ -83,6 +84,7 @@ public int Callback_MenuMapTitle(Menu MenuMapTitle, MenuAction action, int param
 			delete MenuMapTitle;
 		}
 	}
+	return 0;
 }
 
 public int Callback_MenuMapName(Menu MenuMapName, MenuAction action, int param1, int param2)
@@ -105,6 +107,7 @@ public int Callback_MenuMapName(Menu MenuMapName, MenuAction action, int param1,
 			delete MenuMapName;
 		}
 	}
+	return 0;
 }
 
 void StartVote(int client, const char[] sMapFullInfo)
@@ -175,6 +178,7 @@ public int Callback_NativeVote(NativeVote vote, MenuAction action, int param1, i
 			vote.Close();
 		}
 	}
+	return 0;
 }
 
 public Action ChangeMap_Timer(Handle timer)
@@ -186,6 +190,7 @@ public Action ChangeMap_Timer(Handle timer)
 		CPrintToChatAll("{default}[{red}提示{default}] 换图失败");
 		LogError("更换 %s 地图失败: %s", g_sMapName, sMsg);
 	}
+	return Plugin_Continue;
 }
 
 void Initialization()
@@ -216,7 +221,7 @@ public void OnMapStart()
 public Action MapStart_Timer(Handle timer)
 {
 	delete g_kvMapList;
-	g_kvMapList = new KeyValues("MapInfo");
+	g_kvMapList = new KeyValues("map");
 
 	char sMissionFile[128];
 	FileType fileType;
@@ -240,13 +245,15 @@ public Action MapStart_Timer(Handle timer)
 	delete hDir;
 	g_kvMapList.Rewind();
 	g_kvMapList.ExportToFile(g_sMapListPath);
+
+	return Plugin_Continue;
 }
 
 void ParseMissionFile(const char[] sMissionFile)
 {
 	g_aMapInfo.Clear();
 	delete g_kvMissionFile;
-	g_kvMissionFile = new KeyValues("MapInfo");
+	g_kvMissionFile = new KeyValues("");
 
 	static char sDisplayTitle[128], sMapName[128];
 

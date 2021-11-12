@@ -95,6 +95,7 @@ public Action Vocalize_Listener(int client, const char[] command, int argc)
 			}
 		}
 	}
+	return Plugin_Continue;
 }
 
 int GetUseEntity(int client, float fRadius)

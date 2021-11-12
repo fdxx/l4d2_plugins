@@ -88,6 +88,7 @@ public Action SlotsVote(int client, int args)
 		}
 		else PrintToChat(client, "Use: !slots <number>");
 	}
+	return Plugin_Handled;
 }
 
 void StartVote(int client, int iNumber)
@@ -156,6 +157,7 @@ public int Callback_NativeVote(NativeVote vote, MenuAction action, int param1, i
 			vote.Close();
 		}
 	}
+	return 0;
 }
 
 bool IsRealClient(int client)

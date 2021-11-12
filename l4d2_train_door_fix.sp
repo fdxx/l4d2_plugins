@@ -124,6 +124,7 @@ void DelSecondTrainDoor()
 public Action deldoor(int client, int args)
 {
 	DelSecondTrainDoor();
+	return Plugin_Handled;
 }
 
 bool IsC7M1Map()

@@ -41,6 +41,7 @@ public Action Cmd_GiveAmmo(int client, int args)
 		}
 		else PrintToChat(client, "\x01请等待 \x04%.0f \x01秒后在使用本命令", FloatAbs(fTime));
 	}
+	return Plugin_Handled;
 }
 
 void CheatCommand(int client, char[] command, char[] args = "")

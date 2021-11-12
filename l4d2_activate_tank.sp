@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name = "L4D2 Activate Tank",
 	author = "XDglory, fdxx",
 	description = "使Tank产生时立即行动攻击玩家, 而不是等待玩家靠近",
-	version = "0.4",
+	version = "0.5",
 	url = "https://forums.alliedmods.net/showthread.php?t=319342"
 };
 
@@ -55,6 +55,8 @@ public Action ActivateTank_Timer(Handle timer, int userid)
 			}
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 int GetRandomSur()

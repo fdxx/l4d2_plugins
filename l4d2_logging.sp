@@ -71,6 +71,7 @@ public Action CommandListener(int client, const char[] command, int argc)
 			LogToFilePlus("%L used: %s %s", client, command, (argc > 0 ? sCmdArgs : ""));
 		}
 	}
+	return Plugin_Continue;
 }
 
 bool IsIgnoredCmd(const char[] sCommand)
@@ -136,5 +137,5 @@ void LogToFilePlus(const char[] sMsg, any ...)
 	BuildPath(Path_SM, sLogPath, sizeof(sLogPath), "logs/%s_logging.log", sDate);
 	VFormat(sBuffer, sizeof(sBuffer), sMsg, 2);
 
-	LogToFileEx(sLogPath, "%s", sBuffer);
+	LogToFileEx(sLogPath, sBuffer);
 }

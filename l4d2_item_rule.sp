@@ -234,6 +234,8 @@ public Action RoundStart_Timer(Handle timer)
 	LogToFileEx_Debug("执行时间: %f", hProfiler.Time);
 	delete hProfiler;
 	#endif
+
+	return Plugin_Continue;
 }
 
 void PrecacheItemModels()
@@ -257,6 +259,8 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 	LimitItem();
 	CreateTimer(0.2, GiveItems_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 	if (g_bFinalMap && g_bFinalMapPills) SpawnPill();
+
+	return Plugin_Continue;
 }
 
 //开局给物品
@@ -279,6 +283,7 @@ public Action GiveItems_Timer(Handle timer)
 			}
 		}
 	}
+	return Plugin_Continue;
 }
 
 //过图的时候删除健康物品和投掷物品
@@ -638,10 +643,12 @@ public Action SpawnGun_Timer(Handle timer)
 		SpawnItem("weapon_shotgun_chrome", view_as<float>({-3320.0, 7788.0, 156.0}), view_as<float>({0.0, 268.0, 270.0}), 3);
 		SpawnItem("weapon_smg_silenced", view_as<float>({-3336.0, 7788.0, 156.0}), view_as<float>({0.0, 285.0, 270.0}), 3);
 	}
+
+	return Plugin_Continue;
 }
 
 
-char CurrentMap()
+char[] CurrentMap()
 {
 	static char sMapName[64];
 	GetCurrentMap(sMapName, sizeof(sMapName));
@@ -783,6 +790,7 @@ public Action Cmd_LimitItems(int client, int args)
 {
 	ProcessEntity();
 	LimitItem();
+	return Plugin_Handled;
 }
 
 public Action Cmd_SpawnItem(int client, int args)
@@ -802,6 +810,7 @@ public Action Cmd_SpawnItem(int client, int args)
 		SpawnItem(sItemName, fPos, _, iCount);
 	}
 	else PrintToChat(client, "使用 sm_spawn_item <物品名字> <数量>");
+	return Plugin_Handled;
 }
 
 public Action Cmd_SpawnAllItem(int client, int args)
@@ -822,6 +831,7 @@ public Action Cmd_SpawnAllItem(int client, int args)
 		}
 	}
 	else PrintToChat(client, "使用 sm_spawn_all_item <数量>");
+	return Plugin_Handled;
 }
 
 stock void LogToFileEx_Debug(const char[] format, any ...)

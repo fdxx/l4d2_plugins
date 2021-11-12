@@ -12,7 +12,7 @@ char logPath[PLATFORM_MAX_PATH];
 ConVar CvarGlow, CvarSkullIcon, CvarMaxReviveCount;
 int g_MaxReviveCount;
 bool g_bGlow, g_bSkullIcon;
-int g_iIcon[MAXPLAYERS+1] = -1;
+int g_iIcon[MAXPLAYERS+1] = {-1, ...};
 
 #define SKULL_ICON "materials/sprites/skull_icon.vmt"
 
@@ -148,7 +148,7 @@ void SetSkullIcon(int client)
 	}
 }
 
-int GetRandomColor()
+int[] GetRandomColor()
 {
 	static const int iColorGroup[][3] =
 	{

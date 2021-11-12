@@ -38,4 +38,5 @@ public Action Netstat(int client, int args)
 			ReplyToCommand(client, "loss: %.1f%% | chock: %.1f%% | rate: %-6s | cmdrate: %-3s | updrate: %-3s | lerp: %.1f | %N", fLoss, fChock, sRate, sCmdRate, sUpdateRate, fLerp, i);
 		}
 	}
+	return Plugin_Handled;
 }

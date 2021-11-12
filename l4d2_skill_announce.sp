@@ -103,6 +103,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 public Action RoundStart_Timer(Handle timer)
 {
 	Reset();
+	return Plugin_Continue;
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -297,6 +298,7 @@ public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadca
 			ClearDamage(iVictim);
 		}
 	}
+	return Plugin_Continue;
 }
 
 public int SortByDamageDesc(int[] x, int[] y, const int[][] array, Handle hndl)

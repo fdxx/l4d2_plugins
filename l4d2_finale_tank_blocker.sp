@@ -32,6 +32,7 @@ public Action RoundStart_Timer(Handle timer)
 	g_TankCount = 0;
 	g_bFinaleMap = L4D_IsMissionFinalMap();
 	g_bC7M3Map = IsC7M3Map();
+	return Plugin_Continue;
 }
 
 public Action L4D2_OnChangeFinaleStage(int &finaleType, const char[] arg)

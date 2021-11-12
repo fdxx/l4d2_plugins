@@ -97,6 +97,7 @@ public Action JoinSpectate(int client, int args)
 			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}进入了旁观状态.", client);
 		}
 	}
+	return Plugin_Handled;
 }
 
 public Action JoinSpectate_Timer(Handle timer, int userid)
@@ -107,6 +108,7 @@ public Action JoinSpectate_Timer(Handle timer, int userid)
 		ChangeClientTeam(client, 1);
 		CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}进入了旁观状态.", client);
 	}
+	return Plugin_Continue;
 }
 
 // To Survivor
@@ -124,6 +126,7 @@ public Action JoinSurvivor(int client, int args)
 		}
 		else PrintHintText(client, "暂无幸存者BOT供接管");
 	}
+	return Plugin_Handled;
 }
 
 // Suicide
@@ -149,6 +152,7 @@ public Action KillSelf(int client, int args)
 			}
 		}
 	}
+	return Plugin_Handled;
 }
 
 // other

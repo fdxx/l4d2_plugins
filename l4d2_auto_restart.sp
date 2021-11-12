@@ -64,6 +64,7 @@ public Action RestServer_Timer(Handle timer)
 		ServerCommand("crash");
 	}
 	else LogToFileEx(g_LogPath, "服务器重启失败，还有真实玩家");
+	return Plugin_Continue;
 }
 
 bool HaveRealPlayer(int iExclude = 0)

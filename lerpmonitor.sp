@@ -18,7 +18,7 @@ public Plugin myinfo =
 	url = ""
 }
 
-public OnPluginStart()
+public void OnPluginStart()
 {
 	CreateConVar("lerp_monitor_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
 
@@ -37,6 +37,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 public Action RoundStart_Timer(Handle timer)
 {
 	bRoundInProgress = true;
+	return Plugin_Continue;
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -99,6 +100,7 @@ public Action PlayerTeamChanged_Timer(Handle timer, int userid)
 			PrintLerp(client);
 		}
 	}
+	return Plugin_Continue;
 }
 
 public Action Lerps_Cmd(int client, int args)
@@ -113,6 +115,7 @@ public Action Lerps_Cmd(int client, int args)
 			ReplyToCommand(client, "%N: %.1f", i, fLerp*1000);
 		}
 	}
+	return Plugin_Handled;
 }
 
 float GetClientLerp(int client)

@@ -38,6 +38,7 @@ public Action CmdVote(int client, int args)
 		ShowVoteMenu(client);
 	}
 	else CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
+	return Plugin_Handled;
 }
 
 void ShowVoteMenu(int client)
@@ -87,6 +88,7 @@ public int Callback_MenuLevel1(Menu hMenuLevel1, MenuAction action, int param1, 
 			delete hMenuLevel1;
 		}
 	}
+	return 0;
 }
 
 public int Callback_MenuLevel2(Menu hMenuLevel2, MenuAction action, int param1, int param2)
@@ -109,6 +111,7 @@ public int Callback_MenuLevel2(Menu hMenuLevel2, MenuAction action, int param1, 
 			delete hMenuLevel2;
 		}
 	}
+	return 0;
 }
 
 void StartVote(int client, const char[] sDisplay)
@@ -186,4 +189,5 @@ public int Callback_NativeVote(NativeVote vote, MenuAction action, int param1, i
 			vote.Close();
 		}
 	}
+	return 0;
 }

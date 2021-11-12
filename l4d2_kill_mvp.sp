@@ -128,6 +128,7 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 public Action Cmd_ShowTotalDamageRank(int client, int args)
 {
 	ShowTotalDamageRank();
+	return Plugin_Handled;
 }
 
 public void OnClientPutInServer(int client)
@@ -527,7 +528,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	return APLRes_Success;
 }
 
-public any Native_GetKillData(Handle plugin, int numParams)
+public int Native_GetKillData(Handle plugin, int numParams)
 {
 	int client =  GetNativeCell(1);
 	esKillData KillData;
@@ -535,5 +536,6 @@ public any Native_GetKillData(Handle plugin, int numParams)
 	KillData.iKillCI = g_iKillCICount[client];
 	KillData.iDmg = g_iTotalDamage[client];
 	SetNativeArray(2, KillData, sizeof(KillData));
+	return 0;
 }
 

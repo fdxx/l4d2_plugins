@@ -101,12 +101,14 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 public Action RoundStart_Timer(Handle timer)
 {
 	SetItemCount();
+	return Plugin_Continue;
 }
 
 public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 {
 	//再次检查。有些物品可能会延迟产生
 	SetItemCount();
+	return Plugin_Continue;
 }
 
 void SetItemCount()
@@ -169,4 +171,5 @@ void StrToLowerCase(char[] str)
 public Action Cmd_ReloadCfg(int client, int args)
 {
 	NameToCount();
+	return Plugin_Handled;
 }

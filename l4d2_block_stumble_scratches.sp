@@ -41,6 +41,7 @@ public Action OnPlayerRunCmd(int client, int &buttons)
 	{
 		buttons &= ~IN_ATTACK2;
 	}
+	return Plugin_Continue;
 }
 
 bool IsValidSI(int client)

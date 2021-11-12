@@ -133,7 +133,7 @@ public Action OnMapStart_Timer(Handle timer)
 	SavePlayedMap();
 	SetNextMapID();
 
-	return Plugin_Handled;
+	return Plugin_Continue;
 }
 
 void SavePlayedMap()
@@ -203,7 +203,7 @@ public Action Announce_Timer(Handle timer, int userid)
 			CPrintToChat(client, "{default}[{yellow}提示{default}] 下一张图%s: {blue}%s", (g_bRandomNextMap ? "(随机)" : ""), g_sMapsInfo[g_iMapID][MAP_TRANSLATE]);
 		}
 	}
-	return Plugin_Handled;
+	return Plugin_Continue;
 }
 
 public void Event_FinaleWin(Event event, char[] name, bool dontBroadcast)

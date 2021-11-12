@@ -71,11 +71,13 @@ public void SpecialsChanged(ConVar convar, const char[] oldValue, const char[] n
 public Action bAnnounce_Timer(Handle timer)
 {
 	AnnounceCurSIMode_All();
+	return Plugin_Continue;
 }
 
 public Action ShowCurSIMode(int client, int args)
 {
 	if (IsRealClient(client)) AnnounceCurSIMode_All();
+	return Plugin_Handled;
 }
 
 public void OnClientPutInServer(int client)
@@ -90,6 +92,7 @@ public Action ShowCurSIMode_Timer(Handle timer, int userid)
 {
 	int client = GetClientOfUserId(userid);
 	if (IsRealClient(client)) AnnounceCurSIMode(client);
+	return Plugin_Continue;
 }
 
 void AnnounceCurSIMode_All()

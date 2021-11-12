@@ -172,7 +172,7 @@ public void OnPluginStart()
 	CvarSpitterLimit = CreateConVar("l4d2_si_spawn_control_spitter_limit", "1", "spitter数量", FCVAR_NONE, true, 0.0, true, 26.0);
 	CvarChargerLimit = CreateConVar("l4d2_si_spawn_control_charger_limit", "1", "charger数量", FCVAR_NONE, true, 0.0, true, 26.0);
 	CvarMaxSILimit = CreateConVar("l4d2_si_spawn_control_max_specials", "6", "最大特感数量", FCVAR_NONE, true, 0.0, true, 26.0);
-	CvarSpawnTime = CreateConVar("l4d2_si_spawn_control_spawn_time", "10.0", "特感产生时间", FCVAR_NONE, true, 2.0, true, 9999.0);
+	CvarSpawnTime = CreateConVar("l4d2_si_spawn_control_spawn_time", "10.0", "特感产生时间", FCVAR_NONE, true, 1.0, true, 9999.0);
 	CvarFirstSpawnTime = CreateConVar("l4d2_si_spawn_control_first_spawn_time", "10.0", "离开安全区域首次产生特感的时间", FCVAR_NONE, true, 1.0, true, 9999.0);
 	CvarKillSITime = CreateConVar("l4d2_si_spawn_control_kill_si_time", "25.0", "多少秒后摸鱼的特感将会被自动杀死", FCVAR_NONE, true, 2.0, true, 9999.0);
 	CvarBlockSpawn = CreateConVar("l4d2_si_spawn_control_block_other_si_spawn", "1", "阻止本插件以外的特感产生 (通过L4D_OnSpawnSpecial限制)", FCVAR_NONE, true, 0.0, true, 1.0);
@@ -289,6 +289,7 @@ public Action RoundStart_Timer(Handle timer)
 	GetMapNavAreaData();
 	g_bFinalMap = L4D_IsMissionFinalMap();
 	g_fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
+	return Plugin_Continue;
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -338,6 +339,7 @@ public Action FirstSpawnSI_Timer(Handle timer)
 		delete g_hSpawnMaxSITimer;
 		g_hSpawnMaxSITimer = CreateTimer(0.3, SpawnMaxSI_Timer, _, TIMER_REPEAT); //间隔0.3s陆续产生特感
 	}
+	return Plugin_Continue;
 }
 
 public Action SpawnMaxSI_Timer(Handle timer)
@@ -391,11 +393,13 @@ public Action SpecialDeathSpawn_Timer(Handle timer, int iSpawnNum)
 {
 	g_hSpawnSITimer[iSpawnNum] = null;
 	SpawnSpecial();
+	return Plugin_Continue;
 }
 
 public Action ReSpawnSpecial_Timer(Handle timer)
 {
 	SpawnSpecial();
+	return Plugin_Continue;
 }
 
 void SpawnSpecial()
@@ -843,16 +847,15 @@ public Action KillSI_Timer(Handle timer, int client)
 		{
 			g_hKillSITimer[client] = null;
 			g_hKillSITimer[client] = CreateTimer(g_fKillSITime, KillSI_Timer, client);
-			return;
 		}
 		else
 		{
 			g_hKillSITimer[client] = null;
 			ForcePlayerSuicide(client);
-			return;
 		}
 	}
 	else g_hKillSITimer[client] = null;
+	return Plugin_Continue;
 }
 
 
@@ -917,6 +920,7 @@ public Action Cmd_ShowSIhud(int client, int args)
 	g_bShowSIhud[client] = !g_bShowSIhud[client];
 	if (g_bShowSIhud[client]) CreateTimer(0.5, ShowSIHud_Timer, client, TIMER_REPEAT);
 	PrintToChat(client, "特感面板状态: %s", (g_bShowSIhud[client] ? "已开启" : "已关闭"));
+	return Plugin_Handled;
 }
 
 public Action ShowSIHud_Timer(Handle timer, int client)
@@ -963,7 +967,7 @@ public Action ShowSIHud_Timer(Handle timer, int client)
 	}
 }
 
-public int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {}
+public int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {return 0;}
 
 int GetSICountByClass(int iZombieClass)
 {
@@ -1039,6 +1043,7 @@ public Action kickbot(Handle timer, int userid)
 	{
 		if (!IsClientInKickQueue(client)) KickClient(client);
 	}
+	return Plugin_Continue;
 }
 
 bool IsRealClient(int client)
@@ -1114,6 +1119,8 @@ public Action Cmd_CvarPrint(int client, int args)
 	ReplyToCommand(client, "l4d2_si_spawn_control_radical_spawn = %b", FindConVar("l4d2_si_spawn_control_radical_spawn").BoolValue);
 	ReplyToCommand(client, "l4d2_si_spawn_control_spawn_range_normal = %i", FindConVar("l4d2_si_spawn_control_spawn_range_normal").IntValue);
 	ReplyToCommand(client, "--------------");
+
+	return Plugin_Handled;
 }
 
 stock void LogToFileEx_Debug(const char[] sMsg, any ...)
@@ -1122,6 +1129,6 @@ stock void LogToFileEx_Debug(const char[] sMsg, any ...)
 	VFormat(buffer, sizeof(buffer), sMsg, 2);
 
 	#if DEBUG
-	LogToFileEx(g_sLogPath, "%s", buffer);
+	LogToFileEx(g_sLogPath, buffer);
 	#endif
 }
