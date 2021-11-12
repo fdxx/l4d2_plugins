@@ -137,5 +137,5 @@ void LogToFilePlus(const char[] sMsg, any ...)
 	BuildPath(Path_SM, sLogPath, sizeof(sLogPath), "logs/%s_logging.log", sDate);
 	VFormat(sBuffer, sizeof(sBuffer), sMsg, 2);
 
-	LogToFileEx(sLogPath, sBuffer);
+	LogToFileEx(sLogPath, "%s", sBuffer);
 }

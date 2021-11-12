@@ -119,6 +119,6 @@ void LogToFileEx_Debug(const char[] format, any ...)
 	VFormat(buffer, sizeof(buffer), format, 2);
 
 	#if DEBUG
-	LogToFileEx(g_logPath, buffer);
+	LogToFileEx(g_logPath, "%s", buffer);
 	#endif
 }
