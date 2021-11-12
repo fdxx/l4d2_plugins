@@ -10,7 +10,7 @@
 - [MultiColors](https://github.com/Bara/Multi-Colors)
 - [stripper](http://www.bailopan.net/stripper/snapshots/1.2/)
 - [Accelerator](https://forums.alliedmods.net/showthread.php?t=277703)
-- [nativevotes](https://github.com/sapphonie/sourcemod-nativevotes-updated)
+- [nativevotes](https://github.com/fdxx/sourcemod-nativevotes-updated/commits/master)
 - [l4d2_weapons](https://github.com/raziEiL/l4d2_weapons)
 
 ## 其他
