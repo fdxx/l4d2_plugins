@@ -12,13 +12,13 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.1"
+#define VERSION "2.2"
 
 #define GAMEDATA "l4d2_nav_area"
 #define BOSS_SURVIVOR_SAFE_DISTANCE 2200.0	//boss和生还者之间的安全距离(考虑Flow转换)
-#define TANK_WITCH_SAFE_FLOW 0.15			//witch和tank之间的安全流距离
+#define TANK_WITCH_SAFE_FLOW 0.20			//witch和tank之间的安全流距离
 #define BOSS_MIN_SPAWN_FLOW 0.20
-#define BOSS_MAX_SPAWN_FLOW 0.90
+#define BOSS_MAX_SPAWN_FLOW 0.85
 
 ConVar CvarDirectorNoBoss;
 ConVar CvarTankSpawnEnable, CvarWitchSpawnEnable;
@@ -44,13 +44,21 @@ Handle g_hSDKFindRandomSpot;
 int g_iSpawnAttributesOffset, g_iFlowDistanceOffset, g_iNavAreaCount;
 Address g_pTheNavAreas;
 
-char g_sLogPath[PLATFORM_MAX_PATH];
+char g_sLogPath[PLATFORM_MAX_PATH], g_sCfgPath[PLATFORM_MAX_PATH];
+
+ArrayList g_aBanFlow;
 
 enum struct g_eSpawanInfo
 {
 	float fFlow;
     float fSpawnPos[3];
 }
+
+enum
+{
+	FLOW_MIN = 0,
+    FLOW_MAX = 1
+};
 
 //https://github.com/KitRifty/sourcepawn-navmesh/blob/master/addons/sourcemod/scripting/include/navmesh.inc
 //https://developer.valvesoftware.com/wiki/List_of_L4D_Series_Nav_Mesh_Attributes:zh-cn
@@ -109,12 +117,15 @@ public Plugin myinfo =
 	author = "fdxx",
 	description = "Set tank and witch spawn on every map",
 	version = VERSION,
-	url = ""
 }
 
 public void OnPluginStart()
 {
+	// https://github.com/SirPlease/L4D2-Competitive-Rework/blob/master/cfg/cfgogl/zonemod/mapinfo.txt
+	BuildPath(Path_SM, g_sCfgPath, sizeof(g_sCfgPath), "data/mapinfo.txt");
+
 	BuildPath(Path_SM, g_sLogPath, sizeof(g_sLogPath), "logs/l4d2_boss_spawn_control.log");
+	g_aBanFlow = new ArrayList(2);
 
 	CvarDirectorNoBoss = FindConVar("director_no_bosses");
 
@@ -146,7 +157,7 @@ public void OnPluginStart()
 	//DEBUG
 	RegAdminCmd("sm_flowhud", ShowFlowHud, ADMFLAG_ROOT);
 	RegAdminCmd("sm_reflow", ReFlow, ADMFLAG_ROOT);
-	RegAdminCmd("sm_setflow_test", SetFlow_Test, ADMFLAG_ROOT);
+	//RegAdminCmd("sm_setflow_test", SetFlow_Test, ADMFLAG_ROOT);
 
 	AutoExecConfig(true, "l4d2_boss_spawn_control");
 }
@@ -201,7 +212,44 @@ public Action RoundStart_Timer(Handle timer)
 	g_fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
 	g_fSpawnDistFlow = (BOSS_SURVIVOR_SAFE_DISTANCE / g_fMapMaxFlowDist);
 
+	GetBanFlow();
 	SetBossSpawnFlow();
+
+	return Plugin_Continue;
+}
+
+void GetBanFlow()
+{
+	g_aBanFlow.Clear();
+
+	float fBanFlow[2];
+
+	fBanFlow[FLOW_MIN] = 0.0;
+	fBanFlow[FLOW_MAX] = BOSS_MIN_SPAWN_FLOW;
+	g_aBanFlow.PushArray(fBanFlow);
+
+	fBanFlow[FLOW_MIN] = BOSS_MAX_SPAWN_FLOW;
+	fBanFlow[FLOW_MAX] = 1.0;
+	g_aBanFlow.PushArray(fBanFlow);
+	
+	KeyValues kv = new KeyValues("");
+
+	if (kv.ImportFromFile(g_sCfgPath))
+	{
+		if (kv.JumpToKey(CurrentMap()) && kv.JumpToKey("tank_ban_flow") && kv.GotoFirstSubKey())
+		{
+			do
+			{
+				fBanFlow[FLOW_MIN] = kv.GetNum("min", -1) * 0.01;
+				fBanFlow[FLOW_MAX] = kv.GetNum("max", -1) * 0.01;
+				g_aBanFlow.PushArray(fBanFlow);
+			}
+			while (kv.GotoNextKey());
+		}
+	}
+	else SetFailState("Failed to load mapinfo file");
+
+	delete kv;
 }
 
 void SetBossSpawnFlow()
@@ -211,73 +259,31 @@ void SetBossSpawnFlow()
 	hProfiler.Start();
 	#endif
 
-	static Address pThisArea, pThreatArea;
-	static int iFlags;
-	static float fThisSpawnPos[3], fThreatSpawnPos[3], fThisFlowDist;
+	static Address pThisArea;
 	static float fTriggerSpawnFlow;
+	static float fThisSpawnPos[3];
 	static g_eSpawanInfo eSpawanInfo;
 
-	int iValidPosCount, iPosCount;
+	ArrayList aSpawnData = new ArrayList(sizeof(g_eSpawanInfo));
 
-	ArrayList aThreatAreaArray = new ArrayList();
-	ArrayList aSpawnDataArray = new ArrayList(sizeof(g_eSpawanInfo));
-
-	//保存Threat区域
 	for (int i = 1; i < g_iNavAreaCount; i++)
 	{
 		pThisArea = view_as<Address>(LoadFromAddress(g_pTheNavAreas + view_as<Address>(i * 4), NumberType_Int32));
 		if (!pThisArea.IsNull())
 		{
-			iFlags = pThisArea.SpawnAttributes;
-			if (iFlags && (iFlags & TERROR_NAV_THREAT))
+			if (IsValidFlags(pThisArea.SpawnAttributes))
 			{
-				aThreatAreaArray.Push(pThisArea);
-				//pThisArea.GetSpawnPos(fThreatSpawnPos);
-				//LogToFileEx_Debug("fThreatFlow = %.2f, fThreatSpawnPos(%.1f %.1f %.1f)", (pThisArea.Flow/g_fMapMaxFlowDist*100.0), fThreatSpawnPos[0], fThreatSpawnPos[1], fThreatSpawnPos[2]);
-			}
-		}
-	}
-
-	//保存Threat区域附近点位
-	for (int p = 0; p < aThreatAreaArray.Length; p++)
-	{
-		pThreatArea = aThreatAreaArray.Get(p);
-		pThreatArea.GetSpawnPos(fThreatSpawnPos);
-
-		for (int i = 1; i < g_iNavAreaCount; i++)
-		{
-			pThisArea = view_as<Address>(LoadFromAddress(g_pTheNavAreas + view_as<Address>(i * 4), NumberType_Int32));
-			if (!pThisArea.IsNull())
-			{
-				if (pThisArea.SpawnAttributes)
+				fTriggerSpawnFlow = pThisArea.Flow/g_fMapMaxFlowDist - g_fSpawnDistFlow;
+				if (IsValidFlow(fTriggerSpawnFlow))
 				{
-					fThisFlowDist = pThisArea.Flow;
-					if (0.0 < fThisFlowDist < g_fMapMaxFlowDist)
+					pThisArea.GetSpawnPos(fThisSpawnPos);
+					if (!IsWillStuck(fThisSpawnPos))
 					{
-						if (FloatAbs((fThisFlowDist/g_fMapMaxFlowDist) - (pThreatArea.Flow/g_fMapMaxFlowDist)) <= 0.03)
+						if (L4D2Direct_GetTerrorNavArea(fThisSpawnPos) != Address_Null)
 						{
-							pThisArea.GetSpawnPos(fThisSpawnPos);
-							if (GetVectorDistance(fThisSpawnPos, fThreatSpawnPos) <= 300.0)
-							{
-								iPosCount++;
-								if (!IsWillStuck(fThisSpawnPos))
-								{
-									if (L4D2Direct_GetTerrorNavArea(fThisSpawnPos) != Address_Null)
-									{
-										fTriggerSpawnFlow = (fThisFlowDist/g_fMapMaxFlowDist) - g_fSpawnDistFlow;
-										if (BOSS_MIN_SPAWN_FLOW <= fTriggerSpawnFlow <= BOSS_MAX_SPAWN_FLOW)
-										{
-											iValidPosCount++;
-											eSpawanInfo.fFlow = fTriggerSpawnFlow;
-											eSpawanInfo.fSpawnPos = fThisSpawnPos;
-											aSpawnDataArray.PushArray(eSpawanInfo);
-											//LogToFileEx_Debug("fThisSpawnPos(%.1f %.1f %.1f)", fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
-										}
-									}
-									//else LogToFileEx_Debug("无效 Flow: %.3f", fTriggerSpawnFlow);
-								}
-								//else LogToFileEx_Debug("无效点位会卡住");
-							}
+							eSpawanInfo.fFlow = fTriggerSpawnFlow;
+							eSpawanInfo.fSpawnPos = fThisSpawnPos;
+							aSpawnData.PushArray(eSpawanInfo);
 						}
 					}
 				}
@@ -285,37 +291,35 @@ void SetBossSpawnFlow()
 		}
 	}
 
-	//PrintBossSpawnData(aSpawnDataArray, 1);
+	//LogToFileEx_Debug("有效点位：%i", aSpawnData.Length);
 
 	//设置Tank产生点
 	if (!g_bStaticTankMap)
 	{
-		if (aSpawnDataArray.Length > 0)
+		if (aSpawnData.Length > 0)
 		{
-			int iRandomIndex = GetRandomInt(0, aSpawnDataArray.Length - 1);
-			aSpawnDataArray.GetArray(iRandomIndex, eSpawanInfo);
+			int iRandomIndex = GetRandomInt(0, aSpawnData.Length - 1);
+			aSpawnData.GetArray(iRandomIndex, eSpawanInfo);
 
 			g_fTankSpawnPos = eSpawanInfo.fSpawnPos;
 			g_fTankSpawnFlow = eSpawanInfo.fFlow;
 
-			aSpawnDataArray.Erase(iRandomIndex);
+			aSpawnData.Erase(iRandomIndex);
 		}
 		else g_fTankSpawnFlow = 0.0;
 	}
 	else g_fTankSpawnFlow = 0.0;
 
-	//PrintBossSpawnData(aSpawnDataArray, 2);
-
 	//设置witch产生点
 	if (!g_bStaticWitchMap)
 	{
-		if (aSpawnDataArray.Length > 0)
+		if (aSpawnData.Length > 0)
 		{
 			bool bValidPos;
 
 			for (int i = 0; i < 200; i++)
 			{
-				aSpawnDataArray.GetArray(GetRandomInt(0, aSpawnDataArray.Length - 1), eSpawanInfo);
+				aSpawnData.GetArray(GetRandomInt(0, aSpawnData.Length - 1), eSpawanInfo);
 
 				//Tank和Witch间隔一定距离
 				if (FloatAbs(g_fTankSpawnFlow - eSpawanInfo.fFlow) > TANK_WITCH_SAFE_FLOW)
@@ -339,28 +343,48 @@ void SetBossSpawnFlow()
 
 	#if DEBUG
 	hProfiler.Stop();
-	LogToFileEx_Debug("区域 %i 个, 点位 %i 个, 有效点位 %i 个, 执行时间: %f", aThreatAreaArray.Length, iPosCount, iValidPosCount, hProfiler.Time);
+	LogToFileEx_Debug("执行时间: %f", hProfiler.Time);
 	LogToFileEx_Debug("TankSpawnFlow(%.1f %.1f %.1f) = %i, WitchSpawnFlow(%.1f %.1f %.1f) = %i", g_fTankSpawnPos[0], g_fTankSpawnPos[1], g_fTankSpawnPos[2], RoundToNearest(g_fTankSpawnFlow * 100.0), g_fWitchSpawnPos[0], g_fWitchSpawnPos[1], g_fWitchSpawnPos[2], RoundToNearest(g_fWitchSpawnFlow * 100.0));
 	delete hProfiler;
 	#endif
 
-	delete aThreatAreaArray;
-	delete aSpawnDataArray;
+	delete aSpawnData;
+}
+
+bool IsValidFlags(int iFlags)
+{	
+	return (iFlags && !(iFlags & TERROR_NAV_EMPTY) && !(iFlags & TERROR_NAV_STOP) && !(iFlags & TERROR_NAV_RESCUE_CLOSET));
+}
+
+bool IsValidFlow(float fFlow)
+{
+	if (0.0 < fFlow < 1.0)
+	{
+		float fBanFlow[2];
+
+		for (int i = 0; i < g_aBanFlow.Length; i++)
+		{
+			g_aBanFlow.GetArray(i, fBanFlow);
+			if (fBanFlow[FLOW_MIN] <= fFlow <= fBanFlow[FLOW_MAX])
+			{
+				return false;
+			}
+		}
+	}
+	else return false;
+	return true;
 }
 
 bool IsWillStuck(const float fPos[3])
 {
-	bool bStuck;
-
 	//似乎所有客户端大小都一样
 	static const float fTankMinSize[3] = {-16.0, -16.0, 0.0};
 	static const float fTankMaxSize[3] = {16.0, 16.0, 71.0};
 
-	Handle hTrace;
-	hTrace = TR_TraceHullFilterEx(fPos, fPos, fTankMinSize, fTankMaxSize, MASK_PLAYERSOLID, TraceFilter);
-	bStuck = TR_DidHit(hTrace);
+	Handle hTrace = TR_TraceHullFilterEx(fPos, fPos, fTankMinSize, fTankMaxSize, MASK_PLAYERSOLID, TraceFilter);
+	bool bStuck = TR_DidHit(hTrace);
+	
 	delete hTrace;
-
 	return bStuck;
 }
 
@@ -371,20 +395,6 @@ public bool TraceFilter(int entity, int contentsMask)
 		return false;
 	}
 	return true;
-}
-
-stock void PrintBossSpawnData(ArrayList aSpawnDataArray, int iNum)
-{
-	g_eSpawanInfo eSpawanInfo;
-	float fThisSpawnFlow, fThisSpawnPos[3];
-
-	for (int i = 0; i < aSpawnDataArray.Length; i++)
-	{
-		aSpawnDataArray.GetArray(i, eSpawanInfo);
-		fThisSpawnFlow = eSpawanInfo.fFlow;
-		fThisSpawnPos = eSpawanInfo.fSpawnPos;
-		LogToFileEx_Debug("[检查数组 %i] (%i) fThisSpawnFlow: %.3f, fThisSpawnPos: (%.0f %.0f %.0f)", iNum, i, fThisSpawnFlow, fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
-	}
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -438,33 +448,17 @@ public Action TankSpawnCheck_Timer(Handle timer)
 	{
 		if (fSurMaxFlow() >= g_fTankSpawnFlow)
 		{
-			CreateTimer(0.1, SpawnTank_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
+			g_bCanSpawnTank = true;
+			L4D2_SpawnTank(g_fTankSpawnPos, NULL_VECTOR);
+			g_bCanSpawnTank = false;
+
 			g_hTankFlowCheckTimer = null;
 			return Plugin_Stop;
 		}
 		return Plugin_Continue;
 	}
-	else
-	{
-		g_hTankFlowCheckTimer = null;
-		return Plugin_Stop;
-	}
-}
-
-public Action SpawnTank_Timer(Handle timer)
-{
-	if (g_bTankSpawnEnable && g_fTankSpawnFlow > 0.0 && g_bLeftSafeArea)
-	{
-		g_bCanSpawnTank = true;
-		bool bSpawnSuccess = L4D2_SpawnTank(g_fTankSpawnPos, NULL_VECTOR) > 0;
-		g_bCanSpawnTank = false;
-		
-		if (!bSpawnSuccess)
-		{
-			LogError("产生Tank失败, g_fTankSpawnFlow = %.3f, g_fTankSpawnPos(%.0f %.0f %.0f)", g_fTankSpawnFlow, g_fTankSpawnPos[0], g_fTankSpawnPos[1], g_fTankSpawnPos[2]);
-			CPrintToChatAll("{default}[{yellow}提示{default}] WTF bug? 产生{olive}Tank{default}失败");
-		}
-	}
+	g_hTankFlowCheckTimer = null;
+	return Plugin_Stop;
 }
 
 public Action WitchSpawnCheck_Timer(Handle timer)
@@ -473,38 +467,23 @@ public Action WitchSpawnCheck_Timer(Handle timer)
 	{
 		if (fSurMaxFlow() >= g_fWitchSpawnFlow)
 		{
-			CreateTimer(0.1, SpawnWitch_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
+			g_bCanSpawnWitch = true;
+			L4D2_SpawnWitch(g_fWitchSpawnPos, NULL_VECTOR);
+			g_bCanSpawnWitch = false;
+
 			g_hWitchFlowCheckTimer = null;
 			return Plugin_Stop;
 		}
 		return Plugin_Continue;
 	}
-	else
-	{
-		g_hWitchFlowCheckTimer = null;
-		return Plugin_Stop;
-	}
-}
-
-public Action SpawnWitch_Timer(Handle timer)
-{
-	if (g_bWitchSpawnEnable && g_fWitchSpawnFlow > 0.0 && g_bLeftSafeArea)
-	{
-		g_bCanSpawnWitch = true;
-		bool bSpawnSuccess = L4D2_SpawnWitch(g_fWitchSpawnPos, NULL_VECTOR) > 0;
-		g_bCanSpawnWitch = false;
-		
-		if (!bSpawnSuccess)
-		{
-			LogError("产生Witch失败, g_fWitchSpawnFlow = %.3f, g_fWitchSpawnPos(%.0f %.0f %.0f)", g_fWitchSpawnFlow, g_fWitchSpawnPos[0], g_fWitchSpawnPos[1], g_fWitchSpawnPos[2]);
-			CPrintToChatAll("{default}[{yellow}提示{default}] WTF bug? 产生{olive}Witch{default}失败");
-		}
-	}
+	g_hWitchFlowCheckTimer = null;
+	return Plugin_Stop;
 }
 
 public Action Bossflow(int client, int args)
 {
 	PrintBossflow();
+	return Plugin_Handled;
 }
 
 public Action ReFlow(int client, int args)
@@ -515,8 +494,9 @@ public Action ReFlow(int client, int args)
 		PrintBossflow();
 	}
 	else PrintToChat(client, "已离开安全区域，无法设置");
+	return Plugin_Handled;
 }
-
+/*
 public Action SetFlow_Test(int client, int args)
 {
 	if (!g_bLeftSafeArea)
@@ -532,7 +512,7 @@ public Action SetFlowTest_Timer(Handle timer)
 	LogToFileEx_Debug("第 %i 次 TestSetFlow", iTestSetFlowcount);
 	SetBossSpawnFlow();
 }
-
+*/
 void PrintBossflow()
 {
 	int SurvivorMaxFlow = RoundToNearest(fSurMaxFlow() * 100.0);
@@ -586,6 +566,7 @@ public Action ShowFlowHud(int client, int args)
 	g_bShowFlow[client] = !g_bShowFlow[client];
 	if (g_bShowFlow[client]) CreateTimer(1.0, ShowFlowHud_Timer, client, TIMER_REPEAT);
 	CPrintToChat(client, "Flow 面板状态: {yellow}%s", (g_bShowFlow[client] ? "已开启" : "已关闭"));
+	return Plugin_Handled;
 }
 
 public Action ShowFlowHud_Timer(Handle timer, int client)
@@ -634,7 +615,7 @@ public Action ShowFlowHud_Timer(Handle timer, int client)
 	}
 }
 
-public int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {}
+public int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {return 0;}
 
 bool StaticTankMap()
 {
@@ -703,9 +684,9 @@ bool IsOfficialMap()
 	return false;
 }
 
-char CurrentMap()
+char[] CurrentMap()
 {
-	static char sMapName[256];
+	static char sMapName[128];
 	GetCurrentMap(sMapName, sizeof(sMapName));
 	return sMapName;
 }
@@ -753,7 +734,7 @@ stock void LogToFileEx_Debug(const char[] format, any ...)
 	VFormat(buffer, sizeof(buffer), format, 2);
 
 	#if DEBUG
-	LogToFileEx(g_sLogPath, "%s", buffer);
+	LogToFileEx(g_sLogPath, buffer);
 	#endif
 }
 
