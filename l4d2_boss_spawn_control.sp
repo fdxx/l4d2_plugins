@@ -12,7 +12,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.2"
+#define VERSION "2.3"
 
 #define GAMEDATA "l4d2_nav_area"
 #define BOSS_SURVIVOR_SAFE_DISTANCE 2200.0	//boss和生还者之间的安全距离(考虑Flow转换)
@@ -28,7 +28,7 @@ bool g_bBlockTankSpawn, g_bBlockWitchSpawn;
 
 float g_fTankSpawnFlow, g_fWitchSpawnFlow;
 float g_fTankSpawnPos[3], g_fWitchSpawnPos[3];
-float g_fSpawnDistFlow;
+float g_fSpawnBufferFlow;
 float g_fMapMaxFlowDist;
 
 bool g_bStaticTankMap = true;
@@ -121,7 +121,7 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	// https://github.com/SirPlease/L4D2-Competitive-Rework/blob/master/cfg/cfgogl/zonemod/mapinfo.txt
+	// Thanks: https://github.com/SirPlease/L4D2-Competitive-Rework/blob/master/cfg/cfgogl/zonemod/mapinfo.txt
 	BuildPath(Path_SM, g_sCfgPath, sizeof(g_sCfgPath), "data/mapinfo.txt");
 
 	BuildPath(Path_SM, g_sLogPath, sizeof(g_sLogPath), "logs/l4d2_boss_spawn_control.log");
@@ -210,7 +210,7 @@ public Action RoundStart_Timer(Handle timer)
 	g_bStaticTankMap = StaticTankMap();
 	g_bStaticWitchMap = StaticWitchMap();
 	g_fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
-	g_fSpawnDistFlow = (BOSS_SURVIVOR_SAFE_DISTANCE / g_fMapMaxFlowDist);
+	g_fSpawnBufferFlow = (BOSS_SURVIVOR_SAFE_DISTANCE / g_fMapMaxFlowDist);
 
 	GetBanFlow();
 	SetBossSpawnFlow();
@@ -260,7 +260,7 @@ void SetBossSpawnFlow()
 	#endif
 
 	static Address pThisArea;
-	static float fTriggerSpawnFlow;
+	static float fSpawnFlow, fTriggerSpawnFlow;
 	static float fThisSpawnPos[3];
 	static g_eSpawanInfo eSpawanInfo;
 
@@ -273,17 +273,21 @@ void SetBossSpawnFlow()
 		{
 			if (IsValidFlags(pThisArea.SpawnAttributes))
 			{
-				fTriggerSpawnFlow = pThisArea.Flow/g_fMapMaxFlowDist - g_fSpawnDistFlow;
-				if (IsValidFlow(fTriggerSpawnFlow))
+				fSpawnFlow = pThisArea.Flow/g_fMapMaxFlowDist;
+				if (IsValidFlow(fSpawnFlow))
 				{
-					pThisArea.GetSpawnPos(fThisSpawnPos);
-					if (!IsWillStuck(fThisSpawnPos))
+					fTriggerSpawnFlow = fSpawnFlow - g_fSpawnBufferFlow;
+					if (fTriggerSpawnFlow > 0.0)
 					{
-						if (L4D2Direct_GetTerrorNavArea(fThisSpawnPos) != Address_Null)
+						pThisArea.GetSpawnPos(fThisSpawnPos);
+						if (!IsWillStuck(fThisSpawnPos))
 						{
-							eSpawanInfo.fFlow = fTriggerSpawnFlow;
-							eSpawanInfo.fSpawnPos = fThisSpawnPos;
-							aSpawnData.PushArray(eSpawanInfo);
+							if (L4D2Direct_GetTerrorNavArea(fThisSpawnPos) != Address_Null)
+							{
+								eSpawanInfo.fFlow = fTriggerSpawnFlow;
+								eSpawanInfo.fSpawnPos = fThisSpawnPos;
+								aSpawnData.PushArray(eSpawanInfo);
+							}
 						}
 					}
 				}
@@ -344,7 +348,7 @@ void SetBossSpawnFlow()
 	#if DEBUG
 	hProfiler.Stop();
 	LogToFileEx_Debug("执行时间: %f", hProfiler.Time);
-	LogToFileEx_Debug("TankSpawnFlow(%.1f %.1f %.1f) = %i, WitchSpawnFlow(%.1f %.1f %.1f) = %i", g_fTankSpawnPos[0], g_fTankSpawnPos[1], g_fTankSpawnPos[2], RoundToNearest(g_fTankSpawnFlow * 100.0), g_fWitchSpawnPos[0], g_fWitchSpawnPos[1], g_fWitchSpawnPos[2], RoundToNearest(g_fWitchSpawnFlow * 100.0));
+	LogToFileEx_Debug("[Tank] flow: %i, actual: %i", RoundToNearest(g_fTankSpawnFlow * 100), RoundToNearest((g_fTankSpawnFlow + g_fSpawnBufferFlow) * 100));
 	delete hProfiler;
 	#endif
 
