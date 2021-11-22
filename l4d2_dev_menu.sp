@@ -7,7 +7,7 @@
 #include <sdkhooks>
 #include <left4dhooks>
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 
 static const char g_sWeapons[][][] = 
 {
@@ -134,7 +134,7 @@ public void OnConfigsExecuted()
 	{
 		TopMenuObject TopObj_DevMenu = g_TopMenu.AddCategory("l4d2_dev_menu", Category_TopMenuHandler, "l4d2_dev_menu", ADMFLAG_ROOT);
 
-		// 可以在 adminmenu_sorting.txt 中设置菜单显示的顺序
+		// 可以在 configs/adminmenu_sorting.txt 中设置菜单显示的顺序
 		g_TopObj_Kill = g_TopMenu.AddItem("l4d2_dev_menu_kill", Item_TopMenuHandler, TopObj_DevMenu, "l4d2_dev_menu_kill", ADMFLAG_ROOT, "处死玩家");
 		g_TopObj_SpawnSpecial = g_TopMenu.AddItem("l4d2_dev_menu_spawnspecial", Item_TopMenuHandler, TopObj_DevMenu, "l4d2_dev_menu_spawnspecial", ADMFLAG_ROOT, "产生特感");
 		g_TopObj_GodMode = g_TopMenu.AddItem("l4d2_dev_menu_godmode", Item_TopMenuHandler, TopObj_DevMenu, "l4d2_dev_menu_godmode", ADMFLAG_ROOT, "无敌模式");
@@ -361,7 +361,7 @@ public int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, in
 			if (itemNum == 0) g_bAutoSpawn[client] = !g_bAutoSpawn[client];
 			else
 			{
-				BlockSpawn(false);
+				AllowSpawn(true);
 
 				char sClass[16], sCmdArgs[128], sDisplay[128];
 				menu.GetItem(itemNum, sClass, sizeof(sClass), _, sDisplay, sizeof(sDisplay));
@@ -369,7 +369,7 @@ public int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, in
 				CheatCommand(client, "z_spawn_old", sCmdArgs);
 
 				PrintToChat(client, "[DevMenu] 产生特感: %s", sDisplay);
-				BlockSpawn(true);
+				AllowSpawn(false);
 			}
 			g_iSpecialClassMenuPos[client] = menu.Selection;
 			SpawnSpecial_ClassSelect(client);
@@ -1299,25 +1299,38 @@ void CheatCommand(int client, const char[] command, const char[] args = "")
 	SetCommandFlags(command, iFlags);
 }
 
-void BlockSpawn(bool bBlock)
+void AllowSpawn(bool bAllow)
 {
-	if (bBlock)
+	static bool bBlockSpecialSpawnDefault, bBlockTankSpawnDefault, bBlockWitchSpawnDefault;
+
+	if (bAllow)
 	{
 		if (g_cvBlockSpecialSpawn != null)
-			g_cvBlockSpecialSpawn.BoolValue = true;
-		if (g_cvBlockTankSpawn != null)
-			g_cvBlockTankSpawn.BoolValue = true;
-		if (g_cvBlockWitchSpawn != null)
-			g_cvBlockWitchSpawn.BoolValue = true;
-	}
-	else
-	{
-		if (g_cvBlockSpecialSpawn != null)
+		{
+			bBlockSpecialSpawnDefault = g_cvBlockSpecialSpawn.BoolValue;
 			g_cvBlockSpecialSpawn.BoolValue = false;
+		}
 		if (g_cvBlockTankSpawn != null)
+		{
+			bBlockTankSpawnDefault = g_cvBlockTankSpawn.BoolValue;
 			g_cvBlockTankSpawn.BoolValue = false;
+		}
 		if (g_cvBlockWitchSpawn != null)
+		{
+			bBlockWitchSpawnDefault = g_cvBlockWitchSpawn.BoolValue;
 			g_cvBlockWitchSpawn.BoolValue = false;
+		}
+	}
+	else // 恢复默认值
+	{
+		if (g_cvBlockSpecialSpawn != null)
+			g_cvBlockSpecialSpawn.BoolValue = bBlockSpecialSpawnDefault;
+
+		if (g_cvBlockTankSpawn != null)
+			g_cvBlockTankSpawn.BoolValue = bBlockTankSpawnDefault;
+
+		if (g_cvBlockWitchSpawn != null)
+			g_cvBlockWitchSpawn.BoolValue = bBlockWitchSpawnDefault;
 	}
 }
 
