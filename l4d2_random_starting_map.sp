@@ -8,7 +8,7 @@ public Plugin myinfo =
 	name = "L4D2 Random starting map",
 	author = "fdxx",
 	description = "L4D2 Random starting map",
-	version = "1.4",
+	version = "1.5",
 	url = ""
 }
 
@@ -22,6 +22,7 @@ public Action ChangeMap(Handle timer)
 {
 	if (!HaveRealPlayer())
 	{
+		SetRandomSeed(GetTime()); // 更好的随机
 		switch (GetRandomInt(1, 14))
 		{
 			case 1: ServerCommand("changelevel c1m1_hotel");
