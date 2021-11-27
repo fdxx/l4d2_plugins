@@ -1,0 +1,25 @@
+"Games"
+{
+	"left4dead2" 
+	{
+		"Functions"
+		{
+			"ForEachTerrorPlayer<SpawnablePZScan>"
+			{
+				"signature"		"ForEachTerrorPlayer<SpawnablePZScan>"
+				"callconv"		"thiscall"
+				"return"		"void"
+				"this"			"ignore"
+			}
+		}
+
+		"Signatures" 
+		{
+			"ForEachTerrorPlayer<SpawnablePZScan>"
+			{
+				"library"	"server"
+				"linux"		"@_Z19ForEachTerrorPlayerI15SpawnablePZScanEbRT_"
+			}
+		}
+    }
+}
