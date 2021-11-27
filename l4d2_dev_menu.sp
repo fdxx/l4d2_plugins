@@ -7,7 +7,7 @@
 #include <sdkhooks>
 #include <left4dhooks>
 
-#define VERSION "0.2"
+#define VERSION "0.3"
 
 static const char g_sWeapons[][][] = 
 {
@@ -107,10 +107,14 @@ int
 	g_iSpecialClassMenuPos[MAXPLAYERS+1],
 	g_iNoClipMenuPos[MAXPLAYERS+1],
 	g_iGodModeMenuPos[MAXPLAYERS+1],
-	g_iKillMenuPos[MAXPLAYERS+1];
+	g_iKillMenuPos[MAXPLAYERS+1],
+	g_iGiveItemType[MAXPLAYERS+1];
 
-int g_iGiveItemType[MAXPLAYERS+1];
-bool g_bAutoSpawn[MAXPLAYERS+1];
+bool
+	g_bAutoSpawn[MAXPLAYERS+1],
+	g_bSpawnType[MAXPLAYERS+1];
+	
+StringMap g_smNameToClass;
 
 public Plugin myinfo = 
 {
@@ -122,13 +126,27 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	CreateConVar("l4d2_dev_menu_version", VERSION, "version", FCVAR_NONE | FCVAR_DONTRECORD);
+	CreateStringMap();
+}
+
+void CreateStringMap()
+{
+	g_smNameToClass = new StringMap();
+	g_smNameToClass.SetValue("smoker", 1, true);
+	g_smNameToClass.SetValue("boomer", 2, true);
+	g_smNameToClass.SetValue("hunter", 3, true);
+	g_smNameToClass.SetValue("spitter", 4, true);
+	g_smNameToClass.SetValue("jockey", 5, true);
+	g_smNameToClass.SetValue("charger", 6, true);
+	g_smNameToClass.SetValue("witch", 7, true);
+	g_smNameToClass.SetValue("tank", 8, true);
 }
 
 public void OnConfigsExecuted()
 {
-	static bool shit = true;
-	if (!shit) return;
-	shit = false;
+	static bool shit;
+	if (shit) return;
+	shit = true;
 
 	if (LibraryExists("adminmenu") && ((g_TopMenu = GetAdminTopMenu()) != null))
 	{
@@ -334,12 +352,14 @@ public int Kill_TargetSelect_MenuHandler(Menu menu, MenuAction action, int clien
 
 void SpawnSpecial_ClassSelect(int client)
 {
-	char sSpawnType[128];
-	FormatEx(sSpawnType, sizeof(sSpawnType), "%s", g_bAutoSpawn[client] ? "设置产生方式 [当前: 自动找位]" : "设置产生方式 [当前: 十字准星处]");
+	static char sSpawnType[128], sAutoSpawn[128];
+	FormatEx(sSpawnType, sizeof(sSpawnType), "%s", g_bSpawnType[client] ? "设置产生方式 [当前: left4dhooks]" : "设置产生方式 [当前: z_spawn_old]");
+	FormatEx(sAutoSpawn, sizeof(sAutoSpawn), "%s", g_bAutoSpawn[client] ? "设置产生位置 [当前: 自动找位]" : "设置产生位置 [当前: 十字准星处]");
 
 	Menu menu = new Menu(SpawnSpecial_ClassSelect_MenuHandler);
 	menu.SetTitle("产生特感:");
 	menu.AddItem("", sSpawnType);
+	menu.AddItem("", sAutoSpawn);
 	menu.AddItem("tank", "Tank");
 	menu.AddItem("witch", "Witch");
 	menu.AddItem("smoker", "Smoker");
@@ -358,19 +378,56 @@ public int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, in
 	{
 		case MenuAction_Select:
 		{
-			if (itemNum == 0) g_bAutoSpawn[client] = !g_bAutoSpawn[client];
-			else
+			switch (itemNum)
 			{
-				AllowSpawn(true);
+				case 0: g_bSpawnType[client] = !g_bSpawnType[client];
+				case 1: g_bAutoSpawn[client] = !g_bAutoSpawn[client];
+				default:
+				{
+					AllowSpawn(true);
 
-				char sClass[16], sCmdArgs[128], sDisplay[128];
-				menu.GetItem(itemNum, sClass, sizeof(sClass), _, sDisplay, sizeof(sDisplay));
-				FormatEx(sCmdArgs, sizeof(sCmdArgs), "%s%s", sClass, (g_bAutoSpawn[client] ? " auto" : ""));
-				CheatCommand(client, "z_spawn_old", sCmdArgs);
+					char sName[16], sDisplay[128];
+					menu.GetItem(itemNum, sName, sizeof(sName), _, sDisplay, sizeof(sDisplay));
 
-				PrintToChat(client, "[DevMenu] 产生特感: %s", sDisplay);
-				AllowSpawn(false);
+					if (!g_bSpawnType[client])
+					{
+						char sCmdArgs[128];
+						FormatEx(sCmdArgs, sizeof(sCmdArgs), "%s%s", sName, (g_bAutoSpawn[client] ? " auto" : ""));
+						CheatCommand(client, "z_spawn_old", sCmdArgs);
+						PrintToChat(client, "[DevMenu] 产生特感 (z_spawn_old): %s", sDisplay);
+					}
+					else
+					{
+						int iClass;
+						if (g_smNameToClass.GetValue(sName, iClass))
+						{
+							float fPos[3];
+							if (GetSpawnPos(client, iClass, fPos))
+							{
+								bool bSpawnSuccess;
+								switch (iClass)
+								{
+									case 1,2,3,4,5,6:
+										bSpawnSuccess = L4D2_SpawnSpecial(iClass, fPos, NULL_VECTOR) > 0;
+
+									case 7:
+										bSpawnSuccess = L4D2_SpawnWitch(fPos, NULL_VECTOR) > MaxClients;
+									
+									case 8:
+										bSpawnSuccess = L4D2_SpawnTank(fPos, NULL_VECTOR) > 0;
+								}
+								if (bSpawnSuccess)
+								{
+									PrintToChat(client, "[DevMenu] 产生特感 (left4dhooks): %s", sDisplay);
+								}
+							}
+						}
+					}
+
+					AllowSpawn(false);
+				}
 			}
+
 			g_iSpecialClassMenuPos[client] = menu.Selection;
 			SpawnSpecial_ClassSelect(client);
 		}
@@ -385,6 +442,36 @@ public int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, in
 		}
 	}
 	return 0;
+}
+
+bool GetSpawnPos(int client, int iClass, float fPos[3])
+{
+	if (g_bAutoSpawn[client])
+	{
+		return L4D_GetRandomPZSpawnPosition(client, iClass, 30, fPos);
+	}
+	else
+	{
+		float fClientAng[3], fClientPos[3];
+   		GetClientEyeAngles(client, fClientAng);
+		GetClientEyePosition(client, fClientPos);
+
+		Handle hTrace = TR_TraceRayFilterEx(fClientPos, fClientAng, MASK_SHOT, RayType_Infinite, TraceFilter);
+		if (TR_DidHit(hTrace))
+		{
+			TR_GetEndPosition(fPos, hTrace); //获得碰撞点
+			fPos[2] += 20.0; // 避免产生在地下
+			delete hTrace;
+			return true;
+		}
+		delete hTrace;
+		return false;
+	}
+}
+
+public bool TraceFilter(int entity, int contentsMask)
+{
+	return entity > MaxClients;
 }
 
 void GodMode_TargetSelect(int client)
@@ -1301,36 +1388,36 @@ void CheatCommand(int client, const char[] command, const char[] args = "")
 
 void AllowSpawn(bool bAllow)
 {
-	static bool bBlockSpecialSpawnDefault, bBlockTankSpawnDefault, bBlockWitchSpawnDefault;
-
+	static bool bDefVal[3];
+	
 	if (bAllow)
 	{
 		if (g_cvBlockSpecialSpawn != null)
 		{
-			bBlockSpecialSpawnDefault = g_cvBlockSpecialSpawn.BoolValue;
+			bDefVal[0] = g_cvBlockSpecialSpawn.BoolValue;
 			g_cvBlockSpecialSpawn.BoolValue = false;
 		}
 		if (g_cvBlockTankSpawn != null)
 		{
-			bBlockTankSpawnDefault = g_cvBlockTankSpawn.BoolValue;
+			bDefVal[1] = g_cvBlockTankSpawn.BoolValue;
 			g_cvBlockTankSpawn.BoolValue = false;
 		}
 		if (g_cvBlockWitchSpawn != null)
 		{
-			bBlockWitchSpawnDefault = g_cvBlockWitchSpawn.BoolValue;
+			bDefVal[2] = g_cvBlockWitchSpawn.BoolValue;
 			g_cvBlockWitchSpawn.BoolValue = false;
 		}
 	}
 	else // 恢复默认值
 	{
 		if (g_cvBlockSpecialSpawn != null)
-			g_cvBlockSpecialSpawn.BoolValue = bBlockSpecialSpawnDefault;
+			g_cvBlockSpecialSpawn.BoolValue = bDefVal[0];
 
 		if (g_cvBlockTankSpawn != null)
-			g_cvBlockTankSpawn.BoolValue = bBlockTankSpawnDefault;
+			g_cvBlockTankSpawn.BoolValue = bDefVal[1];
 
 		if (g_cvBlockWitchSpawn != null)
-			g_cvBlockWitchSpawn.BoolValue = bBlockWitchSpawnDefault;
+			g_cvBlockWitchSpawn.BoolValue = bDefVal[2];
 	}
 }
 
