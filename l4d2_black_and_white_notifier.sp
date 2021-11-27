@@ -5,14 +5,12 @@
 #include <sdktools>
 #include <sdkhooks>
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
-char logPath[PLATFORM_MAX_PATH];
-
-ConVar CvarGlow, CvarSkullIcon, CvarMaxReviveCount;
-int g_MaxReviveCount;
+ConVar g_cvGlow, g_cvSkullIcon, g_cvSurMaxIncapCount;
+int g_iSurMaxIncapCount;
 bool g_bGlow, g_bSkullIcon;
-int g_iIcon[MAXPLAYERS+1] = {-1, ...};
+int g_iIconRef[MAXPLAYERS+1];
 
 #define SKULL_ICON "materials/sprites/skull_icon.vmt"
 
@@ -20,96 +18,156 @@ public Plugin myinfo =
 {
 	name = "L4D2 Black and White Notifier",
 	author = "fdxx",
-	description = "",
 	version = VERSION,
-	url = ""
 }
 
 public void OnPluginStart()
 {
-	BuildPath(Path_SM, logPath, sizeof(logPath), "logs/l4d2_black_and_white_notifier.log");
-
 	CreateConVar("l4d2_black_and_white_notifier_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+	g_cvGlow = CreateConVar("l4d2_black_and_white_notifier_glow", "1", "黑白的玩家发光", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvSkullIcon = CreateConVar("l4d2_black_and_white_notifier_skull_icon", "1", "黑白的玩家头上显示骷髅头图标", FCVAR_NONE, true, 0.0, true, 1.0);
 
-	CvarGlow = CreateConVar("l4d2_black_and_white_notifier_glow", "1", "黑白的玩家发光", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarSkullIcon = CreateConVar("l4d2_black_and_white_notifier_skull_icon", "1", "黑白的玩家头上显示骷髅头图标", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvSurMaxIncapCount = FindConVar("survivor_max_incapacitated_count");
 
 	GetCvars();
 
-	CvarGlow.AddChangeHook(ConVarChanged);
-	CvarSkullIcon.AddChangeHook(ConVarChanged);
+	g_cvGlow.AddChangeHook(ConVarChanged);
+	g_cvSkullIcon.AddChangeHook(ConVarChanged);
+	g_cvSurMaxIncapCount.AddChangeHook(ConVarChanged);
 
-	HookEvent("round_start", Event_RoundStart);
-
+	HookEvent("player_spawn", Event_PlayerSpawn);
+	HookEvent("player_team", Event_PlayerTeam);
 	HookEvent("revive_success", Event_Heal);
 	HookEvent("heal_success", Event_Heal);
-	HookEvent("player_death", Event_PlayerAction);
-	HookEvent("player_spawn", Event_PlayerAction);
-	HookEvent("player_team", Event_PlayerAction);
+	HookEvent("player_death", Event_PlayerDeath, EventHookMode_Pre);
 }
 
-public void OnConfigsExecuted()
-{
-	CvarMaxReviveCount = FindConVar("survivor_max_incapacitated_count");
-	g_MaxReviveCount = CvarMaxReviveCount.IntValue;
-}
-
-public void ConVarChanged(ConVar convar, char[] oldValue, char[] newValue)
+void ConVarChanged(ConVar convar, char[] oldValue, char[] newValue)
 {
 	GetCvars();
 }
 
 void GetCvars()
 {
-	g_bGlow = CvarGlow.BoolValue;
-	g_bSkullIcon = CvarSkullIcon.BoolValue;
-}
-
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
-{
-	BlackAndWhiteCheck();
+	g_bGlow = g_cvGlow.BoolValue;
+	g_bSkullIcon = g_cvSkullIcon.BoolValue;
+	g_iSurMaxIncapCount = g_cvSurMaxIncapCount.IntValue;
 }
 
 public void OnMapStart()
+{
+	CreateTimer(0.1, OnMapStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+Action OnMapStart_Timer(Handle timer)
 {
 	if (!IsModelPrecached(SKULL_ICON))
 	{
 		PrecacheModel(SKULL_ICON, true);
 	}
+	return Plugin_Continue;
 }
 
-public void Event_Heal(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-	int client = GetClientOfUserId(event.GetInt("subject"));
-	if (IsValidSur(client))
+	int userid = event.GetInt("userid");
+	if (GetClientOfUserId(userid) > 0)
 	{
-		BlackAndWhiteCheck();
+		CreateTimer(0.1, PlayerSpawn_Timer, userid, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
-public void Event_PlayerAction(Event event, const char[] name, bool dontBroadcast)
+Action PlayerSpawn_Timer(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+
+	if (IsValidSur(client) && IsPlayerAlive(client))
+	{
+		RemoveIcon(client);
+		ResetGlow(client);
+
+		if (IsBlackAndWhite(client))
+		{
+			if (g_bGlow) SetGlow(client);
+			if (g_bSkullIcon) SetSkullIcon(client);
+		}
+	}
+	return Plugin_Continue;
+}
+
+void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsValidSur(client))
+	int NewTeam = event.GetInt("team");
+
+	if (client > 0 && NewTeam == 2)
 	{
-		BlackAndWhiteCheck();
+		CreateTimer(0.1, BlackAndWhiteCheck_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
-void BlackAndWhiteCheck()
+void Event_Heal(Event event, const char[] name, bool dontBroadcast)
 {
-	for (int i = 1; i <= MaxClients; i++)
+	CreateTimer(0.1, BlackAndWhiteCheck_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+Action BlackAndWhiteCheck_Timer(Handle timer)
+{
+	static int i;
+
+	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i))
+		RemoveIcon(i);
+	}
+
+	for (i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
 		{
-			if (GetClientTeam(i) == 2 && IsPlayerAlive(i) && IsBaW(i))
+			if (IsBlackAndWhite(i))
 			{
 				if (g_bGlow) SetGlow(i);
 				if (g_bSkullIcon) SetSkullIcon(i);
 			}
-			else Reset(i);
+			else ResetGlow(i);
 		}
 	}
+
+	return Plugin_Continue;
+}
+
+Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (IsValidSur(client))
+	{
+		RemoveIcon(client);
+		ResetGlow(client);
+	}
+	return Plugin_Continue;
+}
+
+void ResetGlow(int client)
+{
+	SetEntProp(client, Prop_Send, "m_iGlowType", 0);
+	SetEntProp(client, Prop_Send, "m_glowColorOverride", 0);
+	SetEntProp(client, Prop_Send, "m_nGlowRange", 0);
+}
+
+void RemoveIcon(int client)
+{
+	if (IsValidEntRef(g_iIconRef[client]))
+	{
+		RemoveEntity(g_iIconRef[client]);
+		g_iIconRef[client] = 0;
+	}	
+}
+
+bool IsValidEntRef(int ref)
+{
+	if (ref && EntRefToEntIndex(ref) != INVALID_ENT_REFERENCE)
+		return true;
+	return false;
 }
 
 void SetGlow(int client)
@@ -122,101 +180,60 @@ void SetGlow(int client)
 // https://forums.alliedmods.net/showpost.php?p=2720796&postcount=18
 void SetSkullIcon(int client)
 {
-	if (g_iIcon[client] > 0) return;
-
-	int iEnt = CreateEntityByName("env_sprite");
-	
-	if (iEnt > 0)
+	if (!IsValidEntRef(g_iIconRef[client]))
 	{
+		int iEnt = CreateEntityByName("env_sprite");
+		if (iEnt == -1) return;
+		
+		g_iIconRef[client] = EntIndexToEntRef(iEnt);
+
 		DispatchKeyValue(iEnt, "model", SKULL_ICON);
 		DispatchKeyValue(iEnt, "spawnflags", "3");
 		DispatchKeyValue(iEnt, "rendermode", "9");
-		int iColor[3];
-		iColor = GetRandomColor();
-		SetEntityRenderColor(iEnt, iColor[0], iColor[1], iColor[2], 200);
 		DispatchKeyValue(iEnt, "scale", "0.001");
 		DispatchSpawn(iEnt);
+		SetEntityRenderColor(iEnt, 255, 0, 0, 200);
 		SetVariantString("!activator");
 		AcceptEntityInput(iEnt, "SetParent", client);
 		SetVariantString("eyes");
 		AcceptEntityInput(iEnt, "SetParentAttachment");
 		TeleportEntity(iEnt, view_as<float>({-3.0, 0.0, 6.0}), NULL_VECTOR, NULL_VECTOR);
-		g_iIcon[client] = iEnt;
 
-		SDKUnhook(iEnt, SDKHook_SetTransmit, OnSetTransmit);
-		SDKHook(iEnt, SDKHook_SetTransmit, OnSetTransmit);
+		SDKUnhook(iEnt, SDKHook_SetTransmit, Hook_SetTransmit);
+		SDKHook(iEnt, SDKHook_SetTransmit, Hook_SetTransmit);
 	}
 }
 
-int[] GetRandomColor()
+Action Hook_SetTransmit(int entity, int client)
 {
-	static const int iColorGroup[][3] =
+	static int ref;
+	ref = EntIndexToEntRef(entity);
+	if (ref != INVALID_ENT_REFERENCE)
 	{
-		{255, 0, 0}, //red
-		{0, 255, 0}, //green
-		{0, 0, 255}, //blue
-		{155, 0, 255}, //purple
-		{0, 255, 255}, //cyan
-		{255, 155, 0}, //orange
-		{-1, -1, -1}, //white
-		{255, 0, 150}, //pink
-		{128, 255, 0}, //lime
-		{128, 0, 0}, //maroon
-		{0, 128, 128}, //teal
-		{255, 255, 0}, //yellow
-		{50, 50, 50}, //grey
-		{50, 50, 50}, //gray
-	};
-
-	return iColorGroup[GetRandomInt(0, (sizeof(iColorGroup) - 1))];
-}
-
-public Action OnSetTransmit(int entity, int client)
-{
-	switch (GetEntProp(client, Prop_Send, "m_iObserverMode"))
-	{
-		//mode -1未定义 0自己 1刚死亡时 2未知 3未知 4第一视角 5第三视角 6自由视角
-		case 0:
+		switch (GetEntProp(client, Prop_Send, "m_iObserverMode"))
 		{
-			if (entity == g_iIcon[client])
+			//mode -1未定义 0自己 1刚死亡时 2未知 3未知 4第一视角 5第三视角 6自由视角
+			case 0:
 			{
-				return Plugin_Handled;
+				if (ref == g_iIconRef[client])
+					return Plugin_Handled;
+			}
+			case 4:
+			{
+				static int iTarget;
+				iTarget = GetEntPropEnt(client, Prop_Send, "m_hObserverTarget");
+				if (iTarget > 0 && ref == g_iIconRef[iTarget])
+					return Plugin_Handled;
 			}
 		}
-		case 4:
-		{
-			static int iTarget;
-			iTarget = GetEntPropEnt(client, Prop_Send, "m_hObserverTarget");
-			if ((iTarget > 0) && (entity == g_iIcon[iTarget]))
-			{
-				return Plugin_Handled;
-			}
-		}
+		return Plugin_Continue;
 	}
-	return Plugin_Continue;
+	return Plugin_Handled;
 }
 
-void Reset(int client)
+bool IsBlackAndWhite(int client)
 {
-	SetEntProp(client, Prop_Send, "m_iGlowType", 0);
-	SetEntProp(client, Prop_Send, "m_glowColorOverride", 0);
-	SetEntProp(client, Prop_Send, "m_nGlowRange", 0);
-	RemoveIcon(client);
-}
-
-void RemoveIcon(int client)
-{
-	if (g_iIcon[client] > 0 && IsValidEntity(g_iIcon[client]))
-	{
-		SDKUnhook(g_iIcon[client], SDKHook_SetTransmit, OnSetTransmit);
-		RemoveEntity(g_iIcon[client]);
-		g_iIcon[client] = -1;
-	}
-}
-
-bool IsBaW(int client)
-{
-	if (GetEntProp(client, Prop_Send, "m_currentReviveCount") >= g_MaxReviveCount)
+	if (GetEntProp(client, Prop_Send, "m_currentReviveCount") >= g_iSurMaxIncapCount)
 	{
 		return true;
 	}
