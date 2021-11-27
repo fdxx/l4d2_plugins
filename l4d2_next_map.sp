@@ -159,7 +159,8 @@ void SetNextMapID()
 		{
 			iMapID = GetRandomInt(0, (sizeof(g_sMapsInfo) - 1));
 			bool bValidMapID = CheckMapID(iMapID);
-			while (!bValidMapID) //随机地图不重复
+			int i;
+			while (!bValidMapID && ++i < 200) //随机地图不重复
 			{
 				iMapID = GetRandomInt(0, (sizeof(g_sMapsInfo) - 1));
 				bValidMapID = CheckMapID(iMapID);
