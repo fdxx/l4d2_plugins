@@ -5,7 +5,7 @@
 #include <sdktools>
 #include <multicolors>
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 
 public Plugin myinfo =
 {
@@ -30,7 +30,7 @@ void OnNextFrame()
 {
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && GetEntProp(i, Prop_Send, "m_zombieClass") == 8 && IsPlayerAlive(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 3 && GetEntProp(i, Prop_Send, "m_zombieClass") == 8 && IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
 		{
 			if (!IsFakeClient(i))
 			{
