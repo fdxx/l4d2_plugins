@@ -7,7 +7,7 @@
 #include <dhooks>
 #include <multicolors>
 
-#define VERSION "0.2"
+#define VERSION "0.3"
 
 ConVar
 	g_cvGameMode,
@@ -229,7 +229,7 @@ void Reset()
 	g_bLeftSafeArea = false;
 	g_aJoinTankList.Clear();
 
-	for (int i = 0; i <= MAXPLAYERS; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		delete g_hSpawnSITimer[i];
 	}
@@ -254,32 +254,36 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 Action SpawnSI_Timer(Handle timer, int userid)
 {
 	int client = GetClientOfUserId(userid);
-
-	if (IsValidSI(client) && !IsPlayerAlive(client) && !IsFakeClient(client))
+	if (client > 0 && client <= MaxClients && IsClientInGame(client))
 	{
-		if (g_iSpawnCountDown[client] <= 0)
+		if (GetClientTeam(client) == 3 && !IsPlayerAlive(client) && !IsFakeClient(client))
 		{
-			int iClass = FindSpawnClass();
-			if (1 <= iClass <= 6)
+			if (g_iSpawnCountDown[client] <= 0)
 			{
-				g_bAllowSpawn = true;
-				
-				FakeClientCommand(client, "spec_next");
-				CheatCommand(client, "z_spawn_old", g_sSpecialName[iClass]);
-				if (IsPlayerAlive(client)) L4D_State_Transition(client, STATE_GHOST);
-				else LogError("设置灵魂状态失败, 客户端不是活着状态");
+				int iClass = FindSpawnClass();
+				if (1 <= iClass <= 6)
+				{
+					g_bAllowSpawn = true;
+					
+					FakeClientCommand(client, "spec_next");
+					CheatCommand(client, "z_spawn_old", g_sSpecialName[iClass]);
+					if (IsPlayerAlive(client)) L4D_State_Transition(client, STATE_GHOST);
+					else LogError("设置灵魂状态失败, 客户端不是活着状态");
 
-				g_bAllowSpawn = false;
+					g_bAllowSpawn = false;
+				}
+
+				g_hSpawnSITimer[client] = null;
+				return Plugin_Stop;
 			}
 
-			g_hSpawnSITimer[client] = null;
-			return Plugin_Stop;
+			PrintHintText(client, "%i 秒后重生", g_iSpawnCountDown[client]--);
+			return Plugin_Continue;
 		}
 
-		PrintHintText(client, "%i 秒后重生", g_iSpawnCountDown[client]--);
-		return Plugin_Continue;
+		g_hSpawnSITimer[client] = null;
+		return Plugin_Stop;
 	}
-	g_hSpawnSITimer[client] = null;
 	return Plugin_Stop;
 }
 
@@ -446,7 +450,8 @@ public void OnClientDisconnect(int client)
 
 public void L4D_OnSpawnTank_Post(int client, const float vecPos[3], const float vecAng[3])
 {
-	CreateTimer(0.1, JoinTankCheck_Timer, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+	if (client > 0 && client <= MaxClients)
+		CreateTimer(0.1, JoinTankCheck_Timer, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 Action JoinTankCheck_Timer(Handle timer, int userid)
