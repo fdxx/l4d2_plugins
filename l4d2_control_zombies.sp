@@ -7,7 +7,7 @@
 #include <dhooks>
 #include <multicolors>
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 ConVar
 	g_cvGameMode,
@@ -445,7 +445,11 @@ Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 
 public void OnClientDisconnect(int client)
 {
-	RemoveJoinTank(GetClientUserId(client));
+	if (!IsFakeClient(client))
+	{
+		delete g_hSpawnSITimer[client];
+		RemoveJoinTank(GetClientUserId(client));
+	}
 }
 
 public void L4D_OnSpawnTank_Post(int client, const float vecPos[3], const float vecAng[3])
