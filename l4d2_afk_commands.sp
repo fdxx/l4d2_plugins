@@ -6,7 +6,7 @@
 #include <left4dhooks>
 #include <multicolors>
 
-#define VERSION "2.8"
+#define VERSION "2.9"
 
 ConVar CvarAFKDelay, CvarBlockIdle;
 float g_fAFKDelay;
@@ -93,7 +93,6 @@ public Action JoinSpectate(int client, int args)
 		}
 		else
 		{
-			ForceSuicideFromGhost(client);
 			ChangeClientTeam(client, 1);
 			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}进入了旁观状态.", client);
 		}
@@ -106,7 +105,6 @@ public Action JoinSpectate_Timer(Handle timer, int userid)
 	int client = GetClientOfUserId(userid);
 	if (IsRealClient(client) && GetClientTeam(client) != 1)
 	{
-		ForceSuicideFromGhost(client);
 		ChangeClientTeam(client, 1);
 		CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}进入了旁观状态.", client);
 	}
@@ -121,7 +119,6 @@ public Action JoinSurvivor(int client, int args)
 		int bot = GetSurBot();
 		if (bot >= 1)
 		{
-			ForceSuicideFromGhost(client);
 			ChangeClientTeam(client, 0);
 			L4D_SetHumanSpec(bot, client);
 			L4D_TakeOverBot(client);
@@ -130,16 +127,6 @@ public Action JoinSurvivor(int client, int args)
 		else PrintHintText(client, "暂无幸存者BOT供接管");
 	}
 	return Plugin_Handled;
-}
-
-// 防止处于幽灵状态的特感BOT丢失
-void ForceSuicideFromGhost(int client)
-{
-	if (GetClientTeam(client) == 3 && IsPlayerAlive(client) && GetEntProp(client, Prop_Send, "m_isGhost"))
-	{
-		//LogMessage("强制自杀幽灵状态的特感");
-		ForcePlayerSuicide(client);
-	}
 }
 
 // Suicide
