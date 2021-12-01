@@ -7,7 +7,7 @@
 #include <sdkhooks>
 #include <left4dhooks>
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 static const char g_sWeapons[][][] = 
 {
@@ -596,7 +596,7 @@ void SetClientGodMode(int client, int iTarget)
 
 	if (bGodMode)
 	{
-		SetEntProp(iTarget, Prop_Data, "m_takedamage", 1);
+		SetEntProp(iTarget, Prop_Data, "m_takedamage", 2);
 		PrintToChat(client, "[DevMenu] 关闭无敌模式: %N", iTarget);
 	}
 	else
