@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define DEBUG 0
-#define VERSION "2.3"
+#define VERSION "2.4"
 
 #include <sourcemod>
 #include <left4dhooks>
@@ -28,6 +28,7 @@ ConVar
 int
 	g_iSpecialLimit[7],
 	g_iMaxSILimit,
+	g_iSpawnMaxSICount,
 	g_iNormalSpawnRange,
 	g_iSpawnAttributesOffset,
 	g_iFlowDistanceOffset,
@@ -38,7 +39,8 @@ float
 	g_fFirstSpawnTime,
 	g_fKillSITime,
 	g_fMapMaxFlowDist,
-	g_fSpawnDist;
+	g_fSpawnDist,
+	g_fSpecialActionTime[MAXPLAYERS+1];
 
 bool
 	g_bBlockSpawn,
@@ -50,7 +52,7 @@ bool
 
 Handle
 	g_hSpawnSITimer[MAXPLAYERS+1],
-	g_hKillSITimer[MAXPLAYERS+1],
+	g_hKillSICheckTimer,
 	g_hFirstSpawnSITimer,
 	g_hSpawnMaxSITimer,
 	g_hSDKFindRandomSpot;
@@ -150,13 +152,13 @@ public void OnPluginStart()
 
 	CreateConVar("l4d2_si_spawn_control_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
 
-	g_cvSpecialLimit[HUNTER] = CreateConVar("l4d2_si_spawn_control_hunter_limit", "1", "Hunter数量", FCVAR_NONE, true, 0.0, true, 26.0);
-	g_cvSpecialLimit[JOCKEY] = CreateConVar("l4d2_si_spawn_control_jockey_limit", "1", "jockey数量", FCVAR_NONE, true, 0.0, true, 26.0);
-	g_cvSpecialLimit[SMOKER] = CreateConVar("l4d2_si_spawn_control_smoker_limit", "1", "smoker数量", FCVAR_NONE, true, 0.0, true, 26.0);
-	g_cvSpecialLimit[BOOMER] = CreateConVar("l4d2_si_spawn_control_boomer_limit", "1", "boomer数量", FCVAR_NONE, true, 0.0, true, 26.0);
-	g_cvSpecialLimit[SPITTER] = CreateConVar("l4d2_si_spawn_control_spitter_limit", "1", "spitter数量", FCVAR_NONE, true, 0.0, true, 26.0);
-	g_cvSpecialLimit[CHARGER] = CreateConVar("l4d2_si_spawn_control_charger_limit", "1", "charger数量", FCVAR_NONE, true, 0.0, true, 26.0);
-	g_cvMaxSILimit = CreateConVar("l4d2_si_spawn_control_max_specials", "6", "最大特感数量", FCVAR_NONE, true, 0.0, true, 26.0);
+	g_cvSpecialLimit[HUNTER] = CreateConVar("l4d2_si_spawn_control_hunter_limit", "1", "Hunter数量", FCVAR_NONE, true, 0.0, true, 31.0);
+	g_cvSpecialLimit[JOCKEY] = CreateConVar("l4d2_si_spawn_control_jockey_limit", "1", "jockey数量", FCVAR_NONE, true, 0.0, true, 31.0);
+	g_cvSpecialLimit[SMOKER] = CreateConVar("l4d2_si_spawn_control_smoker_limit", "1", "smoker数量", FCVAR_NONE, true, 0.0, true, 31.0);
+	g_cvSpecialLimit[BOOMER] = CreateConVar("l4d2_si_spawn_control_boomer_limit", "1", "boomer数量", FCVAR_NONE, true, 0.0, true, 31.0);
+	g_cvSpecialLimit[SPITTER] = CreateConVar("l4d2_si_spawn_control_spitter_limit", "1", "spitter数量", FCVAR_NONE, true, 0.0, true, 31.0);
+	g_cvSpecialLimit[CHARGER] = CreateConVar("l4d2_si_spawn_control_charger_limit", "1", "charger数量", FCVAR_NONE, true, 0.0, true, 31.0);
+	g_cvMaxSILimit = CreateConVar("l4d2_si_spawn_control_max_specials", "6", "最大特感数量", FCVAR_NONE, true, 0.0, true, 31.0);
 	g_cvSpawnTime = CreateConVar("l4d2_si_spawn_control_spawn_time", "10.0", "特感产生时间", FCVAR_NONE, true, 1.0, true, 9999.0);
 	g_cvFirstSpawnTime = CreateConVar("l4d2_si_spawn_control_first_spawn_time", "10.0", "离开安全区域首次产生特感的时间", FCVAR_NONE, true, 1.0, true, 9999.0);
 	g_cvKillSITime = CreateConVar("l4d2_si_spawn_control_kill_si_time", "25.0", "多少秒后摸鱼的特感将会被自动杀死", FCVAR_NONE, true, 2.0, true, 9999.0);
@@ -187,7 +189,7 @@ public void OnPluginStart()
 	HookEvent("finale_vehicle_leaving", Event_RoundEnd, EventHookMode_PostNoCopy);
 
 	HookEvent("player_death", Event_PlayerDeath, EventHookMode_Pre);
-	HookEvent("player_spawn", Event_PlayerSpawn);
+	//HookEvent("player_spawn", Event_PlayerSpawn);
 	HookEvent("player_hurt", Event_PlayerHurt);
 
 	RegAdminCmd("sm_sihud", Cmd_ShowSIhud, ADMFLAG_ROOT);
@@ -201,7 +203,7 @@ public void OnPluginStart()
 	g_aSurPosData = new ArrayList(sizeof(SurPosData));
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 
@@ -211,6 +213,7 @@ public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] new
 		if (StringToInt(newValue) > StringToInt(oldValue))
 		{
 			delete g_hSpawnMaxSITimer;
+			g_iSpawnMaxSICount = 0;
 			g_hSpawnMaxSITimer = CreateTimer(0.3, SpawnMaxSI_Timer, _, TIMER_REPEAT);
 		}
 	}
@@ -259,21 +262,24 @@ void TweakSettings()
 	}
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	Reset();
 	CreateTimer(2.0, RoundStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action RoundStart_Timer(Handle timer)
+Action RoundStart_Timer(Handle timer)
 {
 	if (g_bRadicalSpawn) GetMapNavAreaData();
 	g_bFinalMap = L4D_IsMissionFinalMap();
 	g_fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
+	delete g_hKillSICheckTimer;
+	g_hKillSICheckTimer = CreateTimer(2.0, KillSICheck_Timer, _, TIMER_REPEAT);
+
 	return Plugin_Continue;
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	Reset();
 }
@@ -289,11 +295,11 @@ void Reset()
 
 	delete g_hFirstSpawnSITimer;
 	delete g_hSpawnMaxSITimer;
+	delete g_hKillSICheckTimer;
 
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
 		delete g_hSpawnSITimer[i];
-		delete g_hKillSITimer[i];
 	}
 
 	g_bCanSpawn = false;
@@ -310,21 +316,22 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 	return Plugin_Continue;
 }
 
-public Action FirstSpawnSI_Timer(Handle timer)
+Action FirstSpawnSI_Timer(Handle timer)
 {
 	g_hFirstSpawnSITimer = null;
 
 	if (g_bLeftSafeArea)
 	{
 		delete g_hSpawnMaxSITimer;
+		g_iSpawnMaxSICount = 0;
 		g_hSpawnMaxSITimer = CreateTimer(0.3, SpawnMaxSI_Timer, _, TIMER_REPEAT); //间隔0.3s陆续产生特感
 	}
 	return Plugin_Continue;
 }
 
-public Action SpawnMaxSI_Timer(Handle timer)
+Action SpawnMaxSI_Timer(Handle timer)
 {
-	if (g_bLeftSafeArea && GetAliveSpecialsTotal() < g_iMaxSILimit)
+	if (g_bLeftSafeArea && GetAliveSpecialsTotal() < g_iMaxSILimit && ++g_iSpawnMaxSICount < MaxClients)
 	{
 		SpawnSpecial();
 		return Plugin_Continue;
@@ -336,25 +343,26 @@ public Action SpawnMaxSI_Timer(Handle timer)
 	}
 }
 
-public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	if (g_bLeftSafeArea)
 	{
-		int userid = event.GetInt("userid");
-		int client = GetClientOfUserId(userid);
+		static int userid, client, iClass;
 
-		if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3)
+		userid = event.GetInt("userid");
+		client = GetClientOfUserId(userid);
+
+		if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3 && IsFakeClient(client))
 		{
-			int iZombieClass = GetZombieClass(client);
-			switch (iZombieClass)
+			iClass = GetZombieClass(client);
+			switch (iClass)
 			{
-				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER, TANK:
+				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
 				{
-					delete g_hKillSITimer[client];
 					SpecialDeathSpawn(g_fSpawnTime);
 
 					// 踢出bot释放客户端索引，排除spitter避免无声痰
-					if (iZombieClass != SPITTER) CreateTimer(0.2, kickbot, userid);
+					if (iClass != SPITTER) CreateTimer(0.2, kickbot, userid);
 				}
 			}
 		}
@@ -370,14 +378,14 @@ void SpecialDeathSpawn(float fTime)
 	iSpawnNum++;
 }
 
-public Action SpecialDeathSpawn_Timer(Handle timer, int iSpawnNum)
+Action SpecialDeathSpawn_Timer(Handle timer, int iSpawnNum)
 {
 	g_hSpawnSITimer[iSpawnNum] = null;
 	SpawnSpecial();
 	return Plugin_Continue;
 }
 
-public Action ReSpawnSpecial_Timer(Handle timer)
+Action ReSpawnSpecial_Timer(Handle timer)
 {
 	SpawnSpecial();
 	return Plugin_Continue;
@@ -451,14 +459,14 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 	static float fThisSpawnPos[3], fThisFlowDist, fThisDist;
 	static float fSpawnData[MAX_VALID_POS][4];
 	static bool bFindValidPos;
-	static int iPosCount, iValidPosCount;
+	static int iPosCount, iValidPosCount, i;
 
 	bFindValidPos = false;
 	iPosCount = 0;
 	iValidPosCount = 0;
 	GetSurPos();
 
-	for (int i = 1; i < g_iNavAreaCount; i++)
+	for (i = 1; i < g_iNavAreaCount; i++)
 	{
 		pThisArea = view_as<Address>(LoadFromAddress(g_pTheNavAreas + view_as<Address>(i * 4), NumberType_Int32));
 		if (!pThisArea.IsNull())
@@ -543,8 +551,9 @@ void GetSurPos()
 {
 	g_aSurPosData.Clear();
 	static SurPosData PosData;
+	static int i;
 
-	for (int i = 1; i <= MaxClients; i++)
+	for (i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
 		{
@@ -558,8 +567,9 @@ void GetSurPos()
 bool IsNearTheSur(const float fAreaFlow, const float fAreaSpawnPos[3], float &fDist)
 {
 	static SurPosData PosData;
+	static int i;
 
-	for (int i = 0; i < g_aSurPosData.Length; i++)
+	for (i = 0; i < g_aSurPosData.Length; i++)
 	{
 		g_aSurPosData.GetArray(i, PosData);
 		if (FloatAbs(fAreaFlow - PosData.fFlow) <= g_fSpawnDist)
@@ -578,12 +588,13 @@ bool IsSurVisible(const float fAreaSpawnPos[3])
 {
 	static float fTargetPos[3];
 	static SurPosData PosData;
+	static int i;
 
 	fTargetPos[0] = fAreaSpawnPos[0];
 	fTargetPos[1] = fAreaSpawnPos[1];
 	fTargetPos[2] = fAreaSpawnPos[2] + 62.0; //眼睛位置
 
-	for (int i = 0; i < g_aSurPosData.Length; i++)
+	for (i = 0; i < g_aSurPosData.Length; i++)
 	{
 		g_aSurPosData.GetArray(i, PosData);
 		if (IsVisible(PosData.fPos, fTargetPos))
@@ -631,7 +642,7 @@ bool IsVisible(const float fStartPos[3], const float fTargetPos[3])
 	return bVisible;
 }
 
-public bool TraceFilter(int entity, int contentsMask)
+bool TraceFilter(int entity, int contentsMask)
 {
 	if (entity <= MaxClients || !IsValidEntity(entity))
 	{
@@ -666,7 +677,7 @@ bool IsWillStuck(const float fPos[3])
 	return bStuck;
 }
 
-public bool TraceFilter_Stuck(int entity, int contentsMask)
+bool TraceFilter_Stuck(int entity, int contentsMask)
 {
 	if (entity <= MaxClients || !IsValidEntity(entity))
 	{
@@ -676,13 +687,13 @@ public bool TraceFilter_Stuck(int entity, int contentsMask)
 }
 
 //实际上浮点也可以正确排序。
-public int SortAscendingByDist(int[] x, int[] y, const int[][] array, Handle hndl)
+int SortAscendingByDist(int[] x, int[] y, const int[][] array, Handle hndl)
 {
 	if (x[3] < y[3]) return -1;
 	else if (x[3] > y[3]) return 1;
 	else return 0;
 }
-
+/*
 stock void CheckArray(const float[][] fArray, int size)
 {
 	for (int i; i < size; i++)
@@ -690,16 +701,16 @@ stock void CheckArray(const float[][] fArray, int size)
 		LogToFileEx_Debug("fArray[%i][3] = %f", i, fArray[i][3]);
 	}
 }
-
+*/
 int GetRandomSur()
 {
-	static int client;
+	static int client, i;
 
 	client = 0;
 	g_aClientsArray.Clear();
 	SetRandomSeed(GetTime());
 
-	for (int i = 1; i <= MaxClients; i++)
+	for (i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
 		{
@@ -717,13 +728,13 @@ int GetRandomSur()
 
 int FindSpawnClass()
 {
-	int iClass;
+	static int iClass, i;
 	int iSpecialCount[7];
 	g_aClassArray.Clear();
 
-	for (int i = 1; i <= MaxClients; i++)
+	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
 		{
 			iClass = GetZombieClass(i);
 			if (1 <= iClass <= 6)
@@ -733,7 +744,7 @@ int FindSpawnClass()
 		}
 	}
 
-	for (int i = 1; i <= 6; i++)
+	for (i = 1; i <= 6; i++)
 	{
 		if (iSpecialCount[i] < g_iSpecialLimit[i])
 		{
@@ -751,7 +762,7 @@ int FindSpawnClass()
 	return iClass;
 }
 
-public void Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast) 
+void Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast) 
 {
 	if (g_bLeftSafeArea)
 	{
@@ -760,103 +771,63 @@ public void Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
 		iVictim = GetClientOfUserId(event.GetInt("userid"));
 		iAttacker = GetClientOfUserId(event.GetInt("attacker"));
 
-		delete g_hKillSITimer[iVictim];
-		g_hKillSITimer[iVictim] = CreateTimer(g_fKillSITime, KillSI_Timer, iVictim);
-
-		delete g_hKillSITimer[iAttacker];
-		g_hKillSITimer[iAttacker] = CreateTimer(g_fKillSITime, KillSI_Timer, iAttacker);
+		g_fSpecialActionTime[iVictim] = GetEngineTime();
+		g_fSpecialActionTime[iAttacker] = GetEngineTime();
 	}
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast) 
+public void L4D_OnSpawnSpecial_Post(int client, int zombieClass, const float vecPos[3], const float vecAng[3])
 {
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	
-	if (IsAliveSI(client))
-	{
-		delete g_hKillSITimer[client];
-		g_hKillSITimer[client] = CreateTimer(g_fKillSITime, KillSI_Timer, client);
-	}
+	g_fSpecialActionTime[client] = GetEngineTime();
 }
 
-public Action KillSI_Timer(Handle timer, int client)
+Action KillSICheck_Timer(Handle timer)
 {
-	if (IsAliveSI(client))
+	if (g_bLeftSafeArea)
 	{
-		// 特感在控人，或者能看见生还者
-		if (GetEntProp(client, Prop_Send, "m_hasVisibleThreats") || GetSurvivorVictim(client) != -1)
+		static int iClass, i;
+		static float fEngineTime;
+		fEngineTime = GetEngineTime();
+
+		for (i = 1; i <= MaxClients; i++)
 		{
-			g_hKillSITimer[client] = null;
-			g_hKillSITimer[client] = CreateTimer(g_fKillSITime, KillSI_Timer, client);
-		}
-		else
-		{
-			g_hKillSITimer[client] = null;
-			ForcePlayerSuicide(client);
+			if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
+			{
+				iClass = GetZombieClass(i);
+				if (1 <= iClass <= 6)
+				{
+					if (fEngineTime - g_fSpecialActionTime[i] > g_fKillSITime)
+					{
+						if (!GetEntProp(i, Prop_Send, "m_hasVisibleThreats") && !HasSurVictim(i, iClass))
+						{
+							ForcePlayerSuicide(i);
+						}
+						else g_fSpecialActionTime[i] = fEngineTime;
+					}
+				}
+			}
 		}
 	}
-	else g_hKillSITimer[client] = null;
 	return Plugin_Continue;
 }
 
-
-bool IsAliveSI(int client)
+bool HasSurVictim(int client, int iClass)
 {
-	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3 && IsPlayerAlive(client) && IsFakeClient(client))
+	switch (iClass)
 	{
-		switch (GetZombieClass(client))
-		{
-			case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
-			{
-				return true;
-			}
-		}
+		case SMOKER:
+			return GetEntPropEnt(client, Prop_Send, "m_tongueVictim") > 0;
+		case HUNTER:
+			return GetEntPropEnt(client, Prop_Send, "m_pounceVictim") > 0;
+		case JOCKEY:
+			return GetEntPropEnt(client, Prop_Send, "m_jockeyVictim") > 0;
+		case CHARGER:
+			return GetEntPropEnt(client, Prop_Send, "m_pummelVictim") > 0 || GetEntPropEnt(client, Prop_Send, "m_carryVictim") > 0;
 	}
 	return false;
 }
 
-int GetSurvivorVictim(int client)
-{
-	int victim;
-
-	/* Charger */
-	victim = GetEntPropEnt(client, Prop_Send, "m_pummelVictim");
-	if (victim > 0)
-	{
-		return victim;
-	}
-
-	victim = GetEntPropEnt(client, Prop_Send, "m_carryVictim");
-	if (victim > 0)
-	{
-		return victim;
-	}
-
-	/* Jockey */
-	victim = GetEntPropEnt(client, Prop_Send, "m_jockeyVictim");
-	if (victim > 0)
-	{
-		return victim;
-	}
-
-	/* Hunter */
-	victim = GetEntPropEnt(client, Prop_Send, "m_pounceVictim");
-	if (victim > 0)
-	{
-		return victim;
- 	}
-
-	/* Smoker */
- 	victim = GetEntPropEnt(client, Prop_Send, "m_tongueVictim");
-	if (victim > 0)
-	{
-		return victim;	
-	}
-
-	return -1;
-}
-
-public Action Cmd_ShowSIhud(int client, int args)
+Action Cmd_ShowSIhud(int client, int args)
 {
 	g_bShowSIhud[client] = !g_bShowSIhud[client];
 	if (g_bShowSIhud[client]) CreateTimer(0.5, ShowSIHud_Timer, client, TIMER_REPEAT);
@@ -864,7 +835,7 @@ public Action Cmd_ShowSIhud(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action ShowSIHud_Timer(Handle timer, int client)
+Action ShowSIHud_Timer(Handle timer, int client)
 {
 	if (g_bShowSIhud[client] && IsRealClient(client) && IsAdminClient(client))
 	{
@@ -908,7 +879,7 @@ public Action ShowSIHud_Timer(Handle timer, int client)
 	}
 }
 
-public int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {return 0;}
+int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {return 0;}
 
 int GetSICountByClass(int iZombieClass)
 {
@@ -925,14 +896,16 @@ int GetSICountByClass(int iZombieClass)
 
 int GetAliveSpecialsTotal() 
 {
-	int iCount;
-	for (int i = 1; i <= MaxClients; i++)
+	static int iCount, i;
+	iCount = 0;
+
+	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
 		{
 			switch (GetZombieClass(i))
 			{
-				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER, TANK:
+				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
 				{
 					iCount++;
 				}
@@ -963,15 +936,16 @@ public Action L4D_OnGetScriptValueInt(const char[] key, int &retVal)
 {
 	if (strcmp(key, "MaxSpecials", false) == 0 || strcmp(key, "cm_MaxSpecials", false) == 0 || strcmp(key, "DominatorLimit", false) == 0 || strcmp(key, "cm_DominatorLimit", false) == 0)
 	{
-		retVal = 28;
+		retVal = 31;
 		return Plugin_Handled;
 	}
 	return Plugin_Continue;
 }
 
-public Action kickbot(Handle timer, int userid)
+Action kickbot(Handle timer, int userid)
 {
-	int client = GetClientOfUserId(userid);
+	static int client;
+	client = GetClientOfUserId(userid);
 	if (client > 0 && client <= MaxClients && IsClientInGame(client) && IsFakeClient(client))
 	{
 		if (!IsClientInKickQueue(client)) KickClient(client);
@@ -1031,7 +1005,7 @@ void GetMapNavAreaData()
 	delete hGameData;
 }
 
-public Action Cmd_CvarPrint(int client, int args)
+Action Cmd_CvarPrint(int client, int args)
 {
 	ReplyToCommand(client, "--------------");
 	ReplyToCommand(client, "L4D2 Special infected spawn control Cvar:");
