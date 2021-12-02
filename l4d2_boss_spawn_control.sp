@@ -534,7 +534,8 @@ Action SetFlowTest_Timer(Handle timer)
 */
 void PrintBossflow()
 {
-	int iFlow = RoundToNearest(fSurMaxFlow() * 100.0);
+	static int iFlow;
+	iFlow = RoundToNearest(fSurMaxFlow() * 100.0);
 	CPrintToChatAll("Current: {yellow}%i {default}%%", iFlow);
 
 	if (g_bTankSpawnEnable)
