@@ -234,7 +234,7 @@ void GetBanFlow()
 {
 	g_aBanFlow.Clear();
 
-	float fBanFlow[2];
+	static float fBanFlow[2];
 
 	fBanFlow[FLOW_MIN] = 0.0;
 	fBanFlow[FLOW_MAX] = BOSS_MIN_SPAWN_FLOW;
