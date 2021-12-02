@@ -12,7 +12,7 @@
 #include <profiler>
 #endif
 
-#define VERSION "2.3"
+#define VERSION "2.4"
 
 #define GAMEDATA "l4d2_nav_area"
 #define BOSS_SURVIVOR_SAFE_DISTANCE 2200.0	//boss和生还者之间的安全距离(考虑Flow转换)
@@ -20,35 +20,47 @@
 #define BOSS_MIN_SPAWN_FLOW 0.20
 #define BOSS_MAX_SPAWN_FLOW 0.85
 
-ConVar CvarDirectorNoBoss;
-ConVar CvarTankSpawnEnable, CvarWitchSpawnEnable;
-ConVar CvarBlockTankSpawn, CvarBlockWitchSpawn;
-bool g_bTankSpawnEnable, g_bWitchSpawnEnable;
-bool g_bBlockTankSpawn, g_bBlockWitchSpawn;
+ConVar 
+	CvarDirectorNoBoss,
+	CvarTankSpawnEnable,
+	CvarWitchSpawnEnable,
+	CvarBlockTankSpawn,
+	CvarBlockWitchSpawn;
 
-float g_fTankSpawnFlow, g_fWitchSpawnFlow;
-float g_fTankSpawnPos[3], g_fWitchSpawnPos[3];
-float g_fSpawnBufferFlow;
-float g_fMapMaxFlowDist;
+bool
+	g_bTankSpawnEnable,
+	g_bWitchSpawnEnable,
+	g_bBlockTankSpawn,
+	g_bBlockWitchSpawn,
+	g_bStaticTankMap = true,
+	g_bStaticWitchMap = true,
+	g_bShowFlow[MAXPLAYERS],
+	g_bCanSpawnTank,
+	g_bCanSpawnWitch,
+	g_bLeftSafeArea;
 
-bool g_bStaticTankMap = true;
-bool g_bStaticWitchMap = true;
-bool g_bLeftSafeArea;
+float
+	g_fTankSpawnFlow,
+	g_fWitchSpawnFlow,
+	g_fTankSpawnPos[3],
+	g_fWitchSpawnPos[3],
+	g_fSpawnBufferFlow,
+	g_fMapMaxFlowDist;
 
-bool g_bShowFlow[MAXPLAYERS];
-bool g_bCanSpawnTank, g_bCanSpawnWitch;
+Handle
+	g_hSDKFindRandomSpot,
+	g_hTankFlowCheckTimer,
+	g_hWitchFlowCheckTimer;
 
-Handle g_hTankFlowCheckTimer, g_hWitchFlowCheckTimer;
-
-Handle g_hSDKFindRandomSpot;
-int g_iSpawnAttributesOffset, g_iFlowDistanceOffset, g_iNavAreaCount;
-Address g_pTheNavAreas;
+int g_iSpawnAttributesOffset,
+	g_iFlowDistanceOffset,
+	g_iNavAreaCount;
 
 char g_sLogPath[PLATFORM_MAX_PATH], g_sCfgPath[PLATFORM_MAX_PATH];
-
+Address g_pTheNavAreas;
 ArrayList g_aBanFlow;
 
-enum struct g_eSpawanInfo
+enum struct SpawanInfo
 {
 	float fFlow;
     float fSpawnPos[3];
@@ -171,7 +183,7 @@ public void OnConfigsExecuted()
 	else CvarDirectorNoBoss.SetInt(0);
 }
 
-public void ConVarChange(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChange(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 
@@ -195,12 +207,12 @@ public void OnMapStart()
 	if (g_bTankSpawnEnable) PrecacheSound("ui/pickup_secret01.wav");
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	CreateTimer(2.0, RoundStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action RoundStart_Timer(Handle timer)
+Action RoundStart_Timer(Handle timer)
 {
 	//LogToFileEx_Debug("====================   Map: %s   ====================", CurrentMap());
 
@@ -262,11 +274,12 @@ void SetBossSpawnFlow()
 	static Address pThisArea;
 	static float fSpawnFlow, fTriggerSpawnFlow;
 	static float fThisSpawnPos[3];
-	static g_eSpawanInfo eSpawanInfo;
+	static SpawanInfo eSpawanInfo;
+	static int i, iRandomIndex;
 
-	ArrayList aSpawnData = new ArrayList(sizeof(g_eSpawanInfo));
+	ArrayList aSpawnData = new ArrayList(sizeof(SpawanInfo));
 
-	for (int i = 1; i < g_iNavAreaCount; i++)
+	for (i = 1; i < g_iNavAreaCount; i++)
 	{
 		pThisArea = view_as<Address>(LoadFromAddress(g_pTheNavAreas + view_as<Address>(i * 4), NumberType_Int32));
 		if (!pThisArea.IsNull())
@@ -302,7 +315,8 @@ void SetBossSpawnFlow()
 	{
 		if (aSpawnData.Length > 0)
 		{
-			int iRandomIndex = GetRandomInt(0, aSpawnData.Length - 1);
+			SetRandomSeed(GetTime());
+			iRandomIndex = GetRandomInt(0, aSpawnData.Length - 1);
 			aSpawnData.GetArray(iRandomIndex, eSpawanInfo);
 
 			g_fTankSpawnPos = eSpawanInfo.fSpawnPos;
@@ -321,7 +335,7 @@ void SetBossSpawnFlow()
 		{
 			bool bValidPos;
 
-			for (int i = 0; i < 200; i++)
+			for (i = 0; i < 200; i++)
 			{
 				aSpawnData.GetArray(GetRandomInt(0, aSpawnData.Length - 1), eSpawanInfo);
 
@@ -364,9 +378,10 @@ bool IsValidFlow(float fFlow)
 {
 	if (0.0 < fFlow < 1.0)
 	{
-		float fBanFlow[2];
+		static float fBanFlow[2];
+		static int i;
 
-		for (int i = 0; i < g_aBanFlow.Length; i++)
+		for (i = 0; i < g_aBanFlow.Length; i++)
 		{
 			g_aBanFlow.GetArray(i, fBanFlow);
 			if (fBanFlow[FLOW_MIN] <= fFlow <= fBanFlow[FLOW_MAX])
@@ -392,7 +407,7 @@ bool IsWillStuck(const float fPos[3])
 	return bStuck;
 }
 
-public bool TraceFilter(int entity, int contentsMask)
+bool TraceFilter(int entity, int contentsMask)
 {
 	if (entity <= MaxClients || !IsValidEntity(entity))
 	{
@@ -401,7 +416,7 @@ public bool TraceFilter(int entity, int contentsMask)
 	return true;
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	Reset();
 }
@@ -446,7 +461,7 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 	return Plugin_Continue;
 }
 
-public Action TankSpawnCheck_Timer(Handle timer)
+Action TankSpawnCheck_Timer(Handle timer)
 {
 	if (g_bTankSpawnEnable && g_fTankSpawnFlow > 0.0 && g_bLeftSafeArea)
 	{
@@ -465,7 +480,7 @@ public Action TankSpawnCheck_Timer(Handle timer)
 	return Plugin_Stop;
 }
 
-public Action WitchSpawnCheck_Timer(Handle timer)
+Action WitchSpawnCheck_Timer(Handle timer)
 {
 	if (g_bWitchSpawnEnable && g_fWitchSpawnFlow > 0.0 && g_bLeftSafeArea)
 	{
@@ -484,13 +499,13 @@ public Action WitchSpawnCheck_Timer(Handle timer)
 	return Plugin_Stop;
 }
 
-public Action Bossflow(int client, int args)
+Action Bossflow(int client, int args)
 {
 	PrintBossflow();
 	return Plugin_Handled;
 }
 
-public Action ReFlow(int client, int args)
+Action ReFlow(int client, int args)
 {
 	if (!g_bLeftSafeArea)
 	{
@@ -501,7 +516,7 @@ public Action ReFlow(int client, int args)
 	return Plugin_Handled;
 }
 /*
-public Action SetFlow_Test(int client, int args)
+Action SetFlow_Test(int client, int args)
 {
 	if (!g_bLeftSafeArea)
 	{
@@ -509,7 +524,7 @@ public Action SetFlow_Test(int client, int args)
 	}
 }
 
-public Action SetFlowTest_Timer(Handle timer)
+Action SetFlowTest_Timer(Handle timer)
 {
 	static int iTestSetFlowcount;
 	iTestSetFlowcount++;
@@ -519,15 +534,15 @@ public Action SetFlowTest_Timer(Handle timer)
 */
 void PrintBossflow()
 {
-	int SurvivorMaxFlow = RoundToNearest(fSurMaxFlow() * 100.0);
-	CPrintToChatAll("Current: {yellow}%i {default}%%", SurvivorMaxFlow);
+	int iFlow = RoundToNearest(fSurMaxFlow() * 100.0);
+	CPrintToChatAll("Current: {yellow}%i {default}%%", iFlow);
 
 	if (g_bTankSpawnEnable)
 	{
 		if (g_fTankSpawnFlow > 0.0)
 		{
-			int iTankSpawnFlow = RoundToNearest(g_fTankSpawnFlow * 100.0);
-			CPrintToChatAll("Tank: {yellow}%i {default}%%", iTankSpawnFlow);
+			iFlow = RoundToNearest(g_fTankSpawnFlow * 100.0);
+			CPrintToChatAll("Tank: {yellow}%i {default}%%", iFlow);
 		}
 		else CPrintToChatAll("Tank: {yellow}None");
 	}
@@ -536,8 +551,8 @@ void PrintBossflow()
 	{
 		if (g_fWitchSpawnFlow > 0.0)
 		{
-			int iWitchSpawnFlow = RoundToNearest(g_fWitchSpawnFlow * 100.0);
-			CPrintToChatAll("Witch: {yellow}%i {default}%%", iWitchSpawnFlow);
+			iFlow = RoundToNearest(g_fWitchSpawnFlow * 100.0);
+			CPrintToChatAll("Witch: {yellow}%i {default}%%", iFlow);
 		}
 		else CPrintToChatAll("Witch: {yellow}None");
 	}
@@ -565,7 +580,7 @@ public Action L4D_OnSpawnWitch(const float vecPos[3], const float vecAng[3])
 	return Plugin_Continue;
 }
 
-public Action ShowFlowHud(int client, int args)
+Action ShowFlowHud(int client, int args)
 {
 	g_bShowFlow[client] = !g_bShowFlow[client];
 	if (g_bShowFlow[client]) CreateTimer(1.0, ShowFlowHud_Timer, client, TIMER_REPEAT);
@@ -573,7 +588,7 @@ public Action ShowFlowHud(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action ShowFlowHud_Timer(Handle timer, int client)
+Action ShowFlowHud_Timer(Handle timer, int client)
 {
 	if (g_bShowFlow[client] && IsRealClient(client) && IsAdminClient(client))
 	{
@@ -619,7 +634,7 @@ public Action ShowFlowHud_Timer(Handle timer, int client)
 	}
 }
 
-public int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {return 0;}
+int NullMenuHandler(Handle hMenu, MenuAction action, int param1, int param2) {return 0;}
 
 bool StaticTankMap()
 {

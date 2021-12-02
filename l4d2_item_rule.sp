@@ -11,19 +11,18 @@
 #include <profiler>
 #endif
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 
-char g_sLogPath[PLATFORM_MAX_PATH], g_sConfigPath[PLATFORM_MAX_PATH];
+char g_sLogPath[PLATFORM_MAX_PATH], g_sCfgPath[PLATFORM_MAX_PATH];
 bool g_bFinalMap, g_bOfficialMap;
 ArrayList g_aItemsArray, g_aTemItemsArray, g_aKitPosArray;
-ConVar CvarFinalMapPills, CvarDelFootLocker, CvarStartItems;
+ConVar g_cvFinalMapPills, g_cvDelFootLocker, g_cvStartItems;
 bool g_bFinalMapPills, g_bDelFootLocker;
 char g_sStartItems[256];
-
-StringMap g_smNameToNumber, g_smModelToName, g_smOldItemToNewItem, g_smItemToLimitNum;
+StringMap g_smNameToNum, g_smModelToName, g_smItemReplace, g_smItemLimit;
 KeyValues g_kv;
 
-enum struct g_eItemInfo
+enum struct ItemInfo
 {
 	char sName[64];
 	float fPos[3];
@@ -84,24 +83,23 @@ public Plugin myinfo =
 	author = "fdxx",
 	description = "物品规则",
 	version = VERSION,
-	url = ""
 };
 
 public void OnPluginStart()
 {
 	BuildPath(Path_SM, g_sLogPath, sizeof(g_sLogPath), "logs/l4d2_item_rule.log");
-	BuildPath(Path_SM, g_sConfigPath, sizeof(g_sConfigPath), "data/l4d2_item_rule.cfg");
+	BuildPath(Path_SM, g_sCfgPath, sizeof(g_sCfgPath), "data/l4d2_item_rule.cfg");
 
 	CreateConVar("l4d2_item_rule_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-	CvarFinalMapPills = CreateConVar("l4d2_item_rule_finalmap_pills", "1", "将结局地图的包替换成药", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarDelFootLocker = CreateConVar("l4d2_item_rule_del_footlocker", "1", "删除物品箱(c6m1大量物品的箱子)", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarStartItems = CreateConVar("l4d2_item_rule_start_give_items", "weapon_pain_pills;health", "出门给的物品, 多个物品用;分割", FCVAR_NONE);
+	g_cvFinalMapPills = CreateConVar("l4d2_item_rule_finalmap_pills", "1", "将结局地图的包替换成药", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvDelFootLocker = CreateConVar("l4d2_item_rule_del_footlocker", "1", "删除物品箱(c6m1大量物品的箱子)", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvStartItems = CreateConVar("l4d2_item_rule_start_give_items", "weapon_pain_pills;health", "出门给的物品, 多个物品用;分割", FCVAR_NONE);
 	
 	GetCvars();
 
-	CvarFinalMapPills.AddChangeHook(ConVarChanged);
-	CvarDelFootLocker.AddChangeHook(ConVarChanged);
-	CvarStartItems.AddChangeHook(ConVarChanged);
+	g_cvFinalMapPills.AddChangeHook(ConVarChanged);
+	g_cvDelFootLocker.AddChangeHook(ConVarChanged);
+	g_cvStartItems.AddChangeHook(ConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("round_start", Event_RoundStart_C4, EventHookMode_PostNoCopy);
@@ -114,26 +112,26 @@ public void OnPluginStart()
 	Initialization();
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();	
 }
 
 void GetCvars()
 {
-	g_bFinalMapPills = CvarFinalMapPills.BoolValue;
-	g_bDelFootLocker = CvarDelFootLocker.BoolValue;
-	CvarStartItems.GetString(g_sStartItems, sizeof(g_sStartItems));
+	g_bFinalMapPills = g_cvFinalMapPills.BoolValue;
+	g_bDelFootLocker = g_cvDelFootLocker.BoolValue;
+	g_cvStartItems.GetString(g_sStartItems, sizeof(g_sStartItems));
 }
 
 void Initialization()
 {
-	g_aItemsArray = new ArrayList(sizeof(g_eItemInfo));
-	g_aTemItemsArray = new ArrayList(sizeof(g_eItemInfo));
+	g_aItemsArray = new ArrayList(sizeof(ItemInfo));
+	g_aTemItemsArray = new ArrayList(sizeof(ItemInfo));
 	g_aKitPosArray = new ArrayList(3);
 
 	g_smModelToName = new StringMap();
-	g_smNameToNumber = new StringMap();
+	g_smNameToNum = new StringMap();
 	
 	char sModel[PLATFORM_MAX_PATH];
 	for (int i = 0; i < sizeof(g_sItems); i++)
@@ -141,14 +139,15 @@ void Initialization()
 		strcopy(sModel, sizeof(sModel), g_sItems[i][ITEM_MODEL]);
 		StrToLowerCase(sModel);
 		g_smModelToName.SetString(sModel, g_sItems[i][ITEM_NAME]);
-		g_smNameToNumber.SetValue(g_sItems[i][ITEM_NAME], i);
+		g_smNameToNum.SetValue(g_sItems[i][ITEM_NAME], i);
 	}
 
-	g_smOldItemToNewItem = new StringMap();
-	g_smItemToLimitNum = new StringMap();
+	g_smItemReplace = new StringMap();
+	g_smItemLimit = new StringMap();
 
+	delete g_kv;
 	g_kv = new KeyValues("l4d2_item_rule");
-	if (g_kv.ImportFromFile(g_sConfigPath))
+	if (g_kv.ImportFromFile(g_sCfgPath))
 	{
 		char sItem[64], sNewItem[64];
 		int iLimit;
@@ -163,20 +162,13 @@ void Initialization()
 					if (g_kv.GetSectionName(sItem, sizeof(sItem)))
 					{
 						g_kv.GetString(NULL_STRING, sNewItem, sizeof(sNewItem));
-						
 						if (sNewItem[0] != '\0')
-						{
-							g_smOldItemToNewItem.SetString(sItem, sNewItem);
-						}
-						else LogError("[错误] g_kv.GetString 失败");
+							g_smItemReplace.SetString(sItem, sNewItem);
 					}
-					else LogError("[错误] g_kv.GetSectionName 失败");
 				}
 				while (g_kv.GotoNextKey(false));
 			}
-			else LogError("[错误] g_kv.GotoFirstSubKey 失败");
 		}
-		else LogError("[错误] g_kv.JumpToKey item_replace 失败");
 
 		g_kv.Rewind();
 
@@ -190,30 +182,23 @@ void Initialization()
 					if (g_kv.GetSectionName(sItem, sizeof(sItem)))
 					{
 						iLimit = g_kv.GetNum(NULL_STRING, -1);
-						
 						if (iLimit != -1)
-						{
-							g_smItemToLimitNum.SetValue(sItem, iLimit);
-						}
-						else LogError("[错误] g_kv.GetNum 失败");
+							g_smItemLimit.SetValue(sItem, iLimit);
 					}
-					else LogError("[错误] g_kv.GetSectionName 失败");
 				}
 				while (g_kv.GotoNextKey(false));
 			}
-			else LogError("[错误] g_kv.GotoFirstSubKey 失败");
 		}
-		else LogError("[错误] g_kv.JumpToKey item_limit 失败");
 	}
 	else SetFailState("无法加载 l4d2_item_rule.cfg!");
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	CreateTimer(0.5, RoundStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action RoundStart_Timer(Handle timer)
+Action RoundStart_Timer(Handle timer)
 {
 	//LogToFileEx_Debug("====================   Map: %s   ====================", CurrentMap());
 
@@ -264,21 +249,22 @@ public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
 }
 
 //开局给物品
-public Action GiveItems_Timer(Handle timer)
+Action GiveItems_Timer(Handle timer)
 {
 	static char sPieces[16][64];
+	static int iNumPieces, i, p;
 
 	if (g_sStartItems[0] != '\0')
 	{
-		int iNumPieces = ExplodeString(g_sStartItems, ";", sPieces, sizeof(sPieces), sizeof(sPieces[]));
+		iNumPieces = ExplodeString(g_sStartItems, ";", sPieces, sizeof(sPieces), sizeof(sPieces[]));
 
-		for (int i = 1; i <= MaxClients; i++)
+		for (i = 1; i <= MaxClients; i++)
 		{
 			if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
 			{
-				for (int p = 0; p < iNumPieces; p++)
+				for (p = 0; p < iNumPieces; p++)
 				{
-					GiveItemByName(i, sPieces[p]);
+					CheatCommand(i, "give", sPieces[p]);
 				}
 			}
 		}
@@ -287,7 +273,7 @@ public Action GiveItems_Timer(Handle timer)
 }
 
 //过图的时候删除健康物品和投掷物品
-public void Event_MapTransition(Event event, const char[] name, bool dontBroadcast) 
+void Event_MapTransition(Event event, const char[] name, bool dontBroadcast) 
 {
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -310,12 +296,12 @@ public void Event_MapTransition(Event event, const char[] name, bool dontBroadca
 void ProcessEntity()
 {
 	static char sClassName[64], sItemName[64], sNewItem[64];
-	static int iItemLimit;
+	static int iItemLimit, i;
 	static char sModel[PLATFORM_MAX_PATH];
 
 	g_aItemsArray.Clear();
 
-	for (int i = MaxClients+1; i <= GetMaxEntities(); i++)
+	for (i = MaxClients+1; i <= GetMaxEntities(); i++)
 	{
 		if (IsValidEntity(i))
 		{
@@ -338,7 +324,7 @@ void ProcessEntity()
 					continue;
 				}
 
-				if (strncmp(sClassName, "weapon_", 7) == 0 || strcmp(sClassName, "prop_physics") == 0 || strcmp(sClassName, "upgrade_laser_sight") == 0)
+				if (sClassName[0] == 'w' || sClassName[0] == 'p' || sClassName[0] == 'u')
 				{
 					if (GetEntPropString(i, Prop_Data, "m_ModelName", sModel, sizeof(sModel)) > 1)
 					{
@@ -366,15 +352,14 @@ void ProcessEntity()
 							}
 
 							//替换武器
-							if (g_smOldItemToNewItem.GetString(sItemName, sNewItem, sizeof(sNewItem)))
+							if (g_smItemReplace.GetString(sItemName, sNewItem, sizeof(sNewItem)))
 							{
 								ReplaceWeapon(i, sClassName, sNewItem);
 								continue;
 							}
 							
-							
 							//保存物品点位
-							if (g_smItemToLimitNum.GetValue(sItemName, iItemLimit))
+							if (g_smItemLimit.GetValue(sItemName, iItemLimit))
 							{
 								if (iItemLimit >= 0)
 								{
@@ -398,6 +383,7 @@ void ProcessEntity()
 void DelFootLocker(int iEntity)
 {
 	static char sModel[PLATFORM_MAX_PATH], sButtonClassName[16];
+	static int i;
 
 	if (GetEntPropString(iEntity, Prop_Data, "m_ModelName", sModel, sizeof(sModel)) > 1)
 	{
@@ -406,7 +392,7 @@ void DelFootLocker(int iEntity)
 			static float fBoxPos[3];
 			GetEntPropVector(iEntity, Prop_Data, "m_vecOrigin", fBoxPos);
 			
-			for (int i = MaxClients+1; i <= GetMaxEntities(); i++)
+			for (i = MaxClients+1; i <= GetMaxEntities(); i++)
 			{
 				if (IsValidEntity(i))
 				{
@@ -452,7 +438,7 @@ void ReplaceWeapon(int iEntity, const char[] sClassName, const char[] sNewItem)
 void SaveItemData(int iEntity, const char sItemName[64])
 {
 	static float fItemPos[3], fItemAng[3];
-	static g_eItemInfo eItemInfo;
+	static ItemInfo eItemInfo;
 
 	GetEntPropVector(iEntity, Prop_Data, "m_vecOrigin", fItemPos);
 	GetEntPropVector(iEntity, Prop_Data, "m_angRotation", fItemAng);
@@ -487,27 +473,23 @@ void LimitItem()
 					{
 						if (iLimit >= 1) SpawnItemToLimit(sItemName, iLimit);
 					}
-					else LogError("[错误] g_kv.GetNum 失败");
 				}
-				else LogError("[错误] g_kv.GetSectionName 失败");
 			}
 			while (g_kv.GotoNextKey(false));
 		}
-		else LogError("[错误] g_kv.GotoFirstSubKey 失败");
 	}
-	else LogError("[错误] g_kv.JumpToKey item_limit 失败");
 }
 
 void SpawnItemToLimit(const char[] sItemName, int iLimit)
 {
-	static int iSpawnCount, index;
-	static g_eItemInfo eItemInfo;
+	static int iSpawnCount, index, i;
+	static ItemInfo eItemInfo;
 
 	g_aTemItemsArray.Clear();
 	iSpawnCount = 0;
 	
 	//提取物品到新的数组
-	for (int i = 0; i < g_aItemsArray.Length; i++)
+	for (i = 0; i < g_aItemsArray.Length; i++)
 	{
 		g_aItemsArray.GetArray(i, eItemInfo);
 		
@@ -519,7 +501,7 @@ void SpawnItemToLimit(const char[] sItemName, int iLimit)
 
 	//从新的数组随机产生物品
 	if (iLimit > g_aTemItemsArray.Length) iLimit = g_aTemItemsArray.Length;
-	for (int i = 0; i < iLimit; i++)
+	for (i = 0; i < iLimit; i++)
 	{
 		index = GetRandomInt(0, g_aTemItemsArray.Length - 1);
 
@@ -570,11 +552,11 @@ bool IsRepeatPos(const float[] x)
 void SpawnPill()
 {
 	static float fPos[3];
-	static int iSpawnCount;
+	static int iSpawnCount, i;
 
 	iSpawnCount = 0;
 
-	for (int i = 0; i < g_aKitPosArray.Length; i++)
+	for (i = 0; i < g_aKitPosArray.Length; i++)
 	{
 		g_aKitPosArray.GetArray(i, fPos);
 
@@ -623,12 +605,12 @@ bool IsOfficialMap()
 }
 
 //为什么c4m4安全屋没有枪? HardCode that shit
-public void Event_RoundStart_C4(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart_C4(Event event, const char[] name, bool dontBroadcast)
 {
 	CreateTimer(5.0, SpawnGun_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action SpawnGun_Timer(Handle timer)
+Action SpawnGun_Timer(Handle timer)
 {
 	if (strcmp(CurrentMap(), "c4m3_sugarmill_b") == 0)
 	{
@@ -660,7 +642,7 @@ int SpawnItem(const char[] sItemName, const float fPos[3], float fAng[3] = {0.0,
 	int iItemNum;
 	int iEntIndex = -1;
 
-	if (g_smNameToNumber.GetValue(sItemName, iItemNum))
+	if (g_smNameToNum.GetValue(sItemName, iItemNum))
 	{
 		bool bHasSpawnclass = strcmp(g_sItems[iItemNum][HAS_SPAWN_CLASS], "true") == 0;
 		bool bHasCount = strcmp(g_sItems[iItemNum][HAS_COUNT], "true") == 0;
@@ -755,18 +737,13 @@ int SpawnItem(const char[] sItemName, const float fPos[3], float fAng[3] = {0.0,
 }
 
 // 为什么医疗物品 DispatchKeyValue count 无效??
-public void SetCount_OnNextFrame(DataPack hPack)
+void SetCount_OnNextFrame(DataPack hPack)
 {
 	hPack.Reset();
 	int iEntIndex = hPack.ReadCell();
 	int iCount = hPack.ReadCell();
 	delete hPack;
 	SetEntProp(iEntIndex, Prop_Data, "m_itemCount", iCount);
-}
-
-void GiveItemByName(int client, const char[] sName)
-{
-	CheatCommand(client, "give", sName);
 }
 
 void CheatCommand(int client, const char[] command, const char[] args = "")
@@ -780,20 +757,21 @@ void CheatCommand(int client, const char[] command, const char[] args = "")
 //https://forums.alliedmods.net/showthread.php?t=331053
 void StrToLowerCase(char[] str)
 {
-	for (int i = 0; i < strlen(str); i++)
+	static int i;
+	for (i = 0; i < strlen(str); i++)
 	{
 		str[i] = CharToLower(str[i]);
 	}
 }
 
-public Action Cmd_LimitItems(int client, int args)
+Action Cmd_LimitItems(int client, int args)
 {
 	ProcessEntity();
 	LimitItem();
 	return Plugin_Handled;
 }
 
-public Action Cmd_SpawnItem(int client, int args)
+Action Cmd_SpawnItem(int client, int args)
 {
 	if (args == 2)
 	{
@@ -813,7 +791,7 @@ public Action Cmd_SpawnItem(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action Cmd_SpawnAllItem(int client, int args)
+Action Cmd_SpawnAllItem(int client, int args)
 {
 	if (args == 1)
 	{

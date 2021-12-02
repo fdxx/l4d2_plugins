@@ -7,7 +7,7 @@
 #include <dhooks>
 #include <multicolors>
 
-#define VERSION "0.4"
+#define VERSION "0.5"
 
 ConVar
 	g_cvGameMode,
@@ -37,7 +37,7 @@ Handle
 	g_hSurGlowCheck;
 
 ArrayList g_aJoinTankList;
-char g_sGameMode[128];
+char g_sDefMode[128];
 DynamicDetour g_dSpawnPlayerZombieScan;
 float g_fMapStartTime;
 
@@ -139,7 +139,7 @@ public void OnConfigsExecuted()
 		SetFailState("不支持的游戏模式");
 	}
 
-	g_cvGameMode.GetString(g_sGameMode, sizeof(g_sGameMode));
+	g_cvGameMode.GetString(g_sDefMode, sizeof(g_sDefMode));
 	
 	FindConVar("z_scrimmage_sphere").SetBounds(ConVarBound_Lower, true, 0.0);
 	FindConVar("z_scrimmage_sphere").SetBounds(ConVarBound_Upper, true, 0.0);
@@ -354,11 +354,7 @@ void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
 	{
 		switch (OldTeam)
 		{
-			case 2:
-			{
-				//LogMessage("%N 离开team2", client);
-				//CreateTimer(0.1, ResetSurGlow, _, TIMER_FLAG_NO_MAPCHANGE);
-			}
+			//case 2: {}
 			case 3:
 			{
 				if (IsRealClient(client))
@@ -412,9 +408,14 @@ Action SetLadderGlow_Timer(Handle timer, int userid)
 	{
 		if (GetClientTeam(client) == 3)
 		{
-			SendConVarValue(client, g_cvGameMode, "versus");
+			if (!g_cvGameMode.ReplicateToClient(client, "versus"))
+				LogError("对 %N 设置假对抗模式失败", client);
 		}
-		else SendConVarValue(client, g_cvGameMode, g_sGameMode);
+		else
+		{
+			if (!g_cvGameMode.ReplicateToClient(client, g_sDefMode))
+				LogError("恢复 %N 游戏模式失败", client);
+		}
 	}
 	return Plugin_Continue;
 }
