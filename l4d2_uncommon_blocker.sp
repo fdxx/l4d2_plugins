@@ -1,19 +1,67 @@
-/*
-	-----------------------------------------------------------------------------------------------------------------------------------------------------
+/* -----------------------------------------------------------------------------------------------------------------------------------------------------
+ * 	Changelog:
+ * 	---------
+ *		2.2: (24.10.2021) (A1m`)
+ *			1. Fixed: in some cases we received the coordinates of the infected 0.0.0, now the plugin always gets the correct coordinates.
+ *
+ * 		2.0: (14.08.2021) (A1m`)
+ * 			1. Completely rewrite the method of identifying uncommon infected.
+ * 			2. Added some uncommon infected (fallen survivor and Jimmy Gibbs).
+ * 			3. Optimization and code improvement.
+ * 			4. Plugin tested for all uncommon infected.
+ * 			5. A bug is noticed in the plugin, sometimes we get zero coordinates on the SDKHook_SpawnPost, what should we do about it?
+ *
+ * 		0.1d: (06.07.2021) (A1m`)
+ * 			1. fixes description of cvar 'sm_uncinfblock_enabled' after 12+- years of using the plugin :D.
+ *
+ * 		0.1c: (23.06.2021) (A1m`)
+ * 			1. new syntax, little fixes.
+ *
+ * 		0.1b:
+ * 			1. spawns infected after killing uncommon entity.
+ *
+ * 		0.1a
+ * 			1. first version (not really optimized).
+ *
+ * -----------------------------------------------------------------------------------------------------------------------------------------------------
+ * Plugin test results (these are all uncommon infected):
+ *
+ * L4D2Gender_Ceda = 11
+ * Plugin flag: (11 - 11 = 0) (1 << 0) = 1
+ * Uncommon infected spawned! Model: models/infected/common_male_ceda_l4d1.mdl, gender: 11, plugin flag: 1.
+ * Uncommon infected spawned! Model: models/infected/common_male_ceda.mdl, gender: 11, plugin flag: 1.
+ *
+ * L4D2Gender_Crawler = 12
+ * Plugin flag: (12 - 11 = 1) (1 << 1) = 2
+ * Uncommon infected spawned! Model: models/infected/common_male_mud_L4D1.mdl, gender: 12, plugin flag: 2.
+ * Uncommon infected spawned! Model: models/infected/common_male_mud.mdl, gender: 12, plugin flag: 2.
+ *
+ * L4D2Gender_Undistractable = 13
+ * Plugin flag: (13 - 11 = 2) (1 << 2) = 4
+ * Uncommon infected spawned! Model: models/infected/common_male_roadcrew_l4d1.mdl, gender: 13, plugin flag: 4.
+ * Uncommon infected spawned! Model: models/infected/common_male_roadcrew.mdl, gender: 13, plugin flag: 4.
+ * Uncommon infected spawned! Model: models/infected/common_male_baggagehandler_02.mdl, gender: 13, plugin flag: 4.
+ * Note: common_male_roadcrew_rain.mdl is this model used in the game?
+ *
+ * L4D2Gender_Fallen = 14
+ * Plugin flag: (14 - 11 = 3) (1 << 3) = 8
+ * Uncommon infected spawned! Model: models/infected/common_male_fallen_survivor_l4d1.mdl, gender: 14, plugin flag: 8.
+ * Uncommon infected spawned! Model: models/infected/common_male_fallen_survivor.mdl, gender: 14, plugin flag: 8.
+ * Uncommon infected spawned! Model: models/infected/common_male_parachutist.mdl, gender: 14, plugin flag: 8.
+ * Note: no, it's not the one that hangs on the tree on the map 'c3m2_swamp'.
 
-	Changelog
-	---------
-		0.2 (by fdxx)
-			- Newdecls
-			- Add more Uncommon Infected
+ * L4D2Gender_Riot_Control = 15
+ * Plugin flag: (15 - 11 = 4) (1 << 4) = 16
+ * Uncommon infected spawned! Model: models/infected/common_male_riot.mdl, gender: 15, plugin flag: 16.
+ * Note: there is a version for l4d1, but it is not used (common_male_riot_l4d1.mdl).
 
-		0.1b
-			- spawns common after killing uncommon entity
-			
-		0.1a
-			- first version (not really optimized)
+ * L4D2Gender_Clown = 16
+ * Plugin flag: (16 - 11 = 5) (1 << 5) = 32
+ * Uncommon infected spawned! Model: models/infected/common_male_clown.mdl, gender: 16, plugin flag: 32.
 
-	-----------------------------------------------------------------------------------------------------------------------------------------------------
+ * L4D2Gender_Jimmy = 17
+ * Plugin flag: (17 - 11 = 6) (1 << 6) = 64
+ * Uncommon infected spawned! Model: models/infected/common_male_jimmy.mdl, gender: 17, plugin flag: 64.
 */
 
 #pragma semicolon 1
@@ -23,123 +71,92 @@
 #include <sdktools>
 #include <sdkhooks>
 
-#define DEBUG 0
+enum /*L4D2_Gender*/
+{
+	L4D2Gender_Neutral			= 0,
+	L4D2Gender_Male				= 1,
+	L4D2Gender_Female			= 2,
+	L4D2Gender_Nanvet			= 3, //Bill
+	L4D2Gender_TeenGirl			= 4, //Zoey
+	L4D2Gender_Biker			= 5, //Francis
+	L4D2Gender_Manager			= 6, //Louis
+	L4D2Gender_Gambler			= 7, //Nick
+	L4D2Gender_Producer			= 8, //Rochelle
+	L4D2Gender_Coach			= 9, //Coach
+	L4D2Gender_Mechanic			= 10, //Ellis
+	L4D2Gender_Ceda				= 11,
+	L4D2Gender_Crawler			= 12, //Mudman
+	L4D2Gender_Undistractable	= 13, //Workman (class not reacting to the pipe bomb)
+	L4D2Gender_Fallen			= 14,
+	L4D2Gender_Riot_Control		= 15, //RiotCop
+	L4D2Gender_Clown			= 16,
+	L4D2Gender_Jimmy			= 17, //JimmyGibbs
+	L4D2Gender_Hospital_Patient	= 18,
+	L4D2Gender_Witch_Bride		= 19,
+	L4D2Gender_Police			= 20, //l4d1 RiotCop (was removed from the game)
+	L4D2Gender_Male_L4D1		= 21,
+	L4D2Gender_Female_L4D1		= 22,
+	
+	L4D2Gender_MaxSize //23 size
+};
 
-#define UNC_CEDA		1	//防化服
-#define UNC_CLOWN		2	//小丑
-#define UNC_FALLEN		4	//堕落幸存者
-#define UNC_JIMMY		8	//赛车手
-#define UNC_MUDMEN		16	//泥人
-#define UNC_RIOT		32	//防爆警察
-#define UNC_ROADCREW	64	//道路工人
-#define UNC_PARACHUTIST	128	//伞兵(c3m2)
-
-ConVar CvarPluginEnabled, CvarBlockFlags;
-bool g_bPluginEnabled;
-int g_iBlockFlags;
-
-char logPath[PLATFORM_MAX_PATH];
-
-public Plugin myinfo = 
+public Plugin myinfo =
 {
 	name = "Uncommon Infected Blocker",
-	author = "Tabun",
+	author = "Tabun, A1m`, fdxx",
 	description = "Blocks uncommon infected from ruining your day.",
-	version = "0.2.3",
-	url = "nope"
-}
+	version = "2.2",
+	url = "https://github.com/L4D-Community/L4D2-Competitive-Framework"
+};
 
-public void OnPluginStart()
+public void OnPluginStart() {}
+
+public void OnEntityCreated(int iEntity, const char[] sClassName)
 {
-	BuildPath(Path_SM, logPath, sizeof(logPath), "logs/l4d2_uncommon_blocker.log");
-
-	CvarPluginEnabled = CreateConVar("sm_uncinfblock_enabled", "1", "Enable Plugin", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarBlockFlags = CreateConVar("sm_uncinfblock_types", "165", "Which uncommon infected to block. Number addition.(1:ceda, 2:clown, 4:fallen survivor, 8:jimmy, 16:mud men, 32:riot, 64:roadcrew, 128:parachutist).", FCVAR_NONE);
-
-	GetCvars();
-
-	CvarPluginEnabled.AddChangeHook(ConVarChange);
-	CvarBlockFlags.AddChangeHook(ConVarChange);
-}
-
-public void ConVarChange(ConVar convar, const char[] oldValue, const char[] newValue)
-{
-	GetCvars();	
-}
-
-void GetCvars()
-{
-	g_bPluginEnabled = CvarPluginEnabled.BoolValue;
-	g_iBlockFlags = CvarBlockFlags.IntValue;
-}
-
-public void OnEntityCreated(int entity, const char[] classname)
-{
-	if (g_bPluginEnabled)
+	if (sClassName[0] == 'i')
 	{
-		if (strcmp(classname, "infected") == 0)
+		if (strncmp(sClassName, "infected", 8, false) == 0)
+			SDKHook(iEntity, SDKHook_SpawnPost, Hook_OnEntitySpawned);
+	}
+}
+
+void Hook_OnEntitySpawned(int iEntity)
+{
+	RequestFrame(OnNextFrame, EntIndexToEntRef(iEntity));
+}
+
+void OnNextFrame(int iEntity)
+{
+	if (EntRefToEntIndex(iEntity) == INVALID_ENT_REFERENCE || !IsValidEdict(iEntity)) return;
+
+	switch (GetEntProp(iEntity, Prop_Send, "m_Gender"))
+	{
+		case L4D2Gender_Ceda, L4D2Gender_Fallen, L4D2Gender_Riot_Control:
 		{
-			SDKHook(entity, SDKHook_SpawnPost, EntitySpawned);
+			float fLocation[3];
+			GetEntPropVector(iEntity, Prop_Send, "m_vecOrigin", fLocation);
+
+			/*
+			char sModel[128];
+			GetEntPropString(iEntity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+			LogMessage("删除(%.0f %.0f %.0f) %s", fLocation[0], fLocation[1], fLocation[2], sModel);
+			*/
+			
+			RemoveEntity(iEntity);
+			SpawnNewInfected(fLocation);
 		}
 	}
 }
 
-public void EntitySpawned(int entity)
+void SpawnNewInfected(const float fLocation[3])
 {
-	RequestFrame(OnNextFrame, EntIndexToEntRef(entity));
+	int iInfected = CreateEntityByName("infected");
+	if (iInfected < 1) return;
+
+	int iTickTime = RoundToNearest(GetGameTime() / GetTickInterval()) + 5; // copied from uncommon spawner plugin, prolly helps avoid the zombie get 'stuck' ?
+	SetEntProp(iInfected, Prop_Data, "m_nNextThinkTick", iTickTime);
+	DispatchSpawn(iInfected);
+	ActivateEntity(iInfected);
+
+	TeleportEntity(iInfected, fLocation, NULL_VECTOR, NULL_VECTOR);
 }
-
-public void OnNextFrame(any entity)
-{
-	if (EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE || !IsValidEntity(entity)) return;
-
-	static char sModelName[PLATFORM_MAX_PATH];
-	if (GetEntPropString(entity, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName)) > 1)
-	{
-		if (IsUncommonInf(sModelName))
-		{
-			float fPos[3];
-			GetEntPropVector(entity, Prop_Send, "m_vecOrigin", fPos);
-			RemoveEntity(entity);
-			LogToFileEx_Debug("删除 %s (%.1f %.1f %.1f)", sModelName, fPos[0], fPos[1], fPos[2]);
-			SpawnCommonInfected(fPos);
-		}
-	}
-}
-
-bool IsUncommonInf(const char[] sModelName)
-{
-	if (StrContains(sModelName, "_ceda") != -1			&& (UNC_CEDA & g_iBlockFlags))			{ return true; }
-	if (StrContains(sModelName, "_clown") != -1			&& (UNC_CLOWN & g_iBlockFlags))			{ return true; }
-	if (StrContains(sModelName, "_fallen") != -1		&& (UNC_FALLEN & g_iBlockFlags))		{ return true; }
-	if (StrContains(sModelName, "_jimmy") != -1			&& (UNC_JIMMY & g_iBlockFlags))			{ return true; }
-	if (StrContains(sModelName, "_mud") != -1			&& (UNC_MUDMEN & g_iBlockFlags))		{ return true; }
-	if (StrContains(sModelName, "_riot") != -1			&& (UNC_RIOT & g_iBlockFlags))			{ return true; }
-	if (StrContains(sModelName, "_roadcrew") != -1		&& (UNC_ROADCREW & g_iBlockFlags))		{ return true; }
-	if (StrContains(sModelName, "_parachutist") != -1	&& (UNC_PARACHUTIST & g_iBlockFlags))	{ return true; }
-
-	return false;
-}
-
-void SpawnCommonInfected(const float fPos[3])
-{
-	int iZombie = CreateEntityByName("infected");
-	int ticktime = RoundToNearest(GetGameTime() / GetTickInterval()) + 5;
-	SetEntProp(iZombie, Prop_Data, "m_nNextThinkTick", ticktime);
-	DispatchSpawn(iZombie);
-	ActivateEntity(iZombie);
-	TeleportEntity(iZombie, fPos, NULL_VECTOR, NULL_VECTOR);
-
-	LogToFileEx_Debug("产生普通僵尸 (%.1f %.1f %.1f)", fPos[0], fPos[1], fPos[2]);
-}
-
-void LogToFileEx_Debug(const char[] format, any ...)
-{
-	char buffer[254];
-	VFormat(buffer, sizeof(buffer), format, 2);
-
-	#if DEBUG
-	LogToFileEx(logPath, "%s", buffer);
-	#endif
-}
-
