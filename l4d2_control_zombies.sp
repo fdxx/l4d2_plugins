@@ -7,7 +7,7 @@
 #include <dhooks>
 #include <multicolors>
 
-#define VERSION "0.5"
+#define VERSION "0.8"
 
 ConVar
 	g_cvGameMode,
@@ -24,7 +24,8 @@ int
 	g_iSpawnCountDown[MAXPLAYERS+1],
 	g_iSpawnTime,
 	g_iGlowEntRef[MAXPLAYERS+1],
-	g_iSurMaxIncapCount;
+	g_iSurMaxIncapCount,
+	g_iSpawnablePZ;
 
 bool
 	g_bBlockOtherRespawn,
@@ -78,7 +79,7 @@ public void OnPluginStart()
 	g_cvMaxSpecialLimit = CreateConVar("l4d2_cz_max_special_limit", "1", "感染玩家人数最大限制", FCVAR_NONE);
 	g_cvSpecialLimit[SMOKER] = CreateConVar("l4d2_cz_smoker_limit", "0", "Smoker玩家限制", FCVAR_NONE);
 	g_cvSpecialLimit[BOOMER] = CreateConVar("l4d2_cz_boomer_limit", "0", "Boomer玩家限制", FCVAR_NONE);
-	g_cvSpecialLimit[HUNTER] = CreateConVar("l4d2_cz_hunter_limit", "5", "Hunter玩家限制", FCVAR_NONE);
+	g_cvSpecialLimit[HUNTER] = CreateConVar("l4d2_cz_hunter_limit", "1", "Hunter玩家限制", FCVAR_NONE);
 	g_cvSpecialLimit[SPITTER] = CreateConVar("l4d2_cz_spitter_limit", "0", "Spitter玩家限制", FCVAR_NONE);
 	g_cvSpecialLimit[JOCKEY] = CreateConVar("l4d2_cz_jockey_limit", "0", "Jockey玩家限制", FCVAR_NONE);
 	g_cvSpecialLimit[CHARGER] = CreateConVar("l4d2_cz_charger_limit", "0", "Charger玩家限制", FCVAR_NONE);
@@ -106,6 +107,7 @@ public void OnPluginStart()
 	HookEvent("player_death", Event_PlayerDeath, EventHookMode_Pre);
 	HookEvent("player_team", Event_PlayerTeam);
 	HookEvent("player_spawn", Event_PlayerSpawn);
+	HookEvent("tank_frustrated", Event_TankFrustrated);
 	//HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
 	//HookEvent("player_bot_replace", Event_BotReplacePlayer);
 
@@ -121,15 +123,18 @@ public void OnPluginStart()
 void LoadGameData()
 {
 	GameData hGameData = new GameData("l4d2_control_zombies");
+
 	if (hGameData == null)
 		SetFailState("加载 l4d2_control_zombies.txt 文件失败");
-	
 	g_dSpawnPlayerZombieScan = DynamicDetour.FromConf(hGameData, "ForEachTerrorPlayer<SpawnablePZScan>");
 	if (g_dSpawnPlayerZombieScan == null)
 		SetFailState("加载 ForEachTerrorPlayer<SpawnablePZScan> 签名失败");
-
 	if (!g_dSpawnPlayerZombieScan.Enable(Hook_Pre, mreOnSpawnPlayerZombieScanPre))
-		SetFailState("启用 mreOnSpawnPlayerZombieScan 失败");
+		SetFailState("启用 mreOnSpawnPlayerZombieScanPre 失败");
+	if (!g_dSpawnPlayerZombieScan.Enable(Hook_Post, mreOnSpawnPlayerZombieScanPost))
+		SetFailState("启用 mreOnSpawnPlayerZombieScanPost 失败");
+
+	delete hGameData;
 }
 
 public void OnConfigsExecuted()
@@ -260,21 +265,41 @@ Action SpawnSI_Timer(Handle timer, int userid)
 		{
 			if (g_iSpawnCountDown[client] <= 0)
 			{
+				if (g_iSpawnCountDown[client] <= -8)
+				{
+					CPrintToChat(client, "{default}[{yellow}BUG{default}] 重生失败, 请尝试重新切换团队后再试试");
+					g_hSpawnSITimer[client] = null;
+					return Plugin_Stop;
+				}
+
 				int iClass = FindSpawnClass();
 				if (1 <= iClass <= 6)
 				{
 					g_bAllowSpawn = true;
-					
 					FakeClientCommand(client, "spec_next");
+					if (GetEntProp(client, Prop_Send, "m_lifeState") != 1 && GetEntProp(client, Prop_Send, "m_lifeState") != 2)
+						SetEntProp(client, Prop_Send, "m_lifeState", 1);
+					g_iSpawnablePZ = client;
 					CheatCommand(client, "z_spawn_old", g_sSpecialName[iClass]);
-					if (IsPlayerAlive(client)) L4D_State_Transition(client, STATE_GHOST);
-					else LogError("设置灵魂状态失败, 客户端不是活着状态");
-
+					g_iSpawnablePZ = 0;
 					g_bAllowSpawn = false;
-				}
 
-				g_hSpawnSITimer[client] = null;
-				return Plugin_Stop;
+					if (IsPlayerAlive(client))
+					{
+						L4D_State_Transition(client, STATE_GHOST);
+						g_hSpawnSITimer[client] = null;
+						return Plugin_Stop;
+					}
+					else
+					{
+						float fPos[3];
+						char sMap[128];
+						GetClientAbsOrigin(client, fPos);
+						GetCurrentMap(sMap, sizeof(sMap));
+						LogError("%N 重生失败, 地图: %s, 坐标: (%.0f %.0f %.0f), 特感玩家数和限制: %i/%i, m_lifeState = %i, m_isGhost = %i", client, sMap, fPos[0], fPos[1], fPos[2], GetZombiePlayerTotal(), g_iMaxSpecialLimit, GetEntProp(client, Prop_Send, "m_lifeState"), GetEntProp(client, Prop_Send, "m_isGhost"));
+					}
+				}
+				else LogError("FindSpawnClass 失败");
 			}
 
 			PrintHintText(client, "%i 秒后重生", g_iSpawnCountDown[client]--);
@@ -480,13 +505,81 @@ Action JoinTankCheck_Timer(Handle timer, int userid)
 	return Plugin_Continue;
 }
 
+// 避免坦克无限控制权
+void Event_TankFrustrated(Event event, const char[] name, bool dontBroadcast)
+{
+	RequestFrame(OnNextFrame, event.GetInt("userid"));
+}
+
+void OnNextFrame(int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (IsRealClient(client) && GetClientTeam(client) == 3 && IsPlayerAlive(client) && GetZombieClass(client) == 8)
+	{
+		L4D_ReplaceWithBot(client);
+		delete g_hSpawnSITimer[client];
+		g_iSpawnCountDown[client] = g_iSpawnTime;
+		g_hSpawnSITimer[client] = CreateTimer(1.0, SpawnSI_Timer, userid, TIMER_REPEAT);
+	}
+}
+
 MRESReturn mreOnSpawnPlayerZombieScanPre()
 {
 	if (!g_bAllowSpawn && g_bBlockOtherRespawn)
-	{
 		return MRES_Supercede;
-	}
+
+	vSpawnablePZScanProtect(0);
 	return MRES_Ignored;
+}
+
+MRESReturn mreOnSpawnPlayerZombieScanPost()
+{
+	vSpawnablePZScanProtect(1);
+	return MRES_Ignored;
+}
+
+void vSpawnablePZScanProtect(int iState)
+{
+	static int i;
+	static bool bResetGhost[MAXPLAYERS + 1];
+	static bool bResetLifeState[MAXPLAYERS + 1];
+
+	switch (iState)
+	{
+		case 0: 
+		{
+			for (i = 1; i <= MaxClients; i++)
+			{
+				if (i == g_iSpawnablePZ || !IsClientInGame(i) || IsFakeClient(i) || GetClientTeam(i) != 3)
+					continue;
+
+				if (GetEntProp(i, Prop_Send, "m_isGhost") == 1)
+				{
+					bResetGhost[i] = true;
+					SetEntProp(i, Prop_Send, "m_isGhost", 0);
+				}
+				else if (!IsPlayerAlive(i))
+				{
+					bResetLifeState[i] = true;
+					SetEntProp(i, Prop_Send, "m_lifeState", 0);
+				}
+			}
+		}
+
+		case 1: 
+		{
+			for (i = 1; i <= MaxClients; i++)
+			{
+				if (bResetGhost[i])
+					SetEntProp(i, Prop_Send, "m_isGhost", 1);
+				if (bResetLifeState[i])
+					SetEntProp(i, Prop_Send, "m_lifeState", 1);
+
+				bResetGhost[i] = false;
+				bResetLifeState[i] = false;
+			}
+		}
+	}
 }
 
 public Action L4D_OnEnterGhostStatePre(int client)
@@ -498,11 +591,15 @@ public Action L4D_OnEnterGhostStatePre(int client)
 	return Plugin_Continue;
 }
 
-// 避免幽灵 Tank
+// 避免卡住的幽灵坦克Bot (z_spawn方式产生的坦克Bot)
 public Action L4D_OnTryOfferingTankBot(int tank_index, bool &enterStasis)
 {
-	enterStasis = false;
-	return Plugin_Changed;
+	if (enterStasis)
+	{
+		enterStasis = false;
+		return Plugin_Changed;
+	}
+	return Plugin_Continue;
 }
 
 void RemoveSurGlow(int client)
@@ -757,3 +854,5 @@ bool IsAdminClient(int client)
 	}
 	return false;
 }
+
+

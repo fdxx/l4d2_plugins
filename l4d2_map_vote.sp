@@ -2,195 +2,175 @@
 #pragma newdecls required
 
 #include <sourcemod>
-#include <nativevotes> //https://github.com/sapphonie/sourcemod-nativevotes-updated
+#include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
+
+#define VERSION "0.2"
 
 ArrayList g_aExcludeFile, g_aMapInfo;
 KeyValues g_kvMapList, g_kvMissionFile;
 char g_sMapListPath[PLATFORM_MAX_PATH];
-char g_sMapName[128];
 
 public Plugin myinfo = 
 {
 	name = "L4D2 Map vote",
 	author = "Alex Dragokas, fdxx",
 	description = "第三方地图投票，自动解析地图文件",
-	version = "0.1",
+	version = VERSION,
 };
 
 public void OnPluginStart()
 {
+	CreateConVar("l4d2_map_vote_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+
 	RegConsoleCmd("sm_vote3", Cmd_VoteMap);
 	RegConsoleCmd("sm_v3", Cmd_VoteMap);
 	
 	Initialization();
 }
 
-public Action Cmd_VoteMap(int client, int args)
+Action Cmd_VoteMap(int client, int args)
 {
 	if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 1)
 	{
-		ShowVoteMenu(client);
+		Menu menu = new Menu(MapTitle_MenuHandler);
+		menu.SetTitle("选择地图:");
+
+		g_kvMapList.Rewind();
+		char sMapTitle[128];
+		if (g_kvMapList.GotoFirstSubKey())
+		{
+			do
+			{
+				g_kvMapList.GetSectionName(sMapTitle, sizeof(sMapTitle));
+				menu.AddItem(sMapTitle, sMapTitle);
+			}
+			while (g_kvMapList.GotoNextKey());
+		}
+		menu.Display(client, 20);
+		return Plugin_Handled;
 	}
-	else CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
+
+	CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
 	return Plugin_Handled;
 }
 
-void ShowVoteMenu(int client)
-{
-	Menu MenuMapTitle = new Menu(Callback_MenuMapTitle);
-	MenuMapTitle.SetTitle("选择地图:");
-
-	g_kvMapList.Rewind();
-	char sMapTitle[128];
-	if (g_kvMapList.GotoFirstSubKey())
-	{
-		do
-		{
-			g_kvMapList.GetSectionName(sMapTitle, sizeof(sMapTitle));
-			MenuMapTitle.AddItem(sMapTitle, sMapTitle);
-		}
-		while (g_kvMapList.GotoNextKey());
-	}
-	MenuMapTitle.Display(client, 20);
-}
-
-
-public int Callback_MenuMapTitle(Menu MenuMapTitle, MenuAction action, int param1, int param2)
+int MapTitle_MenuHandler(Menu hTitleMenu, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
 			char sMapTitle[128], sMapName[128], sMapFullInfo[128];
-			MenuMapTitle.GetItem(param2, sMapTitle, sizeof(sMapTitle));
+			hTitleMenu.GetItem(param2, sMapTitle, sizeof(sMapTitle));
 			g_kvMapList.Rewind();
 			if (g_kvMapList.JumpToKey(sMapTitle) && g_kvMapList.GotoFirstSubKey(false))
 			{
-				Menu MenuMapName = new Menu(Callback_MenuMapName);
-				MenuMapName.SetTitle("选择 %s 的章节:", sMapTitle);
+				Menu menu = new Menu(MapName_MenuHandler);
+				menu.SetTitle("选择 %s 的章节:", sMapTitle);
 				do
 				{
 					g_kvMapList.GetString(NULL_STRING, sMapName, sizeof(sMapName));
 					FormatEx(sMapFullInfo, sizeof(sMapFullInfo), "%s (%s)", sMapTitle, sMapName);
-					MenuMapName.AddItem(sMapFullInfo, sMapName);
+					menu.AddItem(sMapFullInfo, sMapName);
 				}
 				while (g_kvMapList.GotoNextKey(false));
-				MenuMapName.Display(param1, 20);
+				menu.ExitBackButton = true;
+				menu.Display(param1, 20);
 			}
 		}
 		case MenuAction_End:
 		{
-			delete MenuMapTitle;
+			delete hTitleMenu;
 		}
 	}
 	return 0;
 }
 
-public int Callback_MenuMapName(Menu MenuMapName, MenuAction action, int param1, int param2)
+int MapName_MenuHandler(Menu hMapNameMenu, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
 			char sMapName[128], sMapFullInfo[128];
-			MenuMapName.GetItem(param2, sMapFullInfo, sizeof(sMapFullInfo), _, sMapName, sizeof(sMapName));
-			strcopy(g_sMapName, sizeof(g_sMapName), sMapName);
-			StartVote(param1, sMapFullInfo);
+			hMapNameMenu.GetItem(param2, sMapFullInfo, sizeof(sMapFullInfo), _, sMapName, sizeof(sMapName));
+			StartVote(param1, sMapFullInfo, sMapName);
 		}
 		case MenuAction_Cancel:
 		{
-			ShowVoteMenu(param1);
+			if (param2 == MenuCancel_ExitBack)
+				Cmd_VoteMap(param1, 0);
 		}
 		case MenuAction_End:
 		{
-			delete MenuMapName;
+			delete hMapNameMenu;
 		}
 	}
 	return 0;
 }
 
-void StartVote(int client, const char[] sMapFullInfo)
+void StartVote(int client, const char[] sMapFullInfo, const char[] sMapName)
 {
-	if (NativeVotes_IsVoteTypeSupported(NativeVotesType_Custom_YesNo))
+	if (!L4D2NativeVote_IsAllowNewVote())
 	{
-		if (NativeVotes_IsNewVoteAllowed())
-		{
-			NativeVote vote = new NativeVote(Callback_NativeVote, NativeVotesType_Custom_YesNo, MenuAction_Select|NATIVEVOTES_ACTIONS_DEFAULT);
-			vote.Initiator = client;
-			vote.SetDetails("将地图更改为: %s ?", sMapFullInfo);
-			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", client);
-
-			int iTotal = 0;
-			int[] Clients = new int[MaxClients];
-			for (int i = 1; i <= MaxClients; i++)
-			{
-				if (IsClientInGame(i) && !IsFakeClient(i))
-				{
-					if (GetClientTeam(i) == 2 || GetClientTeam(i) == 3)
-					{
-						Clients[iTotal++] = i;
-					}
-				}
-			}
-			vote.DisplayVote(Clients, iTotal, 20);
-		}
-		else CPrintToChat(client, "{default}[{yellow}提示{default}] 请等待 {yellow}%i {default}秒后再进行投票", NativeVotes_CheckVoteDelay());
+		CPrintToChat(client, "{default}[{yellow}提示{default}] 投票正在进行中，暂不能发起新的投票");
+		return;
 	}
+	
+	L4D2NativeVote vote = L4D2NativeVote(VoteHandler);
+	vote.SetDisplayText("将地图更改为: %s ?", sMapFullInfo);
+	vote.Initiator = client;
+	vote.SetInfoString(sMapName);
+
+	int iPlayerCount = 0;
+	int[] iClients = new int[MaxClients];
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i))
+		{
+			if (GetClientTeam(i) == 2 || GetClientTeam(i) == 3)
+			{
+				iClients[iPlayerCount++] = i;
+			}
+		}
+	}
+
+	if (!vote.DisplayVote(iClients, iPlayerCount, 20))
+		LogError("发起投票失败");
 }
 
-public int Callback_NativeVote(NativeVote vote, MenuAction action, int param1, int param2)
+void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 {
 	switch (action)
 	{
-		case MenuAction_Select:
+		case VoteAction_Start:
+		{
+			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", param1);
+		}
+		case VoteAction_PlayerVoted:
 		{
 			CPrintToChatAll("{olive}%N {default}已投票", param1);
 		}
-
-		case MenuAction_VoteCancel:
+		case VoteAction_End:
 		{
-			if (param1 == VoteCancel_NoVotes)
+			if (vote.YesCount > vote.PlayerCount/2)
 			{
-				vote.DisplayFail(NativeVotesFail_NotEnoughVotes);
-			}
-			else
-			{
-				vote.DisplayFail(NativeVotesFail_Generic);
-			}
-		}
+				vote.SetPass("加载中...");
 
-		case MenuAction_VoteEnd:
-		{
-			if (param1 == NATIVEVOTES_VOTE_NO)
-			{
-				vote.DisplayFail(NativeVotesFail_Loses);
+				char sMapName[256], sMsg[128];
+				vote.GetInfoString(sMapName, sizeof(sMapName));
+				ServerCommandEx(sMsg, sizeof(sMsg), "changelevel %s", sMapName);
+				if (sMsg[0] != '\0')
+				{
+					CPrintToChatAll("{default}[{red}提示{default}] 换图失败");
+					LogError("更换 %s 地图失败: %s", sMapName, sMsg);
+				}
 			}
-			else
-			{
-				vote.DisplayPass("5秒后更换地图到 %s", g_sMapName);
-				CreateTimer(5.0, ChangeMap_Timer);
-			}
-		}
-
-		case MenuAction_End:
-		{
-			vote.Close();
+			else vote.SetFail();
 		}
 	}
-	return 0;
-}
-
-public Action ChangeMap_Timer(Handle timer)
-{
-	char sMsg[128];
-	ServerCommandEx(sMsg, sizeof(sMsg), "changelevel %s", g_sMapName);
-	if (sMsg[0] != 0)
-	{
-		CPrintToChatAll("{default}[{red}提示{default}] 换图失败");
-		LogError("更换 %s 地图失败: %s", g_sMapName, sMsg);
-	}
-	return Plugin_Continue;
 }
 
 void Initialization()
@@ -218,7 +198,7 @@ public void OnMapStart()
 	CreateTimer(1.0, MapStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action MapStart_Timer(Handle timer)
+Action MapStart_Timer(Handle timer)
 {
 	delete g_kvMapList;
 	g_kvMapList = new KeyValues("map");

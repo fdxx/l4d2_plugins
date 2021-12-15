@@ -1,21 +1,18 @@
-
 #pragma semicolon 1
 #pragma newdecls required
 
 #include <sourcemod>
-#include <nativevotes>
+#include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
 
-KeyValues g_Kv;
-char g_sCfg[128];
+KeyValues g_kv;
 
 public Plugin myinfo = 
 {
 	name = "L4D2 Config vote",
 	author = "vintik, Sir, fdxx",
 	description = "自定义配置投票",
-	version = "0.2",
-	url = ""
+	version = "0.3",
 }
 
 public void OnPluginStart()
@@ -23,171 +20,154 @@ public void OnPluginStart()
 	char sPath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sPath, sizeof(sPath), "data/l4d2_config_vote.cfg");
 
-	g_Kv = new KeyValues("Config");
-	if (!g_Kv.ImportFromFile(sPath))
+	g_kv = new KeyValues("Config");
+	if (!g_kv.ImportFromFile(sPath))
 		SetFailState("Couldn't load l4d2_config_vote.cfg!");
 
-	RegConsoleCmd("sm_sivote", CmdVote);
-	RegConsoleCmd("sm_votesi", CmdVote);
+	RegConsoleCmd("sm_sivote", Cmd_Vote);
+	RegConsoleCmd("sm_votesi", Cmd_Vote);
 }
 
-public Action CmdVote(int client, int args)
+Action Cmd_Vote(int client, int args)
 {
 	if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 1)
 	{
-		ShowVoteMenu(client);
+		Menu menu = new Menu(Category_MenuHandler);
+		menu.SetTitle("选择投票类型");
+
+		g_kv.Rewind();
+		char sCategory[64];
+		if (g_kv.GotoFirstSubKey())
+		{
+			do
+			{
+				g_kv.GetSectionName(sCategory, sizeof(sCategory));
+				menu.AddItem(sCategory, sCategory);
+			}
+			while (g_kv.GotoNextKey());
+		}
+		menu.Display(client, 20);
+		return Plugin_Handled;
 	}
-	else CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
+
+	CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
 	return Plugin_Handled;
 }
 
-void ShowVoteMenu(int client)
-{
-	Menu hMenuLevel1 = new Menu(Callback_MenuLevel1);
-	hMenuLevel1.SetTitle("选择投票类型");
-
-	g_Kv.Rewind();
-	char sType[128];
-	if (g_Kv.GotoFirstSubKey())
-	{
-		do
-		{
-			g_Kv.GetSectionName(sType, sizeof(sType));
-			hMenuLevel1.AddItem(sType, sType);
-		}
-		while (g_Kv.GotoNextKey());
-	}
-	hMenuLevel1.Display(client, 20);
-}
-
-public int Callback_MenuLevel1(Menu hMenuLevel1, MenuAction action, int param1, int param2)
+int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
-			char sType[128], sCfg[128], sDisplay[128];
-			hMenuLevel1.GetItem(param2, sType, sizeof(sType));
-			g_Kv.Rewind();
-			if (g_Kv.JumpToKey(sType) && g_Kv.GotoFirstSubKey())
+			char sCategory[64], sCfgPath[256], sDisplay[64];
+			hCategoryMenu.GetItem(param2, sCategory, sizeof(sCategory));
+			g_kv.Rewind();
+			if (g_kv.JumpToKey(sCategory) && g_kv.GotoFirstSubKey())
 			{
-				Menu hMenuLevel2 = new Menu(Callback_MenuLevel2);
-				hMenuLevel2.SetTitle(sType);
+				Menu menu = new Menu(Item_MenuHandler);
+				menu.SetTitle(sCategory);
 				do
 				{
-					g_Kv.GetSectionName(sCfg, sizeof(sCfg));
-					g_Kv.GetString("name", sDisplay, sizeof(sDisplay));
-					hMenuLevel2.AddItem(sCfg, sDisplay);
+					g_kv.GetSectionName(sCfgPath, sizeof(sCfgPath));
+					g_kv.GetString("name", sDisplay, sizeof(sDisplay));
+					menu.AddItem(sCfgPath, sDisplay);
 				}
-				while (g_Kv.GotoNextKey());
-				hMenuLevel2.Display(param1, 20);
+				while (g_kv.GotoNextKey());
+				menu.ExitBackButton = true;
+				menu.Display(param1, 20);
 			}
 		}
 		case MenuAction_End:
 		{
-			delete hMenuLevel1;
+			delete hCategoryMenu;
 		}
 	}
 	return 0;
 }
 
-public int Callback_MenuLevel2(Menu hMenuLevel2, MenuAction action, int param1, int param2)
+int Item_MenuHandler(Menu hItemMenu, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
-			char sCfg[128], sDisplay[128];
-			hMenuLevel2.GetItem(param2, sCfg, sizeof(sCfg), _, sDisplay, sizeof(sDisplay));
-			strcopy(g_sCfg, sizeof(g_sCfg), sCfg);
-			StartVote(param1, sDisplay);
+			char sCfgPath[256], sDisplay[64];
+			hItemMenu.GetItem(param2, sCfgPath, sizeof(sCfgPath), _, sDisplay, sizeof(sDisplay));
+			StartVote(param1, sDisplay, sCfgPath);
 		}
 		case MenuAction_Cancel:
 		{
-			ShowVoteMenu(param1);
+			if (param2 == MenuCancel_ExitBack)
+				Cmd_Vote(param1, 0);
 		}
 		case MenuAction_End:
 		{
-			delete hMenuLevel2;
+			delete hItemMenu;
 		}
 	}
 	return 0;
 }
 
-void StartVote(int client, const char[] sDisplay)
+void StartVote(int client, const char[] sDisplay, const char[] sCfgPath)
 {
-	if (NativeVotes_IsVoteTypeSupported(NativeVotesType_Custom_YesNo))
+	if (!L4D2NativeVote_IsAllowNewVote())
 	{
-		if (NativeVotes_IsNewVoteAllowed())
-		{
-			NativeVote vote = new NativeVote(Callback_NativeVote, NativeVotesType_Custom_YesNo, MenuAction_Select|NATIVEVOTES_ACTIONS_DEFAULT);
-			vote.Initiator = client;
-			vote.SetDetails("将配置更改为: %s ?", sDisplay);
-			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", client);
-
-			int iTotal = 0;
-			int[] Clients = new int[MaxClients];
-			for (int i = 1; i <= MaxClients; i++)
-			{
-				if (IsClientInGame(i) && !IsFakeClient(i))
-				{
-					if (GetClientTeam(i) == 2 || GetClientTeam(i) == 3)
-					{
-						Clients[iTotal++] = i;
-					}
-				}
-			}
-			vote.DisplayVote(Clients, iTotal, 20);
-		}
-		else CPrintToChat(client, "{default}[{yellow}提示{default}] 请等待 {yellow}%i {default}秒后再进行投票", NativeVotes_CheckVoteDelay());
+		CPrintToChat(client, "{default}[{yellow}提示{default}] 投票正在进行中，暂不能发起新的投票");
+		return;
 	}
-	else LogError("游戏不支持 NativeVote 插件");
+	
+	L4D2NativeVote vote = L4D2NativeVote(VoteHandler);
+	vote.SetDisplayText("将配置更改为: %s ?", sDisplay);
+	vote.Initiator = client;
+	vote.SetInfoString(sCfgPath);
+
+	int iPlayerCount = 0;
+	int[] iClients = new int[MaxClients];
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i))
+		{
+			if (GetClientTeam(i) == 2 || GetClientTeam(i) == 3)
+			{
+				iClients[iPlayerCount++] = i;
+			}
+		}
+	}
+
+	if (!vote.DisplayVote(iClients, iPlayerCount, 20))
+		LogError("发起投票失败");
 }
 
-public int Callback_NativeVote(NativeVote vote, MenuAction action, int param1, int param2)
+void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 {
 	switch (action)
 	{
-		case MenuAction_Select:
+		case VoteAction_Start:
+		{
+			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", param1);
+		}
+		case VoteAction_PlayerVoted:
 		{
 			CPrintToChatAll("{olive}%N {default}已投票", param1);
 		}
-
-		case MenuAction_VoteCancel:
+		case VoteAction_End:
 		{
-			if (param1 == VoteCancel_NoVotes)
+			if (vote.YesCount > vote.PlayerCount/2)
 			{
-				vote.DisplayFail(NativeVotesFail_NotEnoughVotes);
-			}
-			else
-			{
-				vote.DisplayFail(NativeVotesFail_Generic);
-			}
-		}
+				vote.SetPass("加载中...");
 
-		case MenuAction_VoteEnd:
-		{
-			if (param1 == NATIVEVOTES_VOTE_NO)
-			{
-				vote.DisplayFail(NativeVotesFail_Loses);
-			}
-			else
-			{
-				vote.DisplayPass("加载中...");
-				char sMsg[128];
-				ServerCommandEx(sMsg, sizeof(sMsg), "exec %s", g_sCfg);
+				char sCfgPath[256], sMsg[128];
+				vote.GetInfoString(sCfgPath, sizeof(sCfgPath));
+				ServerCommandEx(sMsg, sizeof(sMsg), "exec %s", sCfgPath);
 				if (sMsg[0] != '\0')
 				{
 					CPrintToChatAll("{default}[{red}提示{default}] 加载配置失败");
-					LogError("加载 %s 失败: %s", g_sCfg, sMsg);
+					LogError("加载 %s 失败: %s", sCfgPath, sMsg);
 				}
 			}
-		}
-
-		case MenuAction_End:
-		{
-			vote.Close();
+			else vote.SetFail();
 		}
 	}
-	return 0;
 }

@@ -925,7 +925,7 @@ public Action L4D_OnSpawnSpecial(int &zombieClass, const float vecPos[3], const 
 {
 	if (!g_bCanSpawn && g_bBlockSpawn)
 	{
-		//LogToFileEx_Debug("不是本插件产生的 %s, 已阻止", g_sSpecialName[zombieClass]);
+		LogMessage("不是本插件产生的 %s, 已阻止", g_sSpecialName[zombieClass]);
 		return Plugin_Handled;
 	}
 	return Plugin_Continue;

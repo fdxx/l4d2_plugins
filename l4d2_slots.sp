@@ -3,53 +3,57 @@
 
 #include <sourcemod>
 #include <left4dhooks>
-#include <nativevotes>
+#include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
 
-#define VERSION "0.4"
+#define VERSION "0.5"
 
-ConVar sv_maxplayers;
-ConVar CvarSlotsDefault, CvarSlotsVoteMin, CvarSlotsVoteMax;
-int g_iSlotsDef, g_iSlotsVoteMin, g_iSlotsVoteMax;
-int g_iVoteNumber;
+ConVar
+	g_cvSvMaxPlayers,
+	g_cvSlotsDefault,
+	g_cvSlotsVoteMin,
+	g_cvSlotsVoteMax;
+
+int
+	g_iSlotsDef,
+	g_iSlotsVoteMin,
+	g_iSlotsVoteMax;
 
 public Plugin myinfo =
 {
 	name = "L4D2 Slots",
-	author = "Sir, fdxx",
-	description = "",
+	author = "fdxx",
 	version = VERSION,
-	url = ""
 }
 
 public void OnPluginStart()
 {
 	CreateConVar("l4d2_slots_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
 
-	CvarSlotsDefault = CreateConVar("l4d2_slots_default", "5", "默认slots设置(服务器启动时设置)", FCVAR_NONE, true, -1.0, true, 31.0);
-	CvarSlotsVoteMin = CreateConVar("l4d2_slots_vote_min", "5", "slots投票最小限制", FCVAR_NONE, true, -1.0, true, 31.0);
-	CvarSlotsVoteMax = CreateConVar("l4d2_slots_vote_max", "6", "slots投票最大限制", FCVAR_NONE, true, -1.0, true, 31.0);
+	g_cvSlotsDefault = CreateConVar("l4d2_slots_default", "5", "默认slots设置(服务器启动时设置)", FCVAR_NONE, true, -1.0, true, 31.0);
+	g_cvSlotsVoteMin = CreateConVar("l4d2_slots_vote_min", "5", "slots投票最小限制", FCVAR_NONE, true, -1.0, true, 31.0);
+	g_cvSlotsVoteMax = CreateConVar("l4d2_slots_vote_max", "6", "slots投票最大限制", FCVAR_NONE, true, -1.0, true, 31.0);
 
 	GetCvars();
 
-	CvarSlotsDefault.AddChangeHook(ConVarChanged);
-	CvarSlotsVoteMin.AddChangeHook(ConVarChanged);
-	CvarSlotsVoteMax.AddChangeHook(ConVarChanged);
+	g_cvSlotsDefault.AddChangeHook(ConVarChanged);
+	g_cvSlotsVoteMin.AddChangeHook(ConVarChanged);
+	g_cvSlotsVoteMax.AddChangeHook(ConVarChanged);
 
-	RegConsoleCmd("sm_slots", SlotsVote);
-	RegConsoleCmd("sm_slot", SlotsVote);
+	RegConsoleCmd("sm_slots", Cmd_SlotsVote);
+	RegConsoleCmd("sm_slot", Cmd_SlotsVote);
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
 
 void GetCvars()
 {
-	g_iSlotsDef = CvarSlotsDefault.IntValue;
-	g_iSlotsVoteMin = CvarSlotsVoteMin.IntValue;
-	g_iSlotsVoteMax = CvarSlotsVoteMax.IntValue;
+	g_iSlotsDef = g_cvSlotsDefault.IntValue;
+	g_iSlotsVoteMin = g_cvSlotsVoteMin.IntValue;
+	g_iSlotsVoteMax = g_cvSlotsVoteMax.IntValue;
 }
 
 public void OnConfigsExecuted()
@@ -57,32 +61,30 @@ public void OnConfigsExecuted()
 	FindConVar("sv_allow_lobby_connect_only").SetBool(false);
 	L4D_LobbyUnreserve();
 
-	sv_maxplayers = FindConVar("sv_maxplayers");
+	g_cvSvMaxPlayers = FindConVar("sv_maxplayers");
 
-	if (sv_maxplayers != null)
+	if (g_cvSvMaxPlayers != null)
 	{
 		static bool bAlreadySet;
 		if (!bAlreadySet)
 		{
 			bAlreadySet = true;
-			sv_maxplayers.SetInt(g_iSlotsDef);
+			g_cvSvMaxPlayers.SetInt(g_iSlotsDef);
 		}
 	}
 	else SetFailState("l4dtoolz plugin not loaded?");
 }
 
-public Action SlotsVote(int client, int args)
+Action Cmd_SlotsVote(int client, int args)
 {
-	if (IsRealClient(client))
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client))
 	{
 		if (args == 1)
 		{
-			char sArg[2];
-			GetCmdArg(1, sArg, sizeof(sArg));
-			g_iVoteNumber = StringToInt(sArg);
-			if (g_iSlotsVoteMin <= g_iVoteNumber <= g_iSlotsVoteMax)
+			int iSlotNum = GetCmdArgInt(1);
+			if (g_iSlotsVoteMin <= iSlotNum <= g_iSlotsVoteMax)
 			{
-				StartVote(client, g_iVoteNumber);
+				StartVote(client, iSlotNum);
 			}
 			else PrintToChat(client, "%i <= number <= %i", g_iSlotsVoteMin, g_iSlotsVoteMax);
 		}
@@ -91,77 +93,54 @@ public Action SlotsVote(int client, int args)
 	return Plugin_Handled;
 }
 
-void StartVote(int client, int iNumber)
+void StartVote(int client, int iSlotNum)
 {
-	if (NativeVotes_IsVoteTypeSupported(NativeVotesType_Custom_YesNo))
+	if (!L4D2NativeVote_IsAllowNewVote())
 	{
-		if (NativeVotes_IsNewVoteAllowed())
-		{
-			NativeVote vote = new NativeVote(Callback_NativeVote, NativeVotesType_Custom_YesNo, MenuAction_Select|NATIVEVOTES_ACTIONS_DEFAULT);
-			vote.Initiator = client;
-			vote.SetDetails("将 Slots 更改为 %i ?", iNumber);
-			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", client);
-
-			int iTotal = 0;
-			int[] Clients = new int[MaxClients];
-			for (int i = 1; i <= MaxClients; i++)
-			{
-				if (IsRealClient(i))
-				{
-					Clients[iTotal++] = i;
-				}
-			}
-			vote.DisplayVote(Clients, iTotal, 20);
-		}
-		else CPrintToChat(client, "{default}[{yellow}提示{default}] 请等待 {yellow}%i {default}秒后再进行投票", NativeVotes_CheckVoteDelay());
+		CPrintToChat(client, "{default}[{yellow}提示{default}] 投票正在进行中，暂不能发起新的投票");
+		return;
 	}
-	else LogError("游戏不支持 NativeVote 插件");
+	
+	L4D2NativeVote vote = L4D2NativeVote(VoteHandler);
+	vote.SetDisplayText("将 Slots 更改为 %i ?", iSlotNum);
+	vote.Initiator = client;
+	vote.Value = iSlotNum;
+
+	int iPlayerCount = 0;
+	int[] iClients = new int[MaxClients];
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i))
+		{
+			iClients[iPlayerCount++] = i;
+		}
+	}
+
+	if (!vote.DisplayVote(iClients, iPlayerCount, 20))
+		LogError("发起投票失败");
 }
 
-public int Callback_NativeVote(NativeVote vote, MenuAction action, int param1, int param2)
+void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 {
 	switch (action)
 	{
-		case MenuAction_Select:
+		case VoteAction_Start:
+		{
+			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", param1);
+		}
+		case VoteAction_PlayerVoted:
 		{
 			CPrintToChatAll("{olive}%N {default}已投票", param1);
 		}
-
-		case MenuAction_VoteCancel:
+		case VoteAction_End:
 		{
-			if (param1 == VoteCancel_NoVotes)
+			if (vote.YesCount > vote.PlayerCount/2)
 			{
-				vote.DisplayFail(NativeVotesFail_NotEnoughVotes);
+				vote.SetPass("加载中...");
+				g_cvSvMaxPlayers.SetInt(vote.Value);
 			}
-			else
-			{
-				vote.DisplayFail(NativeVotesFail_Generic);
-			}
-		}
-
-		case MenuAction_VoteEnd:
-		{
-			if (param1 == NATIVEVOTES_VOTE_NO)
-			{
-				vote.DisplayFail(NativeVotesFail_Loses);
-			}
-			else
-			{
-				vote.DisplayPass("加载中...");
-				sv_maxplayers.SetInt(g_iVoteNumber);
-			}
-		}
-
-		case MenuAction_End:
-		{
-			vote.Close();
+			else vote.SetFail();
 		}
 	}
-	return 0;
 }
-
-bool IsRealClient(int client)
-{
-	return (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client));
-}
-
