@@ -5,7 +5,7 @@
 #include <sdkhooks>
 #include <multicolors>
 
-#define VERSION "1.8"
+#define VERSION "1.9"
 
 #define SMOKER	1
 #define BOOMER	2
@@ -15,20 +15,33 @@
 #define CHARGER	6
 #define TANK	8
 
-int g_iKillSICount[MAXPLAYERS+1];				//特感击杀数量
-int g_iKillCICount[MAXPLAYERS+1];				//普通丧尸击杀数量
-int g_iAttackerFFDamage[MAXPLAYERS+1];			//友伤
-int g_iVictimFFDamage[MAXPLAYERS+1];			//被友伤
-int g_iTotalDamage[MAXPLAYERS+1];				//特感和丧失总伤害
-int g_iTankDamage[MAXPLAYERS+1][MAXPLAYERS+1];	//tank伤害[victim][attacker]
-float g_fWitchDamage[2049][MAXPLAYERS+1];		//witch伤害[victim][attacker]
+int
+	g_iKillSICount[MAXPLAYERS+1],				//特感击杀数量
+	g_iKillCICount[MAXPLAYERS+1],				//普通丧尸击杀数量
+	g_iAttackerFFDamage[MAXPLAYERS+1],			//友伤
+	g_iVictimFFDamage[MAXPLAYERS+1],			//被友伤
+	g_iTotalDamage[MAXPLAYERS+1],				//特感和丧失总伤害
+	g_iTankDamage[MAXPLAYERS+1][MAXPLAYERS+1],	//tank伤害[victim][attacker]
+	g_iMaxEntities;
 
-ConVar CvarTotalDamageWithTank, CvarTotalDamageWithWitch, CvarTotalDamageWithCI;
-ConVar CvarTankDamageAnnounce, CvarWitchDamageAnnounce;
+float
+	g_fWitchDamage[2049][MAXPLAYERS+1];			//witch伤害[victim][attacker]
 
-bool g_bTotalDamageWithTank, g_bTotalDamageWithWitch, g_bTotalDamageWithCI;
-bool g_bTankDamageAnnounce, g_bWitchDamageAnnounce;
-bool g_bTankAlive[MAXPLAYERS+1], g_bWitchAlive[2049];
+ConVar
+	g_cvTotalDamageWithTank,
+	g_cvTotalDamageWithWitch,
+	g_cvTotalDamageWithCI,
+	g_cvTankDamageAnnounce,
+	g_cvWitchDamageAnnounce;
+
+bool
+	g_bTotalDamageWithTank,
+	g_bTotalDamageWithWitch,
+	g_bTotalDamageWithCI,
+	g_bTankDamageAnnounce,
+	g_bWitchDamageAnnounce,
+	g_bTankAlive[MAXPLAYERS+1],
+	g_bWitchAlive[2049];
 
 public Plugin myinfo =
 {
@@ -43,19 +56,19 @@ public void OnPluginStart()
 {
 	CreateConVar("l4d2_kill_mvp_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
 
-	CvarTotalDamageWithTank = CreateConVar("l4d2_kill_mvp_add_tank_damage", "1", "总伤害包括Tank伤害", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarTotalDamageWithWitch = CreateConVar("l4d2_kill_mvp_add_witch_damage", "1", "总伤害包括Witch伤害", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarTotalDamageWithCI = CreateConVar("l4d2_kill_mvp_add_ci_damage", "1", "总伤害包括普通丧失伤害", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarTankDamageAnnounce = CreateConVar("l4d2_kill_mvp_tank_death_damage_announce", "1", "Tank死后公布Tank伤害", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarWitchDamageAnnounce = CreateConVar("l4d2_kill_mvp_witch_death_damage_announce", "1", "Witch死后公布Witch伤害", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvTotalDamageWithTank = CreateConVar("l4d2_kill_mvp_add_tank_damage", "1", "总伤害包括Tank伤害", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvTotalDamageWithWitch = CreateConVar("l4d2_kill_mvp_add_witch_damage", "1", "总伤害包括Witch伤害", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvTotalDamageWithCI = CreateConVar("l4d2_kill_mvp_add_ci_damage", "1", "总伤害包括普通丧失伤害", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvTankDamageAnnounce = CreateConVar("l4d2_kill_mvp_tank_death_damage_announce", "1", "Tank死后公布Tank伤害", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvWitchDamageAnnounce = CreateConVar("l4d2_kill_mvp_witch_death_damage_announce", "1", "Witch死后公布Witch伤害", FCVAR_NONE, true, 0.0, true, 1.0);
 
 	GetCvars();
 
-	CvarTotalDamageWithTank.AddChangeHook(ConVarChanged);
-	CvarTotalDamageWithWitch.AddChangeHook(ConVarChanged);
-	CvarTotalDamageWithCI.AddChangeHook(ConVarChanged);
-	CvarTankDamageAnnounce.AddChangeHook(ConVarChanged);
-	CvarWitchDamageAnnounce.AddChangeHook(ConVarChanged);
+	g_cvTotalDamageWithTank.AddChangeHook(ConVarChanged);
+	g_cvTotalDamageWithWitch.AddChangeHook(ConVarChanged);
+	g_cvTotalDamageWithCI.AddChangeHook(ConVarChanged);
+	g_cvTankDamageAnnounce.AddChangeHook(ConVarChanged);
+	g_cvWitchDamageAnnounce.AddChangeHook(ConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("map_transition", Event_RoundEnd, EventHookMode_PostNoCopy);
@@ -76,22 +89,24 @@ public void OnPluginStart()
 	AutoExecConfig(true, "l4d2_kill_mvp");
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
 
 void GetCvars()
 {
-	g_bTotalDamageWithTank = CvarTotalDamageWithTank.BoolValue;
-	g_bTotalDamageWithWitch = CvarTotalDamageWithWitch.BoolValue;
-	g_bTotalDamageWithCI = CvarTotalDamageWithCI.BoolValue;
-	g_bTankDamageAnnounce = CvarTankDamageAnnounce.BoolValue;
-	g_bWitchDamageAnnounce = CvarWitchDamageAnnounce.BoolValue;
+	g_bTotalDamageWithTank = g_cvTotalDamageWithTank.BoolValue;
+	g_bTotalDamageWithWitch = g_cvTotalDamageWithWitch.BoolValue;
+	g_bTotalDamageWithCI = g_cvTotalDamageWithCI.BoolValue;
+	g_bTankDamageAnnounce = g_cvTankDamageAnnounce.BoolValue;
+	g_bWitchDamageAnnounce = g_cvWitchDamageAnnounce.BoolValue;
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
+	g_iMaxEntities = GetMaxEntities();
+
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
 		g_iKillSICount[i] = 0;
@@ -120,12 +135,12 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ShowTotalDamageRank();
 }
 
-public Action Cmd_ShowTotalDamageRank(int client, int args)
+Action Cmd_ShowTotalDamageRank(int client, int args)
 {
 	ShowTotalDamageRank();
 	return Plugin_Handled;
@@ -141,7 +156,7 @@ public void OnClientDisconnect(int client)
 	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 
@@ -153,7 +168,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 }
 
 //火的伤害统计不准确，只有站在火里才计算
-public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
 {
 	if (IsValidSur(attacker) && IsPlayerAlive(attacker))
 	{
@@ -202,7 +217,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 	return Plugin_Continue;
 }
 
-public Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	int iAttacker = GetClientOfUserId(event.GetInt("attacker"));
 	int iVictim = GetClientOfUserId(event.GetInt("userid"));
@@ -267,18 +282,19 @@ void ShowTankDamageRank(int iTank)
 	}
 }
 
-public void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int iWitch = event.GetInt("witchid");
 	if (IsValidEntityIndex(iWitch))
 	{
 		g_bWitchAlive[iWitch] = true;
 		ClearWitchDamage(iWitch);
+		SDKUnhook(iWitch, SDKHook_OnTakeDamage, OnTakeDamage_Witch);
 		SDKHook(iWitch, SDKHook_OnTakeDamage, OnTakeDamage_Witch);
 	}
 }
 
-public Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
+Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
 {
 	if (!g_bWitchAlive[victim]) return Plugin_Continue;
 
@@ -304,7 +320,7 @@ public Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, floa
 	return Plugin_Continue;
 }
 
-public Action Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
+Action Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
 {
 	int iAttacker = GetClientOfUserId(event.GetInt("userid"));
 	int iWitch = event.GetInt("witchid");
@@ -360,7 +376,7 @@ void ShowWitchDamageRank(int iWitch)
 	}
 }
 
-public void Event_InfectedHurt(Event event, const char[] name, bool dontBroadcast)
+void Event_InfectedHurt(Event event, const char[] name, bool dontBroadcast)
 {
 	if (g_bTotalDamageWithCI)
 	{
@@ -384,9 +400,10 @@ public void Event_InfectedHurt(Event event, const char[] name, bool dontBroadcas
 	}
 }
 
-public void Event_InfectedDeath(Event event, const char[] name, bool dontBroadcast)
+void Event_InfectedDeath(Event event, const char[] name, bool dontBroadcast)
 {
-	int iAttacker = GetClientOfUserId(event.GetInt("attacker"));
+	static int iAttacker;
+	iAttacker = GetClientOfUserId(event.GetInt("attacker"));
 
 	if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker))
 	{
@@ -450,14 +467,14 @@ void ShowTotalDamageRank()
 	}
 }
 
-public int SortByDamageDesc(int[] x, int[] y, const int[][] array, Handle hndl)
+int SortByDamageDesc(int[] x, int[] y, const int[][] array, Handle hndl)
 {
 	if (x[1] > y[1]) return -1;
 	else if (x[1] < y[1]) return 1;
 	else return 0;
 }
 
-public int SortByDamageDesc_FF(int[] x, int[] y, const int[][] array, Handle hndl)
+int SortByDamageDesc_FF(int[] x, int[] y, const int[][] array, Handle hndl)
 {
 	if (x[4] > y[4]) return -1;
 	else if (x[4] < y[4]) return 1;
@@ -466,7 +483,7 @@ public int SortByDamageDesc_FF(int[] x, int[] y, const int[][] array, Handle hnd
 
 bool IsValidEntityIndex(int entity)
 {
-	return (MaxClients+1 <= entity <= GetMaxEntities());
+	return (MaxClients+1 <= entity <= g_iMaxEntities);
 }
 
 void ClearWitchDamage(int iWitch)
@@ -514,8 +531,7 @@ int GetZombieClass(int client)
 	return GetEntProp(client, Prop_Send, "m_zombieClass");
 }
 
-
-enum struct esKillData
+enum struct SurKillData
 {
 	int iKillSI;
 	int iKillCI;
@@ -528,10 +544,10 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	return APLRes_Success;
 }
 
-public int Native_GetKillData(Handle plugin, int numParams)
+int Native_GetKillData(Handle plugin, int numParams)
 {
 	int client =  GetNativeCell(1);
-	esKillData KillData;
+	SurKillData KillData;
 	KillData.iKillSI = g_iKillSICount[client];
 	KillData.iKillCI = g_iKillCICount[client];
 	KillData.iDmg = g_iTotalDamage[client];
