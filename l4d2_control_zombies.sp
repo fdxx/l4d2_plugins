@@ -7,7 +7,7 @@
 #include <dhooks>
 #include <multicolors>
 
-#define VERSION "0.8"
+#define VERSION "0.9"
 
 ConVar
 	g_cvGameMode,
@@ -24,18 +24,19 @@ int
 	g_iSpawnCountDown[MAXPLAYERS+1],
 	g_iSpawnTime,
 	g_iGlowEntRef[MAXPLAYERS+1],
-	g_iSurMaxIncapCount,
-	g_iSpawnablePZ;
+	g_iSurMaxIncapCount;
+	//g_iSpawnablePZ;
 
 bool
 	g_bBlockOtherRespawn,
 	g_bLeftSafeArea,
-	g_bAdminImmunity,
-	g_bAllowSpawn;
+	g_bAdminImmunity;
+	//g_bAllowSpawn;
 
 Handle
 	g_hSpawnSITimer[MAXPLAYERS+1],
-	g_hSurGlowCheck;
+	g_hSurGlowCheck,
+	g_hSDKSetPreSpawnClass;
 
 ArrayList g_aJoinTankList;
 char g_sDefMode[128];
@@ -52,12 +53,12 @@ enum
 	CHARGER	= 6,
 	TANK	= 8,
 };
-
+/*
 static const char g_sSpecialName[][] =
 {
 	"", "smoker", "boomer", "hunter", "spitter", "jockey", "charger"
 };
-
+*/
 public Plugin myinfo = 
 {
 	name = "L4D2 Control Zombies",
@@ -131,8 +132,16 @@ void LoadGameData()
 		SetFailState("加载 ForEachTerrorPlayer<SpawnablePZScan> 签名失败");
 	if (!g_dSpawnPlayerZombieScan.Enable(Hook_Pre, mreOnSpawnPlayerZombieScanPre))
 		SetFailState("启用 mreOnSpawnPlayerZombieScanPre 失败");
-	if (!g_dSpawnPlayerZombieScan.Enable(Hook_Post, mreOnSpawnPlayerZombieScanPost))
-		SetFailState("启用 mreOnSpawnPlayerZombieScanPost 失败");
+	//if (!g_dSpawnPlayerZombieScan.Enable(Hook_Post, mreOnSpawnPlayerZombieScanPost))
+		//SetFailState("启用 mreOnSpawnPlayerZombieScanPost 失败");
+
+	StartPrepSDKCall(SDKCall_Player);
+	if (PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CTerrorPlayer::SetPreSpawnClass") == false)
+		SetFailState("Failed to find signature: CTerrorPlayer::SetPreSpawnClass");
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
+	g_hSDKSetPreSpawnClass = EndPrepSDKCall();
+	if (g_hSDKSetPreSpawnClass == null)
+		SetFailState("Failed to create SDKCall: CTerrorPlayer::SetPreSpawnClass");
 
 	delete hGameData;
 }
@@ -275,6 +284,10 @@ Action SpawnSI_Timer(Handle timer, int userid)
 				int iClass = FindSpawnClass();
 				if (1 <= iClass <= 6)
 				{
+					SDKCall(g_hSDKSetPreSpawnClass, client, iClass);
+					L4D_State_Transition(client, STATE_GHOST);
+
+					/*
 					g_bAllowSpawn = true;
 					FakeClientCommand(client, "spec_next");
 					if (GetEntProp(client, Prop_Send, "m_lifeState") != 1 && GetEntProp(client, Prop_Send, "m_lifeState") != 2)
@@ -283,10 +296,11 @@ Action SpawnSI_Timer(Handle timer, int userid)
 					CheatCommand(client, "z_spawn_old", g_sSpecialName[iClass]);
 					g_iSpawnablePZ = 0;
 					g_bAllowSpawn = false;
+					*/
 
 					if (IsPlayerAlive(client))
 					{
-						L4D_State_Transition(client, STATE_GHOST);
+						//L4D_State_Transition(client, STATE_GHOST);
 						g_hSpawnSITimer[client] = null;
 						return Plugin_Stop;
 					}
@@ -517,21 +531,30 @@ void OnNextFrame(int userid)
 	if (IsRealClient(client) && GetClientTeam(client) == 3 && IsPlayerAlive(client) && GetZombieClass(client) == 8)
 	{
 		L4D_ReplaceWithBot(client);
-		delete g_hSpawnSITimer[client];
-		g_iSpawnCountDown[client] = g_iSpawnTime;
-		g_hSpawnSITimer[client] = CreateTimer(1.0, SpawnSI_Timer, userid, TIMER_REPEAT);
+		SDKCall(g_hSDKSetPreSpawnClass, client, HUNTER);
+		L4D_State_Transition(client, STATE_GHOST);
+
+		if (!IsPlayerAlive(client))
+			LogError("手动重生为 Hunter 失败");
+		//else LogMessage("%N 失去控制权，手动重生为 Hunter", client);
 	}
 }
 
 MRESReturn mreOnSpawnPlayerZombieScanPre()
 {
+	if (g_bBlockOtherRespawn)
+		return MRES_Supercede;
+	return MRES_Ignored;
+
+	/*
 	if (!g_bAllowSpawn && g_bBlockOtherRespawn)
 		return MRES_Supercede;
 
 	vSpawnablePZScanProtect(0);
 	return MRES_Ignored;
+	*/
 }
-
+/*
 MRESReturn mreOnSpawnPlayerZombieScanPost()
 {
 	vSpawnablePZScanProtect(1);
@@ -581,7 +604,7 @@ void vSpawnablePZScanProtect(int iState)
 		}
 	}
 }
-
+*/
 public Action L4D_OnEnterGhostStatePre(int client)
 {
 	if (!g_bLeftSafeArea)
@@ -806,7 +829,7 @@ bool HasZombiePlayer()
 	}
 	return false;
 }
-
+/*
 void CheatCommand(int client, const char[] sCommand, const char[] sArguments = "")
 {
 	static int iCmdFlags, iFlagBits;
@@ -817,7 +840,7 @@ void CheatCommand(int client, const char[] sCommand, const char[] sArguments = "
 	SetUserFlagBits(client, iFlagBits);
 	SetCommandFlags(sCommand, iCmdFlags | FCVAR_CHEAT);
 }
-
+*/
 bool IsRealClient(int client)
 {
 	return (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client));
