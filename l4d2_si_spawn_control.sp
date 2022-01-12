@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define DEBUG 0
-#define VERSION "2.4"
+#define VERSION "2.5"
 
 #include <sourcemod>
 #include <left4dhooks>
@@ -13,7 +13,6 @@
 #endif
 
 #define GAMEDATA "l4d2_nav_area"
-#define MAX_VALID_POS 3000
 
 ConVar
 	g_cvSpecialLimit[7],
@@ -32,6 +31,7 @@ int
 	g_iNormalSpawnRange,
 	g_iSpawnAttributesOffset,
 	g_iFlowDistanceOffset,
+	g_iSurPosDataLength,
 	g_iNavAreaCount;
 	
 float
@@ -55,11 +55,13 @@ Handle
 	g_hKillSICheckTimer,
 	g_hFirstSpawnSITimer,
 	g_hSpawnMaxSITimer,
+	g_hSDKIsVisibleToPlayer,
 	g_hSDKFindRandomSpot;
 
 ArrayList
 	g_aClientsArray,
 	g_aClassArray,
+	g_aSpawnPosData,
 	g_aSurPosData;
 
 Address g_pTheNavAreas;
@@ -200,6 +202,7 @@ public void OnPluginStart()
 
 	g_aClientsArray = new ArrayList();
 	g_aClassArray = new ArrayList();
+	g_aSpawnPosData = new ArrayList(4);
 	g_aSurPosData = new ArrayList(sizeof(SurPosData));
 }
 
@@ -398,8 +401,11 @@ void SpawnSpecial()
 		#if DEBUG
 		Profiler hProfiler = new Profiler();
 		hProfiler.Start();
+		LogToFileEx_Debug("------------------");
 		LogToFileEx_Debug("开始产生特感");
 		#endif
+
+		static float fSpawnPos[3];
 
 		static int iRandomSur;
 		iRandomSur = GetRandomSur();
@@ -411,7 +417,6 @@ void SpawnSpecial()
 
 			if (1 <= iSpawnClass <= 6)
 			{
-				static float fSpawnPos[3];
 				bool bFindSpawnPos, bSpawnSuccess;
 				
 				if (g_bRadicalSpawn && g_iNavAreaCount > 0)
@@ -419,8 +424,8 @@ void SpawnSpecial()
 					bFindSpawnPos = GetSpawnPosByNavArea(fSpawnPos);
 					if (!bFindSpawnPos)
 					{
+						//LogToFileEx_Debug("%f 距离找位失败，暂时重置g_fSpawnDist", g_fSpawnDist);
 						g_fSpawnDist = 1500.0;
-						//LogToFileEx_Debug("找位失败，暂时重置g_fSpawnDist");
 					}
 				}
 				else
@@ -447,7 +452,7 @@ void SpawnSpecial()
 
 		#if DEBUG
 		hProfiler.Stop();
-		LogToFileEx_Debug("执行时间: %f", hProfiler.Time);
+		LogToFileEx_Debug("产生点位: (%f, %f, %f) 执行时间: %f", fSpawnPos[0], fSpawnPos[1], fSpawnPos[2], hProfiler.Time);
 		delete hProfiler;
 		#endif	
 	}
@@ -457,14 +462,13 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 {
 	static Address pThisArea;
 	static float fThisSpawnPos[3], fThisFlowDist, fThisDist;
-	static float fSpawnData[MAX_VALID_POS][4];
 	static bool bFindValidPos;
-	static int iPosCount, iValidPosCount, i;
+	static int iArrayIndex, iValidPosCount, i;
 
 	bFindValidPos = false;
-	iPosCount = 0;
 	iValidPosCount = 0;
 	GetSurPos();
+	g_aSpawnPosData.Clear();
 
 	for (i = 1; i < g_iNavAreaCount; i++)
 	{
@@ -479,20 +483,16 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 					pThisArea.GetSpawnPos(fThisSpawnPos);
 					if (IsNearTheSur(fThisFlowDist, fThisSpawnPos, fThisDist))
 					{
-						iPosCount++;
-						if (!IsSurVisible(fThisSpawnPos))
+						if (!IsSurVisible(fThisSpawnPos, pThisArea))
 						{
 							if (!IsWillStuck(fThisSpawnPos))
 							{
-								if (iValidPosCount < MAX_VALID_POS)
-								{
-									fSpawnData[iValidPosCount][0] = fThisSpawnPos[0];
-									fSpawnData[iValidPosCount][1] = fThisSpawnPos[1];
-									fSpawnData[iValidPosCount][2] = fThisSpawnPos[2];
-									fSpawnData[iValidPosCount][3] = fThisDist;
-									iValidPosCount++;
-								}
-								else LogError("超出 MAX_VALID_POS 最大限制");
+								iArrayIndex = g_aSpawnPosData.Push(fThisDist);
+								g_aSpawnPosData.Set(iArrayIndex, fThisSpawnPos[0], 1);
+								g_aSpawnPosData.Set(iArrayIndex, fThisSpawnPos[1], 2);
+								g_aSpawnPosData.Set(iArrayIndex, fThisSpawnPos[2], 3);
+
+								iValidPosCount++;
 							}
 							//else LogToFileEx_Debug("无效点位，会卡住(%.0f %.0f %.0f)", fThisSpawnPos[0], fThisSpawnPos[1], fThisSpawnPos[2]);
 						}
@@ -503,30 +503,31 @@ bool GetSpawnPosByNavArea(float fSpawnPos[3])
 		}
 	}
 
+	//CheckArray();
+
 	if (iValidPosCount > 0)
 	{
 		//距离排序
-		SortCustom2D(fSpawnData, iValidPosCount, SortAscendingByDist);
-		
-		//CheckArray(fSpawnData, iValidPosCount);
+		g_aSpawnPosData.Sort(Sort_Ascending, Sort_Float);
 
-		//从最近的3个距离中随机选一个，防止产生的位置过于集中
-		static int iNum;
-		if (iValidPosCount >= 3) iNum = GetRandomInt(0, 2);
-		else iNum = 0;
+		//CheckArray();
 
-		fSpawnPos[0] = fSpawnData[iNum][0];
-		fSpawnPos[1] = fSpawnData[iNum][1];
-		fSpawnPos[2] = fSpawnData[iNum][2];
+		//从最近的2个距离中随机选一个，防止产生的位置过于集中
+		if (iValidPosCount >= 2) iArrayIndex = GetRandomInt(0, 1);
+		else iArrayIndex = 0;
+
+		// 等待 SM 支持 ArrayList.Set/GetArray 的 block 参数 
+		// https://github.com/alliedmodders/sourcemod/pull/1656
+		fSpawnPos[0] = g_aSpawnPosData.Get(iArrayIndex, 1);
+		fSpawnPos[1] = g_aSpawnPosData.Get(iArrayIndex, 2);
+		fSpawnPos[2] = g_aSpawnPosData.Get(iArrayIndex, 3);
 
 		//将找位距离设置为最后产生的距离再增加一点
-		g_fSpawnDist = fSpawnData[iNum][3] + 400.0;
-		//LogToFileEx_Debug("fSpawnData[%i][3] = %.1f, g_fSpawnDist = %.1f", iNum, fSpawnData[iNum][3], g_fSpawnDist);
+		g_fSpawnDist = view_as<float>(g_aSpawnPosData.Get(iArrayIndex, 0)) + 400.0;
+		//LogToFileEx_Debug("产生距离为 %f, 设置找位为 %f", g_aSpawnPosData.Get(iArrayIndex, 0), g_fSpawnDist);
 
 		bFindValidPos = true;
 	}
-
-	//LogToFileEx_Debug("找到 %i 个点位, 其中有效点位 %i 个, 最终产生的点位(%.0f %.0f %.0f)", iPosCount, iValidPosCount, fSpawnPos[0], fSpawnPos[1], fSpawnPos[2]);
 
 	return bFindValidPos;
 }
@@ -562,6 +563,8 @@ void GetSurPos()
 			g_aSurPosData.PushArray(PosData);
 		}
 	}
+
+	g_iSurPosDataLength = g_aSurPosData.Length;
 }
 
 bool IsNearTheSur(const float fAreaFlow, const float fAreaSpawnPos[3], float &fDist)
@@ -569,7 +572,7 @@ bool IsNearTheSur(const float fAreaFlow, const float fAreaSpawnPos[3], float &fD
 	static SurPosData PosData;
 	static int i;
 
-	for (i = 0; i < g_aSurPosData.Length; i++)
+	for (i = 0; i < g_iSurPosDataLength; i++)
 	{
 		g_aSurPosData.GetArray(i, PosData);
 		if (FloatAbs(fAreaFlow - PosData.fFlow) <= g_fSpawnDist)
@@ -584,81 +587,27 @@ bool IsNearTheSur(const float fAreaFlow, const float fAreaSpawnPos[3], float &fD
 	return false;
 }
 
-bool IsSurVisible(const float fAreaSpawnPos[3])
+bool IsSurVisible(const float fAreaSpawnPos[3], Address pArea)
 {
-	static float fTargetPos[3];
-	static SurPosData PosData;
 	static int i;
+	static float fTargetPos[3];
 
 	fTargetPos[0] = fAreaSpawnPos[0];
 	fTargetPos[1] = fAreaSpawnPos[1];
 	fTargetPos[2] = fAreaSpawnPos[2] + 62.0; //眼睛位置
 
-	for (i = 0; i < g_aSurPosData.Length; i++)
+	for (i = 1; i <= MaxClients; i++)
 	{
-		g_aSurPosData.GetArray(i, PosData);
-		if (IsVisible(PosData.fPos, fTargetPos))
+		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
 		{
-			return true;
+			if (SDKCall(g_hSDKIsVisibleToPlayer, fTargetPos, i, 2, 3, 0.0, 0, pArea, true))
+			{
+				return true;
+			}
 		}
 	}
+
 	return false;
-}
-
-//https://forums.alliedmods.net/showthread.php?t=132264
-bool IsVisible(const float fStartPos[3], const float fTargetPos[3])
-{
-	static float fAng[3], fVecbuffer[3];
-	static bool bVisible;
-	static Handle hTrace;
-
-	bVisible = false;
-
-	//获取角度
-	MakeVectorFromPoints(fStartPos, fTargetPos, fVecbuffer);
-	GetVectorAngles(fVecbuffer, fAng);
-	
-	//执行射线
-	hTrace = TR_TraceRayFilterEx(fStartPos, fAng, MASK_VISIBLE, RayType_Infinite, TraceFilter);
-
-	if (TR_DidHit(hTrace))
-	{
-		static float fEndPos[3];
-		TR_GetEndPosition(fEndPos, hTrace); //获得碰撞点
-		
-		//如果碰撞点的距离超过目标点位的距离，则可见
-		if ((GetVectorDistance(fStartPos, fEndPos) + 25.0) >= GetVectorDistance(fStartPos, fTargetPos))
-		{
-			bVisible = true;
-		}
-	}
-	else
-	{
-		//LogToFileEx_Debug("Tracer Bug: 射线没碰见任何东西");
-		bVisible = true;
-	}
-
-	delete hTrace;
-	return bVisible;
-}
-
-bool TraceFilter(int entity, int contentsMask)
-{
-	if (entity <= MaxClients || !IsValidEntity(entity))
-	{
-		return false;
-	}
-	
-	static char sEntClassName[16];
-	if (GetEdictClassname(entity, sEntClassName, sizeof(sEntClassName)))
-	{
-		if (strcmp(sEntClassName, "infected", false) == 0 || strcmp(sEntClassName, "witch", false) == 0 || strcmp(sEntClassName, "prop_physics", false) == 0)
-		{
-			return false;
-		}
-	}
-
-	return true;
 }
 
 bool IsWillStuck(const float fPos[3])
@@ -685,21 +634,12 @@ bool TraceFilter_Stuck(int entity, int contentsMask)
 	}
 	return true;
 }
-
-//实际上浮点也可以正确排序。
-int SortAscendingByDist(int[] x, int[] y, const int[][] array, Handle hndl)
+/* 
+void CheckArray()
 {
-	if (x[3] < y[3]) return -1;
-	else if (x[3] > y[3]) return 1;
-	else return 0;
-}
-/*
-stock void CheckArray(const float[][] fArray, int size)
-{
-	for (int i; i < size; i++)
-	{
-		LogToFileEx_Debug("fArray[%i][3] = %f", i, fArray[i][3]);
-	}
+	LogToFileEx_Debug("[数组检查] 第一：距离: %f, 点位: (%f, %f, %f)", g_aSpawnPosData.Get(0, 0), g_aSpawnPosData.Get(0, 1), g_aSpawnPosData.Get(0, 2), g_aSpawnPosData.Get(0, 3));
+	int index  = g_aSpawnPosData.Length - 1;
+	LogToFileEx_Debug("[数组检查] 最后：距离: %f, 点位: (%f, %f, %f)", g_aSpawnPosData.Get(index, 0), g_aSpawnPosData.Get(index, 1), g_aSpawnPosData.Get(index, 2), g_aSpawnPosData.Get(index, 3));
 }
 */
 int GetRandomSur()
@@ -1001,6 +941,22 @@ void GetMapNavAreaData()
 	g_iNavAreaCount = LoadFromAddress(pTheCount, NumberType_Int32);
 	if (g_iNavAreaCount <= 0)
 		LogError("当前地图Nav区域数量为0, 可能是某些测试地图");
+
+	StartPrepSDKCall(SDKCall_Static);
+	if (PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "IsVisibleToPlayer") == false)
+		SetFailState("Failed to find signature: IsVisibleToPlayer");
+	PrepSDKCall_AddParameter(SDKType_Vector, SDKPass_ByRef);									// 目标点位
+	PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);								// 客户端
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);								// 客户端团队
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);								// 目标点位团队, 如果为0将考虑客户端的角度
+	PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);										// 不清楚
+	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer, VDECODE_FLAG_ALLOWWORLD);	// 不清楚
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Pointer);							// 目标点位 NavArea 区域
+	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Pointer);									// 如果为 false，将自动获取目标点位的 NavArea (GetNearestNavArea)
+	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
+	g_hSDKIsVisibleToPlayer = EndPrepSDKCall();
+	if (g_hSDKIsVisibleToPlayer == null)
+		SetFailState("Failed to create SDKCall: IsVisibleToPlayer");
 
 	delete hGameData;
 }
