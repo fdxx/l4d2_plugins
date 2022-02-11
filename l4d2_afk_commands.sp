@@ -6,10 +6,10 @@
 #include <left4dhooks>
 #include <multicolors>
 
-#define VERSION "2.9"
+#define VERSION "3.0"
 
-ConVar CvarAFKDelay, CvarBlockIdle;
-float g_fAFKDelay;
+ConVar g_cvAfkDelay, g_cvBlockIdle;
+float g_fAfkDelay;
 bool g_bBlockIdle;
 
 public Plugin myinfo =
@@ -25,50 +25,50 @@ public void OnPluginStart()
 {
 	CreateConVar("l4d2_afk_commands_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
 
-	CvarAFKDelay = CreateConVar("l4d2_afk_commands_afk_delay", "3.0", "切换到旁观之前的延迟, 0.0=禁用延迟加入旁观", FCVAR_NONE);
-	CvarBlockIdle = CreateConVar("l4d2_afk_commands_block_idle", "1", "是否阻止 go_away_from_keyboard 命令", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvAfkDelay = CreateConVar("l4d2_afk_commands_afk_delay", "3.0", "切换到旁观之前的延迟, 0.0=禁用延迟加入旁观", FCVAR_NONE);
+	g_cvBlockIdle = CreateConVar("l4d2_afk_commands_block_idle", "1", "是否阻止 go_away_from_keyboard 命令", FCVAR_NONE, true, 0.0, true, 1.0);
 
 	GetCvars();
 
-	CvarAFKDelay.AddChangeHook(ConVarChanged);
-	CvarBlockIdle.AddChangeHook(ConVarChanged);
+	g_cvAfkDelay.AddChangeHook(ConVarChanged);
+	g_cvBlockIdle.AddChangeHook(ConVarChanged);
 	
-	AddCommandListener(BlockIdle, "go_away_from_keyboard");
+	AddCommandListener(GoAfk_CmdListener, "go_away_from_keyboard");
 	
-	RegConsoleCmd("sm_afk", JoinSpectate);
-	RegConsoleCmd("sm_away", JoinSpectate);
-	RegConsoleCmd("sm_idle", JoinSpectate);
-	RegConsoleCmd("sm_spectate", JoinSpectate);
-	RegConsoleCmd("sm_spectators", JoinSpectate);
-	RegConsoleCmd("sm_joinspectators", JoinSpectate);
-	RegConsoleCmd("sm_jointeam1", JoinSpectate);
+	RegConsoleCmd("sm_afk", Cmd_JoinSpectate);
+	RegConsoleCmd("sm_away", Cmd_JoinSpectate);
+	RegConsoleCmd("sm_idle", Cmd_JoinSpectate);
+	RegConsoleCmd("sm_spectate", Cmd_JoinSpectate);
+	RegConsoleCmd("sm_spectators", Cmd_JoinSpectate);
+	RegConsoleCmd("sm_joinspectators", Cmd_JoinSpectate);
+	RegConsoleCmd("sm_jointeam1", Cmd_JoinSpectate);
 
-	RegConsoleCmd("sm_survivors", JoinSurvivor);
-	RegConsoleCmd("sm_join", JoinSurvivor);
-	RegConsoleCmd("sm_jg", JoinSurvivor);
-	RegConsoleCmd("sm_jiaru", JoinSurvivor);
-	RegConsoleCmd("sm_jointeam2", JoinSurvivor);
-	RegConsoleCmd("sm_jr", JoinSurvivor);
+	RegConsoleCmd("sm_survivors", Cmd_JoinSurvivor);
+	RegConsoleCmd("sm_join", Cmd_JoinSurvivor);
+	RegConsoleCmd("sm_jg", Cmd_JoinSurvivor);
+	RegConsoleCmd("sm_jiaru", Cmd_JoinSurvivor);
+	RegConsoleCmd("sm_jointeam2", Cmd_JoinSurvivor);
+	RegConsoleCmd("sm_jr", Cmd_JoinSurvivor);
 
-	RegConsoleCmd("sm_kill", KillSelf);
-	RegConsoleCmd("sm_zs", KillSelf);
+	RegConsoleCmd("sm_kill", Cmd_KillSelf);
+	RegConsoleCmd("sm_zs", Cmd_KillSelf);
 
 	AutoExecConfig(true, "l4d2_afk_commands");
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
 
 void GetCvars()
 {
-	g_fAFKDelay = CvarAFKDelay.FloatValue;
-	g_bBlockIdle = CvarBlockIdle.BoolValue;
+	g_fAfkDelay = g_cvAfkDelay.FloatValue;
+	g_bBlockIdle = g_cvBlockIdle.BoolValue;
 }
 
 // Block Idle
-public Action BlockIdle(int client, const char[] command, int argc)
+Action GoAfk_CmdListener(int client, const char[] command, int argc)
 {
 	if (g_bBlockIdle)
 	{
@@ -82,14 +82,14 @@ public Action BlockIdle(int client, const char[] command, int argc)
 }
 
 // To Spectate
-public Action JoinSpectate(int client, int args)
+Action Cmd_JoinSpectate(int client, int args)
 {
 	if (IsRealClient(client) && GetClientTeam(client) != 1)
 	{
-		if (g_fAFKDelay >= 0.1)
+		if (g_fAfkDelay >= 0.1)
 		{
-			CreateTimer(g_fAFKDelay, JoinSpectate_Timer, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
-			PrintHintText(client, "%.1f 秒后进入旁观状态", g_fAFKDelay);
+			CreateTimer(g_fAfkDelay, JoinSpectate_Timer, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+			PrintHintText(client, "%.1f 秒后进入旁观状态", g_fAfkDelay);
 		}
 		else
 		{
@@ -100,7 +100,7 @@ public Action JoinSpectate(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action JoinSpectate_Timer(Handle timer, int userid)
+Action JoinSpectate_Timer(Handle timer, int userid)
 {
 	int client = GetClientOfUserId(userid);
 	if (IsRealClient(client) && GetClientTeam(client) != 1)
@@ -112,10 +112,16 @@ public Action JoinSpectate_Timer(Handle timer, int userid)
 }
 
 // To Survivor
-public Action JoinSurvivor(int client, int args)
+Action Cmd_JoinSurvivor(int client, int args)
 {
 	if (IsRealClient(client) && GetClientTeam(client) != 2)
 	{
+		if (L4D_GetBotOfIdlePlayer(client) > 0)
+		{
+			L4D_TakeOverBot(client);
+			return Plugin_Handled;
+		}
+		
 		int bot = GetSurBot();
 		if (bot >= 1)
 		{
@@ -130,7 +136,7 @@ public Action JoinSurvivor(int client, int args)
 }
 
 // Suicide
-public Action KillSelf(int client, int args)
+Action Cmd_KillSelf(int client, int args)
 {
 	if (IsRealClient(client))
 	{
@@ -165,7 +171,7 @@ int GetSurBot()
 	{
 		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsFakeClient(i))
 		{
-			if (!HasIdlePlayer(i))
+			if (L4D_GetIdlePlayerOfBot(i) <= 0)
 			{
 				if (IsPlayerAlive(i)) aAliveBots.Push(i);
 				else aDeadBots.Push(i);
@@ -187,31 +193,4 @@ int GetSurBot()
 	delete aDeadBots;
 
 	return bot;
-}
-
-bool HasIdlePlayer(int iBot)
-{
-	if (IsClientInGame(iBot) && GetClientTeam(iBot) == 2 && IsPlayerAlive(iBot))
-	{
-		static char sNetClass[12];
-		GetEntityNetClass(iBot, sNetClass, sizeof(sNetClass));
-
-		if (IsFakeClient(iBot) && strcmp(sNetClass, "SurvivorBot") == 0)
-		{
-			static int iClient;
-			iClient = GetClientOfUserId(GetEntProp(iBot, Prop_Send, "m_humanSpectatorUserID"));
-			if (iClient > 0 && iClient <= MaxClients && IsClientConnected(iClient))
-			{
-				if (!IsClientInGame(iClient)) //过图加载中的玩家
-				{
-					return true;
-				}
-				else if (IsClientInGame(iClient) && GetClientTeam(iClient) == 1)
-				{
-					return true;
-				}
-			}
-		}
-	}
-	return false;
 }
