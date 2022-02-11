@@ -5,6 +5,8 @@
 #include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
 
+#define VERSION "0.3"
+
 KeyValues g_kv;
 
 public Plugin myinfo = 
@@ -12,11 +14,13 @@ public Plugin myinfo =
 	name = "L4D2 Config vote",
 	author = "vintik, Sir, fdxx",
 	description = "自定义配置投票",
-	version = "0.3",
+	version = VERSION,
 }
 
 public void OnPluginStart()
 {
+	CreateConVar("l4d2_config_vote_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+	
 	char sPath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sPath, sizeof(sPath), "data/l4d2_config_vote.cfg");
 
@@ -26,6 +30,8 @@ public void OnPluginStart()
 
 	RegConsoleCmd("sm_sivote", Cmd_Vote);
 	RegConsoleCmd("sm_votesi", Cmd_Vote);
+
+	RegPluginLibrary("l4d2_config_vote");
 }
 
 Action Cmd_Vote(int client, int args)

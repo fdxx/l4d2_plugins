@@ -44,8 +44,11 @@ Action Cmd_Vote(int client, int args)
 		menu.SetTitle("选择投票类型:");
 		if (GetClientTeam(client) != 1)
 		{
-			menu.AddItem("ReHealth", "所有人回血");
+			menu.AddItem("ReHealth", "幸存者和特感回血");
 			menu.AddItem("KickPlayer", "踢出玩家");
+			
+			if (LibraryExists("l4d2_config_vote"))
+				menu.AddItem("SpecialVote", "特感投票");
 		}
 		menu.AddItem("ForceSpec", "强制玩家旁观");
 		menu.Display(client, 20);
@@ -131,6 +134,11 @@ int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int client, int 
 					}
 					menu.ExitBackButton = true;
 					menu.Display(client, 20);
+				}
+				case 'S':
+				{
+					if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 1)
+						ClientCommand(client, "sm_sivote");
 				}
 			}
 		}
