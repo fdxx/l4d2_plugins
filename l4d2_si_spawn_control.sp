@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define DEBUG 0
-#define VERSION "2.5"
+#define VERSION "2.6"
 
 #include <sourcemod>
 #include <left4dhooks>
@@ -718,7 +718,8 @@ void Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
 
 public void L4D_OnSpawnSpecial_Post(int client, int zombieClass, const float vecPos[3], const float vecAng[3])
 {
-	g_fSpecialActionTime[client] = GetEngineTime();
+	if (client > 0)
+		g_fSpecialActionTime[client] = GetEngineTime();
 }
 
 Action KillSICheck_Timer(Handle timer)
