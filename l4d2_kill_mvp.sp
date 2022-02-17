@@ -4,8 +4,9 @@
 #include <sourcemod>
 #include <sdkhooks>
 #include <multicolors>
+#include <left4dhooks>
 
-#define VERSION "1.9"
+#define VERSION "2.0"
 
 #define SMOKER	1
 #define BOOMER	2
@@ -170,7 +171,7 @@ void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 //火的伤害统计不准确，只有站在火里才计算
 Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
 {
-	if (IsValidSur(attacker) && IsPlayerAlive(attacker))
+	if (damage > 0.0 && IsValidSur(attacker) && IsPlayerAlive(attacker))
 	{
 		if (IsValidSI(victim) && IsPlayerAlive(victim))
 		{
@@ -209,8 +210,12 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 		{
 			if (attacker != victim)
 			{
-				g_iAttackerFFDamage[attacker] += RoundToFloor(damage);
-				g_iVictimFFDamage[victim] += RoundToFloor(damage);
+				CountdownTimer Timer = L4D2Direct_GetInvulnerabilityTimer(victim);
+				if (Timer != CTimer_Null && CTimer_IsElapsed(Timer))
+				{
+					g_iAttackerFFDamage[attacker] += RoundToFloor(damage);
+					g_iVictimFFDamage[victim] += RoundToFloor(damage);
+				}
 			}
 		}
 	}
@@ -296,7 +301,7 @@ void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
 
 Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
 {
-	if (!g_bWitchAlive[victim]) return Plugin_Continue;
+	if (damage <= 0.0 || !g_bWitchAlive[victim]) return Plugin_Continue;
 
 	if (IsValidEntityIndex(victim))
 	{
