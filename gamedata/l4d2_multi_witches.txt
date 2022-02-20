@@ -1,0 +1,29 @@
+"Games"
+{
+	"left4dead2" 
+	{
+		"Functions"
+		{
+			"CDirector::GetWitchLimit"
+			{
+				"signature"		"CDirector::GetWitchLimit"
+				"callconv"		"thiscall"
+				"return"		"int"
+				"this"			"ignore"
+			}
+		}
+
+		"Signatures"
+		{
+			"CDirector::GetWitchLimit"
+			{
+				"library"	"server"
+				"linux"		"@_ZNK9CDirector13GetWitchLimitEv"
+				
+				// windows 未经测试
+				"windows"	"\x55\x8B\xEC\x83\xEC\x18\x56\x8B\xF1\x8B\x8E\x88\x05\x00\x00"
+				/* 55 8B EC 83 EC 18 56 8B F1 8B 8E 88 05 00 00 */
+			}
+		}
+    }
+}
