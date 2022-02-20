@@ -4,7 +4,6 @@
 #include <sourcemod>
 #include <sdktools>
 #include <left4dhooks>
-#include <dhooks>
 
 #define VERSION "0.3"
 
@@ -13,7 +12,6 @@ int g_iMaxWitchLimit;
 float g_fWitchSpawnTime, g_fKillWitchDistance;
 bool g_bLeftSafeArea;
 Handle g_hSpawnWitchTimer;
-DynamicDetour g_dGetWitchLimit;
 
 public Plugin myinfo =
 {
@@ -38,8 +36,6 @@ public void OnPluginStart()
 
 	HookEvent("round_start", Event_RoundStart);
 	HookEvent("round_end", Event_RoundEnd);
-
-	LoadGameData();
 }
 
 void ConVarChanged(ConVar convar, char[] oldValue, char[] newValue)
@@ -106,17 +102,24 @@ Action SpawnWitch_Timer(Handle timer)
 	{
 		if (GetWitchCount() < g_iMaxWitchLimit)
 		{
-			static float fSpawnPos[3];
-			static int iRandomSur;
+			static float fSpawnPos[3], fSpawnAng[3];
+			static int iRandomSur, index;
 			iRandomSur = GetRandomSur();
+
 			if (iRandomSur > 0)
 			{
 				if (L4D_GetRandomPZSpawnPosition(iRandomSur, 8, 20, fSpawnPos))
 				{
-					if (L4D2_SpawnWitch(fSpawnPos, NULL_VECTOR) <= 0)
+					// 不会触发 left4dhooks 的 L4D_OnSpawnWitch
+					index = CreateEntityByName("witch");
+					if (index > MaxClients)
 					{
-						LogMessage("[%s] 无法产生witch (%.1f %.1f %.1f)", CurrentMap(), fSpawnPos[0], fSpawnPos[1], fSpawnPos[2]);
+						SetAbsOrigin(index, fSpawnPos);
+						fSpawnAng[1] = GetRandomFloat(-179.0, 179.0);
+						SetAbsAngles(index, fSpawnAng);
+						DispatchSpawn(index);
 					}
+					else LogError("[%s] 无法产生witch (%.1f %.1f %.1f)", CurrentMap(), fSpawnPos[0], fSpawnPos[1], fSpawnPos[2]);
 				}
 			}
 		}
@@ -198,24 +201,3 @@ char[] CurrentMap()
 	return sMapName;
 }
 
-void LoadGameData()
-{
-	GameData hGameData = new GameData("l4d2_multi_witches");
-
-	if (hGameData == null)
-		SetFailState("加载 l4d2_multi_witches.txt 文件失败");
-	g_dGetWitchLimit = DynamicDetour.FromConf(hGameData, "CDirector::GetWitchLimit");
-	if (g_dGetWitchLimit == null)
-		SetFailState("加载 CDirector::GetWitchLimit 签名失败");
-	if (!g_dGetWitchLimit.Enable(Hook_Pre, mreOnGetWitchLimitPre))
-		SetFailState("启用 mreOnGetWitchLimitPre 失败");
-
-	delete hGameData;
-}
-
-// 修复有些结局地图无法产生witch的问题
-MRESReturn mreOnGetWitchLimitPre(DHookReturn hReturn)
-{
-	hReturn.Value = -1;
-	return MRES_Supercede;
-}
