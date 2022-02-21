@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name = "L4D2 Block stumble scratches",
 	author = "Tabun, dcx2, fdxx",
 	description = "特感Bot被推后的硬直时间内，阻止使用右键抓人",
-	version = "0.1",
+	version = "0.2",
 	url = "https://github.com/Tabbernaut/L4D2-Plugins/tree/master/ai_damagefix"
 }
 
@@ -25,7 +25,7 @@ public void OnPluginStart()
 		StartPrepSDKCall(SDKCall_Player);
 		if (PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CTerrorPlayer::IsStaggering"))
 		{
-			PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
+			PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
 			g_hStaggering = EndPrepSDKCall();
 			if (g_hStaggering == null) SetFailState("Failed to load signature IsStaggering");
 		}
