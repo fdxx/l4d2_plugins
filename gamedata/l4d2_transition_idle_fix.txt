@@ -1,0 +1,53 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Functions"
+		{
+			"PlayerSaveData::Restore"
+			{
+				"signature"		"PlayerSaveData::Restore"
+				"callconv"		"thiscall"
+				"return"		"void"
+				"this"			"address"
+				"arguments"
+				{
+					"a1"
+					{
+						"type"	"cbaseentity"
+					}
+				}
+			}
+		}
+
+		"Signatures"
+		{
+			/* PlayerSaveData::Restore(PlayerSaveData *__hidden this, CTerrorPlayer *) */
+			"PlayerSaveData::Restore"
+			{
+				"library"	"server"
+				"linux"		"@_ZN14PlayerSaveData7RestoreEP13CTerrorPlayer"
+				"windows"	"\x55\x8B\xEC\x83\xEC\x60\x53\x8B\x5D\x08\x8B\x43\x28"
+				/* 55 8B EC 83 EC 60 53 8B 5D 08 8B 43 28 */
+			}
+
+			/* KeyValues::GetInt(KeyValues *this, const char *s, int) */
+			"KeyValues::GetInt"
+			{
+				"library"	"server"
+				"linux"		"@_ZN9KeyValues6GetIntEPKci"
+				"windows"	"\x55\x8B\xEC\x8B\x45\x08\x6A\x00\x50\xE8\x2A\x2A\x2A\x2A\x85\xC0\x74\x2A\x0F\xBE\x48\x10"
+				/* 55 8B EC 8B 45 08 6A 00 50 E8 ? ? ? ? 85 C0 74 ? 0F BE 48 10 */
+			}
+
+			/* KeyValues::SetInt(KeyValues *this, const char *s, int) */
+			"KeyValues::SetInt"
+			{
+				"library"	"server"
+				"linux"		"@_ZN9KeyValues6SetIntEPKci"
+				"windows"	"\x55\x8B\xEC\x8B\x45\x08\x6A\x01\x50\xE8\x2A\x2A\x2A\x2A\x85\xC0\x74\x2A\x8B\x4D\x0C\x89\x48\x0C\xC6\x40\x10\x02"
+				/* 55 8B EC 8B 45 08 6A 01 50 E8 ? ? ? ? 85 C0 74 ? 8B 4D 0C 89 48 0C C6 40 10 02 */
+			}
+		}
+	}
+}
