@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION	"0.1"
+#define VERSION	"0.2"
 
 #include <sourcemod>
 #include <dhooks>
@@ -58,13 +58,18 @@ void LoadGameData()
 
 MRESReturn mreRestorePlayerDataPre(Address pThis, DHookParam hParams)
 {
-	if (IsFakeClient(hParams.Get(1))) return MRES_Ignored;
+	int client = hParams.Get(1);
 
-	Address kv = view_as<Address>(LoadFromAddress(pThis, NumberType_Int32));
-	if (SDKCall(g_hSDKKVGetInt, kv, "idle", 0) == 1)
+	if (client > 0 && client <= MaxClients && IsClientConnected(client) && !IsFakeClient(client))
 	{
-		SDKCall(g_hSDKKVSetInt, kv, "idle", 0);
-		//LogMessage("Set %N idle to 0", hParams.Get(1));
+		Address kv = view_as<Address>(LoadFromAddress(pThis, NumberType_Int32));
+
+		if (kv != Address_Null && SDKCall(g_hSDKKVGetInt, kv, "idle", 0) == 1)
+		{
+			SDKCall(g_hSDKKVSetInt, kv, "idle", 0);
+			LogMessage("Set %N idle to 0", client);
+		}
 	}
+
 	return MRES_Ignored;
 }
