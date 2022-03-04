@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION	"0.1"
+#define VERSION	"0.2"
 
 #include <sourcemod>
 #include <sdktools>
@@ -17,7 +17,7 @@ Handle g_hTimer;
 
 public Plugin myinfo =
 {
-	name = "L4D2 Server update Checker",
+	name = "L4D2 Server update checker",
 	author = "fdxx",
 	description = "Restart the server when the server has an update.",
 	version = VERSION,
@@ -151,6 +151,6 @@ void InitGameData()
 	g_iVer = SDKCall(hSDKGetVersion);
 	delete hSDKGetVersion;
 
-	FormatEx(g_sUrl, sizeof(g_sUrl), "https://api.steampowered.com/ISteamApps/UpToDateCheck/v0001/?appid=550&version=%i&format=json", g_iVer);
+	FormatEx(g_sUrl, sizeof(g_sUrl), "http://api.steampowered.com/ISteamApps/UpToDateCheck/v0001/?appid=550&version=%i&format=json", g_iVer);
 	BuildPath(Path_SM, g_sLogPath, sizeof(g_sLogPath), "logs/l4d2_server_update_checker.log");
 }
