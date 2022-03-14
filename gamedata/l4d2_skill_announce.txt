@@ -1,0 +1,25 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Functions"
+		{
+			"CTerrorPlayer::Event_Killed"
+			{
+				"signature"		"CTerrorPlayer::Event_Killed"
+				"callconv"		"thiscall"
+				"return"		"void"
+				"this"			"entity"
+			}
+		}
+
+		"Signatures"
+		{
+			"CTerrorPlayer::Event_Killed"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer12Event_KilledERK15CTakeDamageInfo"
+			}
+		}
+	}
+}
