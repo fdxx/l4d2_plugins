@@ -29,7 +29,7 @@ void LoadGameData()
 		SetFailState("Failed to load \"l4d2_transition_idle_fix.txt\" gamedata.");
 
 	DynamicDetour dDetour = DynamicDetour.FromConf(hGameData, "PlayerSaveData::Restore");
-	if (hGameData == null)
+	if (dDetour == null)
 		SetFailState("Failed to create DynamicDetour: PlayerSaveData::Restore");
 	if (!dDetour.Enable(Hook_Pre, mreRestorePlayerDataPre))
 		SetFailState("Failed to detour pre: PlayerSaveData::Restore");
