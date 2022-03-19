@@ -1,0 +1,47 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"MemPatches"
+		{
+			"CLunge::IsAbilityReadyToFire::HasPlayerControlledZombies"
+			{
+				"signature" "CLunge::IsAbilityReadyToFire"
+
+				"linux"
+				{
+					"offset"	"CAh"
+					"verify"	"\x74\x0B"
+					"patch"		"\x90\x90"
+				}
+			}
+
+			"CTerrorPlayer::OnLungeStart::HasPlayerControlledZombies"
+			{
+				"signature" "CTerrorPlayer::OnLungeStart"
+
+				"linux"
+				{
+					"offset"	"1Bh"
+					"verify"	"\x0F\x84\xBF\x01\x00\x00"
+					"patch"		"\x90\x90\x90\x90\x90\x90"
+				}
+			}
+		}
+
+		"Signatures"
+		{
+			"CLunge::IsAbilityReadyToFire"
+			{
+				"library"	"server"
+				"linux"		"@_ZNK6CLunge20IsAbilityReadyToFireEv"
+			}
+
+			"CTerrorPlayer::OnLungeStart"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer12OnLungeStartEv"
+			}
+		}
+	}
+}
