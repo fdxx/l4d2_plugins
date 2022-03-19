@@ -11,7 +11,7 @@ public Plugin myinfo =
 	name = "L4D2 Block charging damage debuff",
 	author = "Tabun, dcx2, fdxx",
 	description = "调整 Charger 冲刺减伤",
-	version = "0.2",
+	version = "0.3",
 	url = "https://github.com/SirPlease/L4D2-Competitive-Rework/blob/master/addons/sourcemod/scripting/l4d2_ai_damagefix.sp"
 }
 
@@ -21,19 +21,15 @@ public void OnPluginStart()
 
 public void OnClientPutInServer(int client)
 {
+	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
-public void OnClientDisconnect(int client)
-{
-	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
-}
-
-public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3], int damagecustom)
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if (damage <= 0.0) return Plugin_Continue;
 
-	if (IsValidSI(victim) && IsPlayerAlive(victim) && IsFakeClient(victim) && GetEntProp(victim, Prop_Send, "m_zombieClass") == 6)
+	if (IsValidSI(victim) && GetEntProp(victim, Prop_Send, "m_zombieClass") == 6 && IsFakeClient(victim) && IsPlayerAlive(victim))
 	{
 		if (IsValidSur(attacker) && IsPlayerAlive(attacker))
 		{
