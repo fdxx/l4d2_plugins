@@ -6,24 +6,25 @@
 #include <multicolors>
 #include <left4dhooks>
 
-#define VERSION "2.0"
+#define VERSION "2.1"
 
-#define SMOKER	1
-#define BOOMER	2
-#define HUNTER	3
-#define SPITTER	4
-#define JOCKEY	5
-#define CHARGER	6
-#define TANK	8
+enum
+{
+	SMOKER	= 1,
+	BOOMER	= 2,
+	HUNTER	= 3,
+	SPITTER	= 4,
+	JOCKEY	= 5,
+	CHARGER	= 6,
+	TANK	= 8,
+}
 
 int
 	g_iKillSICount[MAXPLAYERS+1],				//特感击杀数量
 	g_iKillCICount[MAXPLAYERS+1],				//普通丧尸击杀数量
 	g_iAttackerFFDamage[MAXPLAYERS+1],			//友伤
-	g_iVictimFFDamage[MAXPLAYERS+1],			//被友伤
 	g_iTotalDamage[MAXPLAYERS+1],				//特感和丧失总伤害
-	g_iTankDamage[MAXPLAYERS+1][MAXPLAYERS+1],	//tank伤害[victim][attacker]
-	g_iMaxEntities;
+	g_iTankDamage[MAXPLAYERS+1][MAXPLAYERS+1];	//tank伤害[victim][attacker]
 
 float
 	g_fWitchDamage[2049][MAXPLAYERS+1];			//witch伤害[victim][attacker]
@@ -47,10 +48,8 @@ bool
 public Plugin myinfo =
 {
 	name = "L4D2 Kill mvp",
-	description = "",
 	author = "fdxx",
 	version = VERSION,
-	url = ""
 }
 
 public void OnPluginStart()
@@ -86,6 +85,7 @@ public void OnPluginStart()
 	HookEvent("infected_death", Event_InfectedDeath);
 
 	RegConsoleCmd("sm_mvp", Cmd_ShowTotalDamageRank);
+	RegAdminCmd("sm_clear_mvp", Cmd_ClearMvp, ADMFLAG_ROOT);
 
 	AutoExecConfig(true, "l4d2_kill_mvp");
 }
@@ -106,33 +106,41 @@ void GetCvars()
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	g_iMaxEntities = GetMaxEntities();
+	static int i;
 
-	for (int i = 0; i <= MAXPLAYERS; i++)
+	for (i = 0; i <= MaxClients; i++)
 	{
 		g_iKillSICount[i] = 0;
 		g_iKillCICount[i] = 0;
 		g_iAttackerFFDamage[i] = 0;
-		g_iVictimFFDamage[i] = 0;
 		g_iTotalDamage[i] = 0;
 
 		g_bTankAlive[i] = false;
-
-		for (int a = 0; a <= MAXPLAYERS; a++)
-		{
-			g_iTankDamage[i][a] = 0;
-		}
+		ClearTankDamage(i);
 	}
 
-	for (int i = 0; i <= 2048; i++)
+	for (i = 0; i <= 2048; i++)
 	{
-		SDKUnhook(i, SDKHook_OnTakeDamage, OnTakeDamage_Witch);
 		g_bWitchAlive[i] = false;
+		ClearWitchDamage(i);
+	}
+}
 
-		for (int a = 0; a <= MAXPLAYERS; a++)
-		{
-			g_fWitchDamage[i][a] = 0.0;
-		}
+void ClearTankDamage(int iTank)
+{
+	static int i;
+	for (i = 1; i <= MaxClients; i++)
+	{
+		g_iTankDamage[iTank][i] = 0;
+	}
+}
+
+void ClearWitchDamage(int iWitch)
+{
+	static int i;
+	for (i = 1; i <= MaxClients; i++)
+	{
+		g_fWitchDamage[iWitch][i] = 0.0;
 	}
 }
 
@@ -149,19 +157,16 @@ Action Cmd_ShowTotalDamageRank(int client, int args)
 
 public void OnClientPutInServer(int client)
 {
-	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
-}
-
-public void OnClientDisconnect(int client)
-{
 	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
 void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-	int client = GetClientOfUserId(event.GetInt("userid"));
+	static int client;
+	client = GetClientOfUserId(event.GetInt("userid"));
 
-	if (IsValidSI(client) && GetZombieClass(client) == TANK && IsPlayerAlive(client))
+	if (client > 0)
 	{
 		g_bTankAlive[client] = true;
 		ClearTankDamage(client);
@@ -169,24 +174,24 @@ void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 }
 
 //火的伤害统计不准确，只有站在火里才计算
-Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if (damage > 0.0 && IsValidSur(attacker) && IsPlayerAlive(attacker))
+	if (damage <= 0.0) return Plugin_Continue;
+
+	if (IsValidSur(attacker) && IsPlayerAlive(attacker))
 	{
 		if (IsValidSI(victim) && IsPlayerAlive(victim))
 		{
-			static int iZombieClass, iVictimHealth;
-			iZombieClass = GetZombieClass(victim);
+			static int iVictimHealth;
 			iVictimHealth = GetEntProp(victim, Prop_Data, "m_iHealth");
 			
-			switch (iZombieClass)
+			switch (GetZombieClass(victim))
 			{
 				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
 				{
 					if (damage >= float(iVictimHealth)) g_iTotalDamage[attacker] += iVictimHealth;
 					else g_iTotalDamage[attacker] += RoundToFloor(damage);
 				}
-
 				case TANK:
 				{
 					if (g_bTankAlive[victim] && !GetEntProp(victim, Prop_Send, "m_isIncapacitated"))
@@ -210,11 +215,11 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 		{
 			if (attacker != victim)
 			{
-				CountdownTimer Timer = L4D2Direct_GetInvulnerabilityTimer(victim);
+				static CountdownTimer Timer;
+				Timer = L4D2Direct_GetInvulnerabilityTimer(victim);
 				if (Timer != CTimer_Null && CTimer_IsElapsed(Timer))
 				{
 					g_iAttackerFFDamage[attacker] += RoundToFloor(damage);
-					g_iVictimFFDamage[victim] += RoundToFloor(damage);
 				}
 			}
 		}
@@ -222,24 +227,29 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 	return Plugin_Continue;
 }
 
-Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
-	int iAttacker = GetClientOfUserId(event.GetInt("attacker"));
-	int iVictim = GetClientOfUserId(event.GetInt("userid"));
+	static int iAttacker, iVictim;
+
+	iAttacker = GetClientOfUserId(event.GetInt("attacker"));
+	iVictim = GetClientOfUserId(event.GetInt("userid"));
 
 	if (IsValidSI(iVictim))
 	{
 		if (GetZombieClass(iVictim) == TANK)
 		{
 			g_bTankAlive[iVictim] = false;
+
 			if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker))
 			{
 				g_iKillSICount[iAttacker]++;
 			}
+
 			if (g_bTankDamageAnnounce)
 			{
 				ShowTankDamageRank(iVictim);
 			}
+			
 			ClearTankDamage(iVictim);
 		}
 		else
@@ -250,7 +260,6 @@ Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 			}
 		}
 	}
-	return Plugin_Continue;
 }
 
 void ShowTankDamageRank(int iTank)
@@ -290,7 +299,7 @@ void ShowTankDamageRank(int iTank)
 void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int iWitch = event.GetInt("witchid");
-	if (IsValidEntityIndex(iWitch))
+	if (IsValidEntityEx(iWitch))
 	{
 		g_bWitchAlive[iWitch] = true;
 		ClearWitchDamage(iWitch);
@@ -299,11 +308,11 @@ void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
+Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if (damage <= 0.0 || !g_bWitchAlive[victim]) return Plugin_Continue;
 
-	if (IsValidEntityIndex(victim))
+	if (IsValidEntityEx(victim))
 	{
 		if (IsValidSur(attacker) && IsPlayerAlive(attacker))
 		{
@@ -325,24 +334,19 @@ Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, float &dama
 	return Plugin_Continue;
 }
 
-Action Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
+void Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
 {
 	int iAttacker = GetClientOfUserId(event.GetInt("userid"));
 	int iWitch = event.GetInt("witchid");
 
-	if (IsValidEntityIndex(iWitch))
+	g_bWitchAlive[iWitch] = false;
+
+	if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker))
 	{
-		SDKUnhook(iWitch, SDKHook_OnTakeDamage, OnTakeDamage_Witch);
-		g_bWitchAlive[iWitch] = false;
-
-		if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker))
-		{
-			if (g_bWitchDamageAnnounce) ShowWitchDamageRank(iWitch);
-		}
-
-		ClearWitchDamage(iWitch);
+		if (g_bWitchDamageAnnounce) ShowWitchDamageRank(iWitch);
 	}
-	return Plugin_Continue;
+
+	ClearWitchDamage(iWitch);
 }
 
 void ShowWitchDamageRank(int iWitch)
@@ -391,9 +395,9 @@ void Event_InfectedHurt(Event event, const char[] name, bool dontBroadcast)
 		iDamage  = event.GetInt("amount");
 		iVictim = event.GetInt("entityid");
 
-		if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker))
+		if (IsValidEntityEx(iVictim))
 		{
-			if (IsValidEntityIndex(iVictim))
+			if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker))
 			{
 				static char sClassName[6];
 				if (GetEdictClassname(iVictim, sClassName, sizeof(sClassName)))
@@ -431,7 +435,6 @@ void ShowTotalDamageRank()
 			iTotalKillData[iPlayerCount][2] = g_iKillSICount[i];
 			iTotalKillData[iPlayerCount][3] = g_iKillCICount[i];
 			iTotalKillData[iPlayerCount][4] = g_iAttackerFFDamage[i];
-			iTotalKillData[iPlayerCount][5] = g_iVictimFFDamage[i];
 
 			iAllTotalDamage += g_iTotalDamage[i];
 			iAllTotalFFDamage += g_iAttackerFFDamage[i];
@@ -443,7 +446,7 @@ void ShowTotalDamageRank()
 	if (iPlayerCount > 0)
 	{
 		int client, iTotalDamage, iKillSICount, iKillCICount, iAttackerFFDamage;
-		//int iVictimFFDamage;
+
 		CPrintToChatAll("{default}[{yellow}击杀排名{default}]:");
 		SortCustom2D(iTotalKillData, iPlayerCount, SortByDamageDesc);
 		for (int i; i < iPlayerCount; i++)
@@ -453,7 +456,6 @@ void ShowTotalDamageRank()
 			iKillSICount = iTotalKillData[i][2];
 			iKillCICount = iTotalKillData[i][3];
 			iAttackerFFDamage = iTotalKillData[i][4];
-			//iVictimFFDamage = iTotalKillData[i][5];
 
 			CPrintToChatAll("{blue}伤害{default}:  {yellow}%-6i  {blue}特感{default}:  {yellow}%-3i  {blue}丧尸{default}:  {yellow}%-4i  {blue}友伤{default}:  {yellow}%-5i  {blue}|{default}  {olive}%N", iTotalDamage, iKillSICount, iKillCICount, iAttackerFFDamage, client);
 		}
@@ -486,25 +488,13 @@ int SortByDamageDesc_FF(int[] x, int[] y, const int[][] array, Handle hndl)
 	else return 0;
 }
 
-bool IsValidEntityIndex(int entity)
+bool IsValidEntityEx(int entity)
 {
-	return (MaxClients+1 <= entity <= g_iMaxEntities);
-}
-
-void ClearWitchDamage(int iWitch)
-{
-	for (int i = 1; i <= MaxClients; i++)
+	if (entity > MaxClients)
 	{
-		g_fWitchDamage[iWitch][i] = 0.0;
+		return IsValidEntity(entity);
 	}
-}
-
-void ClearTankDamage(int iTank)
-{
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		g_iTankDamage[iTank][i] = 0;
-	}
+	return false;
 }
 
 bool IsValidSI(int client)
@@ -534,6 +524,12 @@ bool IsValidSur(int client)
 int GetZombieClass(int client)
 {
 	return GetEntProp(client, Prop_Send, "m_zombieClass");
+}
+
+Action Cmd_ClearMvp(int client, int args)
+{
+	Event_RoundStart(view_as<Event>(0), "", true);
+	return Plugin_Handled;
 }
 
 enum struct SurKillData
