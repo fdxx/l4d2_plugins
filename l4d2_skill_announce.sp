@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.9"
+#define VERSION "1.0"
 
 #include <sourcemod>
 #include <sdkhooks>
@@ -183,11 +183,11 @@ void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 
 public void OnClientPutInServer(int client)
 {
-	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
-	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+	SDKUnhook(client, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive);
+	SDKHook(client, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive);
 }
 
-Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamageAlive(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if (damage <= 0.0) return Plugin_Continue;
 
@@ -260,7 +260,7 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 			g_bSkeetDead[iVictim] = false;
 
 			iClass = GetZombieClass(iVictim);
-			if (iClass == JOCKEY || iClass == HUNTER)
+			if (iClass == HUNTER || iClass == JOCKEY)
 			{
 				iAttacker = GetClientOfUserId(event.GetInt("attacker"));
 				if (IsValidSur(iAttacker) && !IsFakeClient(iAttacker) && IsPlayerAlive(iAttacker))
@@ -312,15 +312,15 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 										SortCustom2D(iAssisterData, iAssisterCount, SortByDamageDesc);
 
 										static char sAssisterString[256], sBuffer[128];
-										FormatEx(sAssisterString, sizeof(sAssisterString), "%N (%i dmg /%i shot%s)", iAssisterData[0][0], iAssisterData[0][1], iAssisterData[0][2], (iAssisterData[0][2] == 1 ? "" : "s"));
+										FormatEx(sAssisterString, sizeof(sAssisterString), "%N (%i dmg/%i shot%s)", iAssisterData[0][0], iAssisterData[0][1], iAssisterData[0][2], (iAssisterData[0][2] == 1 ? "" : "s"));
 
 										for (i = 1; i < iAssisterCount; i++)
 										{
-											FormatEx(sBuffer, sizeof(sBuffer), ", %N (%i dmg /%i shot%s)", iAssisterData[i][0], iAssisterData[i][1], iAssisterData[i][2], (iAssisterData[i][2] == 1 ? "" : "s"));
+											FormatEx(sBuffer, sizeof(sBuffer), ", %N (%i dmg/%i shot%s)", iAssisterData[i][0], iAssisterData[i][1], iAssisterData[i][2], (iAssisterData[i][2] == 1 ? "" : "s"));
 											StrCat(sAssisterString, sizeof(sAssisterString), sBuffer);
 										}
 
-										CPrintToChatAll("{orange}★ {olive}%N {blue}teamskeeted {olive}%N {default}for {orange}%i {default}damage in {orange}%i {default}shot%s. {blue}Assisted by: {default}%s", iAttacker, iVictim, g_iHunterDamage[iVictim][iAttacker], g_iShotsDealt[iVictim][iAttacker], (g_iShotsDealt[iVictim][iAttacker] == 1 ? "" : "s"), sAssisterString);
+										CPrintToChatAll("{orange}★ {olive}%N {blue}teamskeeted {olive}%N {default}for {orange}%i {default}dmg in {orange}%i {default}shot%s. {blue}Assisted by: {default}%s", iAttacker, iVictim, g_iHunterDamage[iVictim][iAttacker], g_iShotsDealt[iVictim][iAttacker], (g_iShotsDealt[iVictim][iAttacker] == 1 ? "" : "s"), sAssisterString);
 									}
 									else
 									{
