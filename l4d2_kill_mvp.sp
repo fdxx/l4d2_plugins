@@ -6,7 +6,7 @@
 #include <multicolors>
 #include <left4dhooks>
 
-#define VERSION "2.1"
+#define VERSION "2.2"
 
 enum
 {
@@ -157,8 +157,8 @@ Action Cmd_ShowTotalDamageRank(int client, int args)
 
 public void OnClientPutInServer(int client)
 {
-	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
-	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+	SDKUnhook(client, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive);
+	SDKHook(client, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive);
 }
 
 void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -173,8 +173,7 @@ void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-//火的伤害统计不准确，只有站在火里才计算
-Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamageAlive(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if (damage <= 0.0) return Plugin_Continue;
 
@@ -184,7 +183,7 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 		{
 			static int iVictimHealth;
 			iVictimHealth = GetEntProp(victim, Prop_Data, "m_iHealth");
-			
+
 			switch (GetZombieClass(victim))
 			{
 				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
@@ -194,19 +193,24 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 				}
 				case TANK:
 				{
-					if (g_bTankAlive[victim] && !GetEntProp(victim, Prop_Send, "m_isIncapacitated"))
+					static int iLastAttacker[MAXPLAYERS];
+					static int iVictimHealthPost[MAXPLAYERS];
+
+					if (!g_bTankAlive[victim]) return Plugin_Continue;
+
+					if (!GetEntProp(victim, Prop_Send, "m_isIncapacitated"))
 					{
-						if (damage >= float(iVictimHealth))
-						{
-							g_bTankAlive[victim] = false;
-							if (g_bTotalDamageWithTank) g_iTotalDamage[attacker] += iVictimHealth;
-							if (g_bTankDamageAnnounce) g_iTankDamage[victim][attacker] += iVictimHealth;
-						}
-						else
-						{
-							if (g_bTotalDamageWithTank) g_iTotalDamage[attacker] += RoundToFloor(damage);
-							if (g_bTankDamageAnnounce) g_iTankDamage[victim][attacker] += RoundToFloor(damage);
-						}
+						iLastAttacker[victim] = attacker;
+						iVictimHealthPost[victim] = iVictimHealth - RoundToFloor(damage);
+						
+						if (g_bTotalDamageWithTank) g_iTotalDamage[attacker] += RoundToFloor(damage);
+						if (g_bTankDamageAnnounce) g_iTankDamage[victim][attacker] += RoundToFloor(damage);
+					}
+					else
+					{
+						g_bTankAlive[victim] = false;
+						if (g_bTotalDamageWithTank) g_iTotalDamage[iLastAttacker[victim]] += iVictimHealthPost[victim];
+						if (g_bTankDamageAnnounce) g_iTankDamage[victim][iLastAttacker[victim]] += iVictimHealthPost[victim];
 					}
 				}
 			}
@@ -215,12 +219,7 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 		{
 			if (attacker != victim)
 			{
-				static CountdownTimer Timer;
-				Timer = L4D2Direct_GetInvulnerabilityTimer(victim);
-				if (Timer != CTimer_Null && CTimer_IsElapsed(Timer))
-				{
-					g_iAttackerFFDamage[attacker] += RoundToFloor(damage);
-				}
+				g_iAttackerFFDamage[attacker] += RoundToFloor(damage);
 			}
 		}
 	}
@@ -303,12 +302,12 @@ void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
 	{
 		g_bWitchAlive[iWitch] = true;
 		ClearWitchDamage(iWitch);
-		SDKUnhook(iWitch, SDKHook_OnTakeDamage, OnTakeDamage_Witch);
-		SDKHook(iWitch, SDKHook_OnTakeDamage, OnTakeDamage_Witch);
+		SDKUnhook(iWitch, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive_Witch);
+		SDKHook(iWitch, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive_Witch);
 	}
 }
 
-Action OnTakeDamage_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamageAlive_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if (damage <= 0.0 || !g_bWitchAlive[victim]) return Plugin_Continue;
 
