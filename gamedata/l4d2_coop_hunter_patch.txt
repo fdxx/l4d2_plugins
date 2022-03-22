@@ -4,6 +4,18 @@
 	{
 		"MemPatches"
 		{
+			"CTerrorPlayer::OnLungeStart::HasPlayerControlledZombies"
+			{
+				"signature" "CTerrorPlayer::OnLungeStart"
+
+				"linux"
+				{
+					"offset"	"1Bh"
+					"verify"	"\x0F\x84\xBF\x01\x00\x00"
+					"patch"		"\x90\x90\x90\x90\x90\x90"
+				}
+			}
+
 			"CLunge::IsAbilityReadyToFire::HasPlayerControlledZombies"
 			{
 				"signature" "CLunge::IsAbilityReadyToFire"
@@ -16,14 +28,14 @@
 				}
 			}
 
-			"CTerrorPlayer::OnLungeStart::HasPlayerControlledZombies"
+			"CTerrorPlayer::OnPouncedOnSurvivor::HasPlayerControlledZombies"
 			{
-				"signature" "CTerrorPlayer::OnLungeStart"
+				"signature" "CTerrorPlayer::OnPouncedOnSurvivor"
 
 				"linux"
 				{
-					"offset"	"1Bh"
-					"verify"	"\x0F\x84\xBF\x01\x00\x00"
+					"offset"	"4F6h"
+					"verify"	"\x0F\x84\x47\x01\x00\x00"
 					"patch"		"\x90\x90\x90\x90\x90\x90"
 				}
 			}
@@ -31,16 +43,22 @@
 
 		"Signatures"
 		{
+			"CTerrorPlayer::OnLungeStart"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer12OnLungeStartEv"
+			}
+
 			"CLunge::IsAbilityReadyToFire"
 			{
 				"library"	"server"
 				"linux"		"@_ZNK6CLunge20IsAbilityReadyToFireEv"
 			}
 
-			"CTerrorPlayer::OnLungeStart"
+			"CTerrorPlayer::OnPouncedOnSurvivor"
 			{
 				"library"	"server"
-				"linux"		"@_ZN13CTerrorPlayer12OnLungeStartEv"
+				"linux"		"@_ZN13CTerrorPlayer19OnPouncedOnSurvivorEPS_"
 			}
 		}
 	}
