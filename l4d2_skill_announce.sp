@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 #include <sourcemod>
 #include <sdkhooks>
@@ -218,26 +218,15 @@ MRESReturn mreOnEventKilledPre(int client)
 {
 	if (IsValidSI(client))
 	{
-		switch (GetZombieClass(client))
+		static int iClass;
+		iClass = GetZombieClass(client);
+
+		if (iClass == HUNTER || iClass == JOCKEY)
 		{
-			case JOCKEY:
-			{
-				// GetEntProp(client, Prop_Send, "m_duckUntilOnGround")
-				if (IsInTheAir(client))
-				{
-					g_bSkeetDead[client] = true;
-				}
-			}
-			case HUNTER:
-			{
-				if (GetEntProp(client, Prop_Send, "m_isAttemptingToPounce"))
-				{
-					g_bSkeetDead[client] = true;
-				}
-			}
+			if (IsInTheAir(client, iClass))
+				g_bSkeetDead[client] = true;
 		}
 	}
-
 	return MRES_Ignored;
 }
 
@@ -357,13 +346,18 @@ void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-bool IsInTheAir(int client)
+bool IsInTheAir(int client, int iClass)
 {
 	if ((GetEntProp(client, Prop_Data, "m_fFlags") & FL_ONGROUND) > 0)
 		return false;
 	
 	static int iVictim;
-	iVictim = GetEntPropEnt(client, Prop_Send, "m_jockeyVictim");
+	switch (iClass)
+	{
+		case HUNTER: iVictim = GetEntPropEnt(client, Prop_Send, "m_pounceVictim");
+		case JOCKEY: iVictim = GetEntPropEnt(client, Prop_Send, "m_jockeyVictim");
+	}
+
 	if (IsValidSur(iVictim) && IsPlayerAlive(iVictim))
 		return false;
 
