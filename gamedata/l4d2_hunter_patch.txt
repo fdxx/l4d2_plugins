@@ -1,0 +1,135 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"MemPatches"
+		{
+			// CTerrorPlayer::OnLungeStart::HasPlayerControlledZombies
+
+			"convert_leap_always"
+			{
+				"signature" "CTerrorPlayer::OnLungeStart"
+
+				"linux"
+				{
+					"offset"	"1Bh"
+					"verify"	"\x0F\x84\xBF\x01\x00\x00"
+					"patch"		"\x90\x90\x90\x90\x90\x90"
+				}
+			}
+			"convert_leap_never"
+			{
+				"signature" "CTerrorPlayer::OnLungeStart"
+
+				"linux"
+				{
+					"offset"	"1Bh"
+					"verify"	"\x0F\x84\xBF\x01\x00\x00"
+					"patch"		"\x90\xE9\xBF\x01\x00\x00"
+				}
+			}
+
+			// CLunge::IsAbilityReadyToFire::HasPlayerControlledZombies
+
+			"crouch_pounce_always"
+			{
+				"signature" "CLunge::IsAbilityReadyToFire"
+
+				"linux"
+				{
+					"offset"	"CAh"
+					"verify"	"\x74\x0B"
+					"patch"		"\x90\x90"
+				}
+			}
+			"crouch_pounce_never"
+			{
+				"signature" "CLunge::IsAbilityReadyToFire"
+
+				"linux"
+				{
+					"offset"	"CAh"
+					"verify"	"\x74\x0B"
+					"patch"		"\xEB\x0B"
+				}
+			}
+
+			// CTerrorPlayer::OnPouncedOnSurvivor::HasPlayerControlledZombies
+
+			"bonus_damage_always"
+			{
+				"signature" "CTerrorPlayer::OnPouncedOnSurvivor"
+
+				"linux"
+				{
+					"offset"	"4F6h"
+					"verify"	"\x0F\x84\x47\x01\x00\x00"
+					"patch"		"\x90\x90\x90\x90\x90\x90"
+				}
+			}
+			"bonus_damage_never"
+			{
+				"signature" "CTerrorPlayer::OnPouncedOnSurvivor"
+
+				"linux"
+				{
+					"offset"	"4F6h"
+					"verify"	"\x0F\x84\x47\x01\x00\x00"
+					"patch"		"\x90\xE9\x47\x01\x00\x00"
+				}
+			}
+
+			// CTerrorPlayer::OnTakeDamageInternal::BotCheck
+
+			"pounce_interrupt_always"
+			{
+				"signature" "CTerrorPlayer::OnTakeDamageInternal"
+
+				"linux"
+				{
+					"offset"	"782h"
+					"verify"	"\x75\x92"
+					"patch"		"\x90\x90"
+				}
+			}
+			"pounce_interrupt_never"
+			{
+				"signature" "CTerrorPlayer::OnTakeDamageInternal"
+
+				"linux"
+				{
+					"offset"	"782h"
+					"verify"	"\x75\x92"
+					"patch"		"\xEB\x92"
+				}
+			}
+		}
+
+		"Signatures"
+		{
+			"CTerrorPlayer::OnLungeStart"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer12OnLungeStartEv"
+			}
+
+			"CLunge::IsAbilityReadyToFire"
+			{
+				"library"	"server"
+				"linux"		"@_ZNK6CLunge20IsAbilityReadyToFireEv"
+			}
+
+			"CTerrorPlayer::OnPouncedOnSurvivor"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer19OnPouncedOnSurvivorEPS_"
+			}
+
+			"CTerrorPlayer::OnTakeDamageInternal"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer20OnTakeDamageInternalER15CTakeDamageInfo.part.779"
+			}
+		}
+	}
+}
