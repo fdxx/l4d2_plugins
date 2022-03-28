@@ -27,6 +27,7 @@ public Plugin myinfo =
 	author = "fdxx",
 	description = "Patched some hunter function.",
 	version = VERSION,
+	url = "https://forums.alliedmods.net/showthread.php?t=337071"
 }
 
 public void OnPluginStart()
