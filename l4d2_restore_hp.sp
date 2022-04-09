@@ -2,11 +2,19 @@
 #pragma newdecls required
 
 #include <sourcemod>
+#include <sdkhooks>
 
-#define VERSION "1.3"
+#define VERSION "1.4"
 
-ConVar CvarHealthLimit, CvarAddHealthFlame, CvarDamageInfo;
-int g_iMaxHealthLimit, g_iAddHealthFlame;
+ConVar
+	g_cvHealthLimit,
+	g_cvAddHealthFlame,
+	g_cvDamageInfo;
+
+int
+	g_iMaxHealthLimit,
+	g_iAddHealthFlame;
+
 bool g_bDamageInfo;
 
 #define RED_HEALTH		1
@@ -19,64 +27,64 @@ public Plugin myinfo =
 	author = "fdxx",
 	description = "Attack special infected to restore health",
 	version = VERSION,
-	url = ""
 }
 
 public void OnPluginStart()
 {
-	CreateConVar("l4d2_restore_hp_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+	CreateConVar("l4d2_restore_hp_version", VERSION, "Version", FCVAR_NONE | FCVAR_DONTRECORD);
 
-	CvarHealthLimit = CreateConVar("l4d2_restore_hp_limit", "200", "达到多少血量后不再加血", FCVAR_NONE);
-	CvarAddHealthFlame = CreateConVar("l4d2_restore_hp_flame", "1", "火焰伤害加多少血", FCVAR_NONE);
-	CvarDamageInfo = CreateConVar("l4d2_restore_hp_show_info", "0", "聊天框打印加血信息", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvHealthLimit = CreateConVar("l4d2_restore_hp_limit", "200", "Max health limit", FCVAR_NONE);
+	g_cvAddHealthFlame = CreateConVar("l4d2_restore_hp_flame", "1", "How much does flame damage add health", FCVAR_NONE);
+	g_cvDamageInfo = CreateConVar("l4d2_restore_hp_show_info", "0", "Chat box print info", FCVAR_NONE, true, 0.0, true, 1.0);
 
 	GetCvars();
 
-	CvarHealthLimit.AddChangeHook(ConVarChanged);
-	CvarAddHealthFlame.AddChangeHook(ConVarChanged);
-	CvarDamageInfo.AddChangeHook(ConVarChanged);
+	g_cvHealthLimit.AddChangeHook(ConVarChanged);
+	g_cvAddHealthFlame.AddChangeHook(ConVarChanged);
+	g_cvDamageInfo.AddChangeHook(ConVarChanged);
 
-	HookEvent("player_hurt", Event_PlayerHurt);
-
+	//HookEvent("player_hurt", Event_PlayerHurt);
 	//AutoExecConfig(true, "l4d2_restore_hp");
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
 
 void GetCvars()
 {
-	g_iMaxHealthLimit = CvarHealthLimit.IntValue;
-	g_iAddHealthFlame = CvarAddHealthFlame.IntValue;
-	g_bDamageInfo = CvarDamageInfo.BoolValue;
+	g_iMaxHealthLimit = g_cvHealthLimit.IntValue;
+	g_iAddHealthFlame = g_cvAddHealthFlame.IntValue;
+	g_bDamageInfo = g_cvDamageInfo.BoolValue;
 }
 
-public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
+public void OnClientPutInServer(int client)
 {
-	static int iDamage, iVictim, iAttacker, iAttackerPreHealth, iHealthLevel, iAddHealth, iAttackerPostHealth;
-	static char sWeapon[64];
+	SDKUnhook(client, SDKHook_OnTakeDamageAlivePost, OnTakeDamageAlivePost);
+	SDKHook(client, SDKHook_OnTakeDamageAlivePost, OnTakeDamageAlivePost);
+}
 
-	iDamage = event.GetInt("dmg_health");
-	if (iDamage <= 1 || iDamage > 2000) return Plugin_Continue; //排除异常伤害
+void OnTakeDamageAlivePost(int victim, int attacker, int inflictor, float damage, int damagetype)
+{
+	static int iAttackerHealthPre, iHealthLevel, iAddHealth, iAttackerHealthPost;
 
-	iVictim = GetClientOfUserId(event.GetInt("userid"));
+	if (damage <= 1.0 || damage > 2000.0) return;
 
-	if (IsValidSI(iVictim) && IsPlayerAlive(iVictim))
+	if (IsValidSI(victim) && IsPlayerAlive(victim))
 	{
-		iAttacker = GetClientOfUserId(event.GetInt("attacker"));
+		if (GetEntProp(victim, Prop_Send, "m_zombieClass") == 8 && GetEntProp(victim, Prop_Send, "m_isIncapacitated"))
+			return;
 
-		if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker) && !GetEntProp(iAttacker, Prop_Send, "m_isIncapacitated"))
+		if (IsValidSur(attacker) && IsPlayerAlive(attacker) && !GetEntProp(attacker, Prop_Send, "m_isIncapacitated"))
 		{
-			iAttackerPreHealth = GetEntProp(iAttacker, Prop_Data, "m_iHealth");
-			if (iAttackerPreHealth >= g_iMaxHealthLimit) return Plugin_Continue;
+			iAttackerHealthPre = GetEntProp(attacker, Prop_Data, "m_iHealth");
+			if (iAttackerHealthPre >= g_iMaxHealthLimit) return;
 
-			event.GetString("weapon", sWeapon, sizeof(sWeapon));
-			iHealthLevel = GetHealthStatus(iAttackerPreHealth);
+			iHealthLevel = GetHealthStatus(iAttackerHealthPre);
 			iAddHealth = 0;
 
-			if (strcmp(sWeapon, "melee") == 0)
+			if (damagetype & DMG_SLASH || damagetype & DMG_CLUB)
 			{
 				switch (iHealthLevel)
 				{
@@ -85,7 +93,7 @@ public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcas
 					case RED_HEALTH: iAddHealth = 25;
 				}
 			}
-			else if (strcmp(sWeapon, "entityflame") == 0 || strcmp(sWeapon, "inferno") == 0) //火伤害
+			else if (damagetype & DMG_BURN)
 			{
 				iAddHealth = g_iAddHealthFlame;
 			}
@@ -93,22 +101,21 @@ public Action Event_PlayerHurt(Event event, const char[] name, bool dontBroadcas
 			{
 				switch (iHealthLevel)
 				{
-					case GREEN_HEALTH: iAddHealth = RoundToCeil(iDamage * 0.03);
-					case YELLOW_HEALTH: iAddHealth = RoundToCeil(iDamage * 0.05);
-					case RED_HEALTH: iAddHealth = RoundToCeil(iDamage * 0.08);
+					case GREEN_HEALTH: iAddHealth = RoundToCeil(damage * 0.03);
+					case YELLOW_HEALTH: iAddHealth = RoundToCeil(damage * 0.05);
+					case RED_HEALTH: iAddHealth = RoundToCeil(damage * 0.08);
 				}
 			}
 
-			iAttackerPostHealth = iAttackerPreHealth + iAddHealth;
-			if (iAttackerPostHealth > g_iMaxHealthLimit) iAttackerPostHealth = g_iMaxHealthLimit;
+			iAttackerHealthPost = iAttackerHealthPre + iAddHealth;
+			if (iAttackerHealthPost > g_iMaxHealthLimit) iAttackerHealthPost = g_iMaxHealthLimit;
 
-			SetEntProp(iAttacker, Prop_Data, "m_iHealth", iAttackerPostHealth);
+			SetEntProp(attacker, Prop_Data, "m_iHealth", iAttackerHealthPost);
 
 			if (g_bDamageInfo)
-				PrintToChat(iAttacker, "\x01你使用 \x04%s \x01对 \x05%N \x01造成 \x04%i \x01伤害, \x01加 \x04%i \x01血", sWeapon, iVictim, iDamage, iAddHealth);
+				PrintToChat(attacker, "%N attack %N, damage = %.1f, AddHealth = %i", attacker, victim, damage, iAddHealth);
 		}
 	}
-	return Plugin_Continue;
 }
 
 int GetHealthStatus(int iHealth)
