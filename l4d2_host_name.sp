@@ -3,39 +3,47 @@
 
 #include <sourcemod>
 
-#define VERSION "1.2"
+#define VERSION "1.3"
 
-ConVar CvarDynamicName;
-ConVar HostNameCvar, CvarMaxSpecial, CvarSpecialSpawnTime;
-char g_sHostName[256];
-bool g_bDynamicName;
+ConVar
+	g_cvHostName,
+	g_cvDynamicName,
+	g_cvMaxSpecial,
+	g_cvSpawnTime;
+
+char
+	g_sHostName[256];
+
+bool
+	g_bDynamicName;
 
 public Plugin myinfo = 
 {
 	name = "L4D2 host name",
 	author = "fdxx",
-	description = "",
 	version = VERSION,
-	url = ""
 }
 
 public void OnPluginStart()
 {
-	CreateConVar("l4d2_host_name_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-
-	CvarDynamicName = CreateConVar("l4d2_dynamic_host_name", "1", "将特感配置添加到服务器名字", FCVAR_NONE, true, 0.0, true, 1.0);
-	g_bDynamicName = CvarDynamicName.BoolValue;
-	CvarDynamicName.AddChangeHook(ConVarChanged);
-
-	RegConsoleCmd("sm_curhostname", curhostname);
 	GetCustomHostName();
+
+	CreateConVar("l4d2_host_name_version", VERSION, "Version", FCVAR_NONE | FCVAR_DONTRECORD);
+
+	g_cvHostName = FindConVar("hostname");
+	g_cvDynamicName = CreateConVar("l4d2_dynamic_host_name", "1", "Add special infected configure to host name.", FCVAR_NONE, true, 0.0, true, 1.0);
+	
+	g_bDynamicName = g_cvDynamicName.BoolValue;
+	g_cvDynamicName.AddChangeHook(OnConVarChanged);
+
+	RegConsoleCmd("sm_curhostname", Cmd_GetCurHostName);
 
 	AutoExecConfig(true, "l4d2_host_name");
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	g_bDynamicName = CvarDynamicName.BoolValue;
+	g_bDynamicName = g_cvDynamicName.BoolValue;
 }
 
 void GetCustomHostName()
@@ -43,54 +51,41 @@ void GetCustomHostName()
 	char sFilePath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sFilePath, sizeof(sFilePath), "data/hostname.txt");
 
-	if (FileExists(sFilePath))
-	{
-		File file = OpenFile(sFilePath, "r");
+	if (!FileExists(sFilePath))
+		SetFailState("Failed to read hostname.txt");
 
-		if (file != null)
-		{
-			if (!file.ReadLine(g_sHostName, sizeof(g_sHostName)))
-				SetFailState("读取 hostname.txt 失败");
-		}
-		else SetFailState("读取 hostname.txt 失败");
-		
-		delete file;
-	}
-	else SetFailState("读取 hostname.txt 失败");
+	File hFile = OpenFile(sFilePath, "r");
+	if (hFile == null)
+		SetFailState("Failed to read hostname.txt");
+
+	if (!hFile.ReadLine(g_sHostName, sizeof(g_sHostName)))
+		SetFailState("Failed to read hostname.txt");
+	
+	delete hFile;
 }
 
 public void OnConfigsExecuted()
 {
-	static bool bProcessed;
+	static bool shit;
+	if (shit) return;
+	shit = true;
 
-	if (!bProcessed)
+	if (g_bDynamicName)
 	{
-		HostNameCvar = FindConVar("hostname");
+		g_cvMaxSpecial = FindConVar("l4d2_si_spawn_control_max_specials");
+		g_cvSpawnTime = FindConVar("l4d2_si_spawn_control_spawn_time");
 
-		if (HostNameCvar != null)
-		{
-			if (g_bDynamicName)
-			{
-				CvarMaxSpecial = FindConVar("l4d2_si_spawn_control_max_specials");
-				CvarSpecialSpawnTime = FindConVar("l4d2_si_spawn_control_spawn_time");
-
-				if (CvarMaxSpecial != null)
-				{
-					CvarMaxSpecial.AddChangeHook(SpecialsChanged);
-					CvarSpecialSpawnTime.AddChangeHook(SpecialsChanged);
-					SetHostName();
-				}
-				else SetFailState("l4d2_si_spawn_control plugin not loaded?"); 
-			}
-			else SetHostName();
-		}
-		else SetFailState("Not find hostname ConVar");
-
-		bProcessed = true;
+		if (g_cvMaxSpecial == null)
+			SetFailState("l4d2_si_spawn_control plugin not loaded?");
+		
+		g_cvMaxSpecial.AddChangeHook(OnSpecialsChanged);
+		g_cvSpawnTime.AddChangeHook(OnSpecialsChanged);
 	}
+
+	SetHostName();
 }
 
-public void SpecialsChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void OnSpecialsChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	SetHostName();
 }
@@ -99,18 +94,17 @@ void SetHostName()
 {
 	if (g_bDynamicName)
 	{
-		char sName[256];
-		Format(sName, sizeof(sName), "%s[%i特%.0f秒]", g_sHostName, CvarMaxSpecial.IntValue, CvarSpecialSpawnTime.FloatValue);
-		HostNameCvar.SetString(sName);
+		static char sName[256];
+		FormatEx(sName, sizeof(sName), "%s[%i特%.0f秒]", g_sHostName, g_cvMaxSpecial.IntValue, g_cvSpawnTime.FloatValue);
+		g_cvHostName.SetString(sName);
 	}
-	else HostNameCvar.SetString(g_sHostName);
+	else g_cvHostName.SetString(g_sHostName);
 }
 
-public Action curhostname(int client, int args)
+Action Cmd_GetCurHostName(int client, int args)
 {
 	char sName[256];
-	HostNameCvar.GetString(sName, sizeof(sName));
+	g_cvHostName.GetString(sName, sizeof(sName));
 	ReplyToCommand(client, "Name: %s", sName);
 	return Plugin_Handled;
 }
-
