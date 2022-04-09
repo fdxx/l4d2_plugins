@@ -3,17 +3,24 @@
 
 #include <sourcemod>
 
-#define VERSION "1.1"
+#define VERSION "1.3"
 
-ConVar CvarMaxSpecialsLimit, CvarMaxHunterLimit, CvarSpawnTimeLimit;
+#define MIN_HUNTER 1
+#define MAX_HUNTER 24
+
+#define MIN_TIME 1
+#define MAX_TIME 999
+
+ConVar
+	g_cvMaxSpecialsLimit,
+	g_cvHunterLimit,
+	g_cvSpawnTime;
 
 public Plugin myinfo = 
 {
 	name = "L4D2 Change Hunter limit",
 	author = "Dragokas, fdxx",
-	description = "",
 	version = VERSION,
-	url = ""
 }
 
 public void OnPluginStart()
@@ -23,79 +30,78 @@ public void OnPluginStart()
 
 public void OnConfigsExecuted()
 {
-	CvarMaxSpecialsLimit = FindConVar("l4d2_si_spawn_control_max_specials");
-	CvarMaxHunterLimit = FindConVar("l4d2_si_spawn_control_hunter_limit");
-	CvarSpawnTimeLimit = FindConVar("l4d2_si_spawn_control_spawn_time");
+	g_cvMaxSpecialsLimit = FindConVar("l4d2_si_spawn_control_max_specials");
+	g_cvHunterLimit = FindConVar("l4d2_si_spawn_control_hunter_limit");
+	g_cvSpawnTime = FindConVar("l4d2_si_spawn_control_spawn_time");
 
-	if (CvarMaxSpecialsLimit == null)
+	if (g_cvMaxSpecialsLimit == null)
 	{
 		SetFailState("l4d2_si_spawn_control plugin not loaded?");
 	}
 }
 
-public Action OnClientSayCommand(int client, const char[] command, const char[] sArgs)
+// 1s 1ht - 999s 24ht
+public Action OnClientSayCommand(int client, const char[] command, const char[] sSay)
 {
 	if (IsValidClient(client))
 	{
-		int iAmount, iTime;
-		if (ParseCmd_Amount(sArgs, "ht", iAmount))
+		static int iSayLen, iNumLen, iNum;
+
+		iSayLen = strlen(sSay);
+		if (2 <= iSayLen <= 4)
 		{
-			CvarMaxSpecialsLimit.SetInt(iAmount);
-			CvarMaxHunterLimit.SetInt(iAmount);
-		}
-		else if (ParseCmd_Time(sArgs, "s", iTime))
-		{
-			CvarSpawnTimeLimit.SetFloat(float(iTime));
+			switch (sSay[iSayLen-1])
+			{
+				case 't':
+				{
+					iNumLen = iSayLen - 2;
+					if (strcmp(sSay[iNumLen], "ht") == 0)
+					{
+						if (IsInteger(sSay, iNumLen))
+						{
+							iNum = StringToInt(sSay);
+							if (MIN_HUNTER <= iNum <= MAX_HUNTER)
+							{
+								g_cvMaxSpecialsLimit.IntValue = iNum;
+								g_cvHunterLimit.IntValue = iNum;
+								//PrintToChatAll("iNum = %i", iNum);
+							}
+						}
+					}
+				}
+				case 's':
+				{
+					iNumLen = iSayLen - 1;
+					if (strcmp(sSay[iNumLen], "s") == 0)
+					{
+						if (IsInteger(sSay, iNumLen))
+						{
+							iNum = StringToInt(sSay);
+							if (MIN_TIME <= iNum <= MAX_TIME)
+							{
+								g_cvSpawnTime.FloatValue = float(iNum);
+								//PrintToChatAll("iNum = %i", iNum);
+							}
+						}
+					}
+				}
+			}
 		}
 	}
-
 	return Plugin_Continue;	
 }
 
-bool ParseCmd_Amount(const char[] cmdSource, char[] cmdSample, int &iAmount)
+bool IsInteger(const char[] sBuffer, int iCompareLen)
 {
-	const int NUM_MIN = 1;
-	const int NUM_MAX = 24;
-	const int NUMLEN_MAX = 2;
-	
-	int lenSrc = strlen(cmdSource);
-	int CMDLEN = strlen(cmdSample);
-	
-	if (CMDLEN + 1 <= lenSrc <= CMDLEN + NUMLEN_MAX)
-	{
-		if (strcmp(cmdSource[lenSrc-CMDLEN], cmdSample, true) == 0)
-		{
-			iAmount = StringToInt(cmdSource);
-			if (NUM_MIN <= iAmount <= NUM_MAX)
-			{
-				return true;
-			}
-		}
-	}
-	return false;
-}
+	static int i;
 
-bool ParseCmd_Time(const char[] cmdSource, char[] cmdSample, int &iTime)
-{
-	const int NUM_MIN = 1;
-	const int NUM_MAX = 999;
-	const int NUMLEN_MAX = 3;
-	
-	int lenSrc = strlen(cmdSource);
-	int CMDLEN = strlen(cmdSample);
-	
-	if (CMDLEN + 1 <= lenSrc <= CMDLEN + NUMLEN_MAX)
+	for (i = 0; i < iCompareLen; i++)
 	{
-		if (strcmp(cmdSource[lenSrc-CMDLEN], cmdSample, true) == 0)
-		{
-			iTime = StringToInt(cmdSource);
-			if (NUM_MIN <= iTime <= NUM_MAX)
-			{
-				return true;
-			}
-		}
+		if (!IsCharNumeric(sBuffer[i]) )
+			return false;
 	}
-	return false;
+
+	return true;
 }
 
 bool IsValidClient(int client)
