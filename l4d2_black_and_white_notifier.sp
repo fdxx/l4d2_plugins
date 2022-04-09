@@ -5,7 +5,7 @@
 #include <sdktools>
 #include <sdkhooks>
 
-#define VERSION "0.4"
+#define VERSION "0.5"
 
 ConVar g_cvGlow, g_cvSkullIcon, g_cvSurMaxIncapCount;
 int g_iSurMaxIncapCount;
@@ -197,7 +197,7 @@ void SetSkullIcon(int client)
 		AcceptEntityInput(iEnt, "SetParent", client);
 		SetVariantString("eyes");
 		AcceptEntityInput(iEnt, "SetParentAttachment");
-		TeleportEntity(iEnt, view_as<float>({-3.0, 0.0, 6.0}), NULL_VECTOR, NULL_VECTOR);
+		TeleportEntity(iEnt, view_as<float>({-3.0, 0.0, 9.0}), NULL_VECTOR, NULL_VECTOR);
 
 		SDKUnhook(iEnt, SDKHook_SetTransmit, Hook_SetTransmit);
 		SDKHook(iEnt, SDKHook_SetTransmit, Hook_SetTransmit);
