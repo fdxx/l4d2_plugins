@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define DEBUG 0
-#define VERSION "2.6"
+#define VERSION "2.8"
 
 #include <sourcemod>
 #include <left4dhooks>
@@ -48,7 +48,8 @@ bool
 	g_bRadicalSpawn,
 	g_bFinalMap,
 	g_bShowSIhud[MAXPLAYERS+1],
-	g_bLeftSafeArea;
+	g_bLeftSafeArea,
+	g_bMark[MAXPLAYERS+1];
 
 Handle
 	g_hSpawnSITimer[MAXPLAYERS+1],
@@ -292,6 +293,11 @@ public void OnMapEnd()
 	Reset();
 }
 
+public void OnClientDisconnect(int client)
+{
+	g_bMark[client] = false;
+}
+
 void Reset()
 {
 	g_bLeftSafeArea = false;
@@ -303,6 +309,7 @@ void Reset()
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
 		delete g_hSpawnSITimer[i];
+		g_bMark[i] = false;
 	}
 
 	g_bCanSpawn = false;
@@ -357,18 +364,22 @@ Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 
 		if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3 && IsFakeClient(client))
 		{
-			iClass = GetZombieClass(client);
-			switch (iClass)
+			if (g_bMark[client])
 			{
-				case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
+				iClass = GetZombieClass(client);
+				switch (iClass)
 				{
-					SpecialDeathSpawn(g_fSpawnTime);
+					case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
+					{
+						SpecialDeathSpawn(g_fSpawnTime);
 
-					// 踢出bot释放客户端索引，排除spitter避免无声痰
-					if (iClass != SPITTER) CreateTimer(0.2, kickbot, userid);
+						// 踢出bot释放客户端索引，排除spitter避免无声痰
+						if (iClass != SPITTER) CreateTimer(0.2, kickbot, userid);
+					}
 				}
 			}
 		}
+		g_bMark[client] = false;
 	}
 	return Plugin_Continue;
 }
@@ -417,7 +428,8 @@ void SpawnSpecial()
 
 			if (1 <= iSpawnClass <= 6)
 			{
-				bool bFindSpawnPos, bSpawnSuccess;
+				bool bFindSpawnPos;
+				int index;
 				
 				if (g_bRadicalSpawn && g_iNavAreaCount > 0)
 				{
@@ -436,11 +448,13 @@ void SpawnSpecial()
 				if (bFindSpawnPos)
 				{
 					g_bCanSpawn = true;
-					bSpawnSuccess = L4D2_SpawnSpecial(iSpawnClass, fSpawnPos, NULL_VECTOR) > 0;
+					index = L4D2_SpawnSpecial(iSpawnClass, fSpawnPos, NULL_VECTOR);
 					g_bCanSpawn = false;
+
+					if (index > 0) g_bMark[index] = true;
 				}
 
-				if (!bFindSpawnPos || !bSpawnSuccess)
+				if (!bFindSpawnPos || index <= 0)
 				{
 					//LogToFileEx_Debug("产生特感失败, 重新产生, bFindSpawnPos: %b, bSpawnSuccess: %b", bFindSpawnPos, bSpawnSuccess);
 					CreateTimer(1.0, ReSpawnSpecial_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -674,7 +688,7 @@ int FindSpawnClass()
 
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i) && g_bMark[i])
 		{
 			iClass = GetZombieClass(i);
 			if (1 <= iClass <= 6)
@@ -842,7 +856,7 @@ int GetAliveSpecialsTotal()
 
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i) && g_bMark[i])
 		{
 			switch (GetZombieClass(i))
 			{
@@ -995,4 +1009,18 @@ stock void LogToFileEx_Debug(const char[] sMsg, any ...)
 	#if DEBUG
 	LogToFileEx(g_sLogPath, "%s", buffer);
 	#endif
+}
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	CreateNative("L4D2_CanSpawnSpecial", Native_CanSpawnSpecial);
+	return APLRes_Success;
+}
+
+// L4D2_CanSpawnSpecial(bool bCanSpawn);
+int Native_CanSpawnSpecial(Handle plugin, int numParams)
+{
+	bool bCanSpawn = GetNativeCell(1);
+	g_bCanSpawn = bCanSpawn;
+	return 0;
 }
