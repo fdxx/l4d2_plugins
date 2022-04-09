@@ -7,7 +7,7 @@
 #include <dhooks>
 #include <multicolors>
 
-#define VERSION "0.9"
+#define VERSION "1.0"
 
 ConVar
 	g_cvGameMode,
@@ -25,23 +25,29 @@ int
 	g_iSpawnTime,
 	g_iGlowEntRef[MAXPLAYERS+1],
 	g_iSurMaxIncapCount;
-	//g_iSpawnablePZ;
 
 bool
 	g_bBlockOtherRespawn,
 	g_bLeftSafeArea,
 	g_bAdminImmunity;
-	//g_bAllowSpawn;
 
 Handle
 	g_hSpawnSITimer[MAXPLAYERS+1],
 	g_hSurGlowCheck,
 	g_hSDKSetPreSpawnClass;
 
-ArrayList g_aJoinTankList;
-char g_sDefMode[128];
-DynamicDetour g_dSpawnPlayerZombieScan;
-float g_fMapStartTime;
+float
+	g_fBugExploitTime[MAXPLAYERS+1][2];
+
+ArrayList
+	g_aJoinTankList;
+
+char
+	g_sDefMode[128];
+
+DynamicDetour
+	g_dPlayerZombieAbortControl,
+	g_dSpawnPlayerZombieScan;
 
 enum
 {
@@ -53,12 +59,7 @@ enum
 	CHARGER	= 6,
 	TANK	= 8,
 };
-/*
-static const char g_sSpecialName[][] =
-{
-	"", "smoker", "boomer", "hunter", "spitter", "jockey", "charger"
-};
-*/
+
 public Plugin myinfo = 
 {
 	name = "L4D2 Control Zombies",
@@ -124,17 +125,23 @@ public void OnPluginStart()
 void LoadGameData()
 {
 	GameData hGameData = new GameData("l4d2_control_zombies");
-
 	if (hGameData == null)
 		SetFailState("加载 l4d2_control_zombies.txt 文件失败");
+
 	g_dSpawnPlayerZombieScan = DynamicDetour.FromConf(hGameData, "ForEachTerrorPlayer<SpawnablePZScan>");
 	if (g_dSpawnPlayerZombieScan == null)
 		SetFailState("加载 ForEachTerrorPlayer<SpawnablePZScan> 签名失败");
 	if (!g_dSpawnPlayerZombieScan.Enable(Hook_Pre, mreOnSpawnPlayerZombieScanPre))
 		SetFailState("启用 mreOnSpawnPlayerZombieScanPre 失败");
-	//if (!g_dSpawnPlayerZombieScan.Enable(Hook_Post, mreOnSpawnPlayerZombieScanPost))
-		//SetFailState("启用 mreOnSpawnPlayerZombieScanPost 失败");
 
+	g_dPlayerZombieAbortControl = DynamicDetour.FromConf(hGameData, "CTerrorPlayer::PlayerZombieAbortControl");
+	if (g_dPlayerZombieAbortControl == null)
+		SetFailState("加载 CTerrorPlayer::PlayerZombieAbortControl 签名失败");
+	if (!g_dPlayerZombieAbortControl.Enable(Hook_Pre, mreOnPlayerZombieAbortControlPre))
+		SetFailState("启用 mreOnPlayerZombieAbortControlPre 失败");
+	if (!g_dPlayerZombieAbortControl.Enable(Hook_Post, mreOnPlayerZombieAbortControlPost))
+		SetFailState("启用 mreOnPlayerZombieAbortControlPost 失败");
+	
 	StartPrepSDKCall(SDKCall_Player);
 	if (PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CTerrorPlayer::SetPreSpawnClass") == false)
 		SetFailState("Failed to find signature: CTerrorPlayer::SetPreSpawnClass");
@@ -187,17 +194,12 @@ void GetCvars()
 	}
 }
 
-public void OnMapStart()
-{
-	g_fMapStartTime = GetGameTime();
-}
-
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	Reset();
 	CreateTimer(2.0, RemoveInfectedClips_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 	delete g_hSurGlowCheck;
-	g_hSurGlowCheck = CreateTimer(0.2, SurGlowCheck_Timer, _, TIMER_REPEAT);
+	g_hSurGlowCheck = CreateTimer(0.5, SurGlowCheck_Timer, _, TIMER_REPEAT);
 }
 
 Action RemoveInfectedClips_Timer(Handle timer)
@@ -217,7 +219,8 @@ Action SurGlowCheck_Timer(Handle timer)
 {
 	if (HasZombiePlayer())
 	{
-		for (int i = 1; i <= MaxClients; i++)
+		static int i;
+		for (i = 1; i <= MaxClients; i++)
 		{
 			if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
 			{
@@ -287,20 +290,8 @@ Action SpawnSI_Timer(Handle timer, int userid)
 					SDKCall(g_hSDKSetPreSpawnClass, client, iClass);
 					L4D_State_Transition(client, STATE_GHOST);
 
-					/*
-					g_bAllowSpawn = true;
-					FakeClientCommand(client, "spec_next");
-					if (GetEntProp(client, Prop_Send, "m_lifeState") != 1 && GetEntProp(client, Prop_Send, "m_lifeState") != 2)
-						SetEntProp(client, Prop_Send, "m_lifeState", 1);
-					g_iSpawnablePZ = client;
-					CheatCommand(client, "z_spawn_old", g_sSpecialName[iClass]);
-					g_iSpawnablePZ = 0;
-					g_bAllowSpawn = false;
-					*/
-
 					if (IsPlayerAlive(client))
 					{
-						//L4D_State_Transition(client, STATE_GHOST);
 						g_hSpawnSITimer[client] = null;
 						return Plugin_Stop;
 					}
@@ -545,66 +536,8 @@ MRESReturn mreOnSpawnPlayerZombieScanPre()
 	if (g_bBlockOtherRespawn)
 		return MRES_Supercede;
 	return MRES_Ignored;
-
-	/*
-	if (!g_bAllowSpawn && g_bBlockOtherRespawn)
-		return MRES_Supercede;
-
-	vSpawnablePZScanProtect(0);
-	return MRES_Ignored;
-	*/
-}
-/*
-MRESReturn mreOnSpawnPlayerZombieScanPost()
-{
-	vSpawnablePZScanProtect(1);
-	return MRES_Ignored;
 }
 
-void vSpawnablePZScanProtect(int iState)
-{
-	static int i;
-	static bool bResetGhost[MAXPLAYERS + 1];
-	static bool bResetLifeState[MAXPLAYERS + 1];
-
-	switch (iState)
-	{
-		case 0: 
-		{
-			for (i = 1; i <= MaxClients; i++)
-			{
-				if (i == g_iSpawnablePZ || !IsClientInGame(i) || IsFakeClient(i) || GetClientTeam(i) != 3)
-					continue;
-
-				if (GetEntProp(i, Prop_Send, "m_isGhost") == 1)
-				{
-					bResetGhost[i] = true;
-					SetEntProp(i, Prop_Send, "m_isGhost", 0);
-				}
-				else if (!IsPlayerAlive(i))
-				{
-					bResetLifeState[i] = true;
-					SetEntProp(i, Prop_Send, "m_lifeState", 0);
-				}
-			}
-		}
-
-		case 1: 
-		{
-			for (i = 1; i <= MaxClients; i++)
-			{
-				if (bResetGhost[i])
-					SetEntProp(i, Prop_Send, "m_isGhost", 1);
-				if (bResetLifeState[i])
-					SetEntProp(i, Prop_Send, "m_lifeState", 1);
-
-				bResetGhost[i] = false;
-				bResetLifeState[i] = false;
-			}
-		}
-	}
-}
-*/
 public Action L4D_OnEnterGhostStatePre(int client)
 {
 	if (!g_bLeftSafeArea)
@@ -690,8 +623,6 @@ void SurGlowCheck(int client)
 
 int GetSurGlowColor(int client)
 {
-	static float fFadeStartTime;
-
 	if (GetEntProp(client, Prop_Send, "m_currentReviveCount") >= g_iSurMaxIncapCount)
 	{
 		return 16777215; //白色
@@ -700,7 +631,7 @@ int GetSurGlowColor(int client)
 	{
 		return 180; //红色
 	}
-	else if ((fFadeStartTime = GetEntPropFloat(client, Prop_Send, "m_vomitFadeStart")) > g_fMapStartTime && fFadeStartTime >= GetGameTime() - 15.0)
+	else if (GetEntPropFloat(client, Prop_Send, "m_itTimer", 1) > GetGameTime())
 	{
 		return 11796635; //紫色
 	}
@@ -829,18 +760,7 @@ bool HasZombiePlayer()
 	}
 	return false;
 }
-/*
-void CheatCommand(int client, const char[] sCommand, const char[] sArguments = "")
-{
-	static int iCmdFlags, iFlagBits;
-	iFlagBits = GetUserFlagBits(client), iCmdFlags = GetCommandFlags(sCommand);
-	SetUserFlagBits(client, ADMFLAG_ROOT);
-	SetCommandFlags(sCommand, iCmdFlags & ~FCVAR_CHEAT);
-	FakeClientCommand(client, "%s %s", sCommand, sArguments);
-	SetUserFlagBits(client, iFlagBits);
-	SetCommandFlags(sCommand, iCmdFlags | FCVAR_CHEAT);
-}
-*/
+
 bool IsRealClient(int client)
 {
 	return (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client));
@@ -878,4 +798,40 @@ bool IsAdminClient(int client)
 	return false;
 }
 
+public Action L4D_OnMaterializeFromGhost(int client) //post
+{
+	if (!IsFakeClient(client))
+	{
+		g_fBugExploitTime[client][0] = GetEngineTime() + 1.5;
+	}
+	return Plugin_Continue;
+}
 
+MRESReturn mreOnPlayerZombieAbortControlPre(int client)
+{
+	if (!IsFakeClient(client) && g_fBugExploitTime[client][0] > GetEngineTime())
+	{
+		LogMessage("%N BugExploit PlayerZombieAbortControl", client);
+		return MRES_Supercede;
+	}
+	return MRES_Ignored;
+}
+
+MRESReturn mreOnPlayerZombieAbortControlPost(int client)
+{
+	if (!IsFakeClient(client))
+	{
+		g_fBugExploitTime[client][1] = GetEngineTime() + 1.5;
+	}
+	return MRES_Ignored;
+}
+
+public Action L4D_OnMaterializeFromGhostPre(int client)
+{
+	if (!IsFakeClient(client) && g_fBugExploitTime[client][1] > GetEngineTime())
+	{
+		LogMessage("%N BugExploit MaterializeFromGhost", client);
+		return Plugin_Handled;
+	}
+	return Plugin_Continue;
+}

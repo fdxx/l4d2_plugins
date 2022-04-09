@@ -7,9 +7,17 @@
 			"ForEachTerrorPlayer<SpawnablePZScan>"
 			{
 				"signature"		"ForEachTerrorPlayer<SpawnablePZScan>"
-				"callconv"		"thiscall"
+				"callconv"		"cdecl"
 				"return"		"void"
 				"this"			"ignore"
+			}
+
+			"CTerrorPlayer::PlayerZombieAbortControl"
+			{
+				"signature"		"CTerrorPlayer::PlayerZombieAbortControl"
+				"callconv"		"thiscall"
+				"return"		"void"
+				"this"			"entity"
 			}
 		}
 
@@ -31,6 +39,15 @@
 				"linux"		"@_ZN13CTerrorPlayer16SetPreSpawnClassE15ZombieClassType"
 				"windows"	"\x55\x8B\xEC\x56\x57\x8B\x7D\x08\x8B\xF1\x39\xBE\xB8\x2B\x00\x00"
 				/* 55 8B EC 56 57 8B 7D 08 8B F1 39 BE B8 2B 00 00 */
+			}
+
+			/* CTerrorPlayer::PlayerZombieAbortControl(void) */
+			"CTerrorPlayer::PlayerZombieAbortControl"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer24PlayerZombieAbortControlEv"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x56\x8B\x2A\xE8\x2A\x2A\x2A\x2A\x83\x2A\x2A\x0F\x85\x2A\x2A\x2A\x2A\x8B\x2A\x8B\x90\x2A\x2A\x2A\x2A\x8B\x2A\xFF\x2A\x84\x2A\x0F\x84\x2A\x2A\x2A\x2A\xE8"
+				/* ? ? ? ? ? ? 56 8B ? E8 ? ? ? ? 83 ? ? 0F 85 ? ? ? ? 8B ? 8B 90 ? ? ? ? 8B ? FF ? 84 ? 0F 84 ? ? ? ? E8 */
 			}
 		}
     }
