@@ -751,7 +751,8 @@ int GetZombiePlayerTotal()
 
 bool HasZombiePlayer()
 {
-	for (int i = 1; i <= MaxClients; i++)
+	static int i;
+	for (i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && GetClientTeam(i) == 3 && !IsFakeClient(i))
 		{
@@ -798,13 +799,12 @@ bool IsAdminClient(int client)
 	return false;
 }
 
-public Action L4D_OnMaterializeFromGhost(int client) //post
+public void L4D_OnMaterializeFromGhost(int client) //post
 {
 	if (!IsFakeClient(client))
 	{
 		g_fBugExploitTime[client][0] = GetEngineTime() + 1.5;
 	}
-	return Plugin_Continue;
 }
 
 MRESReturn mreOnPlayerZombieAbortControlPre(int client)
