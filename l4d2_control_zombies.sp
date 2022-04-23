@@ -6,8 +6,9 @@
 #include <sdktools>
 #include <dhooks>
 #include <multicolors>
+#include <sourcescramble> // https://github.com/nosoop/SMExt-SourceScramble
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 ConVar
 	g_cvGameMode,
@@ -127,6 +128,12 @@ void LoadGameData()
 	GameData hGameData = new GameData("l4d2_control_zombies");
 	if (hGameData == null)
 		SetFailState("加载 l4d2_control_zombies.txt 文件失败");
+
+	MemoryPatch mPatch = MemoryPatch.CreateFromConf(hGameData, "CTerrorPlayer::UpdateZombieFrustration::TryOfferingTankBot");
+	if (!mPatch.Validate())
+		SetFailState("Verify patch failed.");
+	if (!mPatch.Enable())
+		SetFailState("Enable patch failed.");
 
 	g_dSpawnPlayerZombieScan = DynamicDetour.FromConf(hGameData, "ForEachTerrorPlayer<SpawnablePZScan>");
 	if (g_dSpawnPlayerZombieScan == null)
