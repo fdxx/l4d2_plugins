@@ -6,7 +6,7 @@
 #include <multicolors>
 #include <left4dhooks>
 
-#define VERSION "2.2"
+#define VERSION "2.3"
 
 enum
 {
@@ -20,6 +20,7 @@ enum
 }
 
 int
+	g_iWitchMaxHealth,
 	g_iKillSICount[MAXPLAYERS+1],				//特感击杀数量
 	g_iKillCICount[MAXPLAYERS+1],				//普通丧尸击杀数量
 	g_iAttackerFFDamage[MAXPLAYERS+1],			//友伤
@@ -27,9 +28,11 @@ int
 	g_iTankDamage[MAXPLAYERS+1][MAXPLAYERS+1];	//tank伤害[victim][attacker]
 
 float
+	g_fWitchHealth[2049],
 	g_fWitchDamage[2049][MAXPLAYERS+1];			//witch伤害[victim][attacker]
 
 ConVar
+	g_cvWitchMaxHealth,
 	g_cvTotalDamageWithTank,
 	g_cvTotalDamageWithWitch,
 	g_cvTotalDamageWithCI,
@@ -42,8 +45,7 @@ bool
 	g_bTotalDamageWithCI,
 	g_bTankDamageAnnounce,
 	g_bWitchDamageAnnounce,
-	g_bTankAlive[MAXPLAYERS+1],
-	g_bWitchAlive[2049];
+	g_bTankAlive[MAXPLAYERS+1];
 
 public Plugin myinfo =
 {
@@ -55,7 +57,8 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	CreateConVar("l4d2_kill_mvp_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-
+	
+	g_cvWitchMaxHealth = FindConVar("z_witch_health");
 	g_cvTotalDamageWithTank = CreateConVar("l4d2_kill_mvp_add_tank_damage", "1", "总伤害包括Tank伤害", FCVAR_NONE, true, 0.0, true, 1.0);
 	g_cvTotalDamageWithWitch = CreateConVar("l4d2_kill_mvp_add_witch_damage", "1", "总伤害包括Witch伤害", FCVAR_NONE, true, 0.0, true, 1.0);
 	g_cvTotalDamageWithCI = CreateConVar("l4d2_kill_mvp_add_ci_damage", "1", "总伤害包括普通丧失伤害", FCVAR_NONE, true, 0.0, true, 1.0);
@@ -64,6 +67,7 @@ public void OnPluginStart()
 
 	GetCvars();
 
+	g_cvWitchMaxHealth.AddChangeHook(ConVarChanged);
 	g_cvTotalDamageWithTank.AddChangeHook(ConVarChanged);
 	g_cvTotalDamageWithWitch.AddChangeHook(ConVarChanged);
 	g_cvTotalDamageWithCI.AddChangeHook(ConVarChanged);
@@ -84,10 +88,18 @@ public void OnPluginStart()
 	HookEvent("infected_hurt", Event_InfectedHurt);
 	HookEvent("infected_death", Event_InfectedDeath);
 
+	HookEvent("player_bot_replace", Event_BotReplacedPlayer);
+
 	RegConsoleCmd("sm_mvp", Cmd_ShowTotalDamageRank);
 	RegAdminCmd("sm_clear_mvp", Cmd_ClearMvp, ADMFLAG_ROOT);
 
 	AutoExecConfig(true, "l4d2_kill_mvp");
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i))
+			OnClientPutInServer(i);
+	}
 }
 
 void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -97,6 +109,7 @@ void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 
 void GetCvars()
 {
+	g_iWitchMaxHealth = g_cvWitchMaxHealth.IntValue;
 	g_bTotalDamageWithTank = g_cvTotalDamageWithTank.BoolValue;
 	g_bTotalDamageWithWitch = g_cvTotalDamageWithWitch.BoolValue;
 	g_bTotalDamageWithCI = g_cvTotalDamageWithCI.BoolValue;
@@ -121,7 +134,7 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 
 	for (i = 0; i <= 2048; i++)
 	{
-		g_bWitchAlive[i] = false;
+		g_fWitchHealth[i] = 0.0;
 		ClearWitchDamage(i);
 	}
 }
@@ -226,6 +239,30 @@ Action OnTakeDamageAlive(int victim, int &attacker, int &inflictor, float &damag
 	return Plugin_Continue;
 }
 
+void Event_BotReplacedPlayer(Event event, const char[] name, bool dontBroadcast)
+{
+	int player = GetClientOfUserId(event.GetInt("player"));
+	int bot = GetClientOfUserId(event.GetInt("bot"));
+
+	if (IsValidSI(player) && GetZombieClass(player) == TANK && !IsFakeClient(player))
+	{
+		if (IsValidSI(bot) && GetZombieClass(bot) == TANK && IsFakeClient(bot) && IsPlayerAlive(bot) && !GetEntProp(bot, Prop_Send, "m_isIncapacitated"))
+		{
+			//LogMessage("[DeBug] AddTankDamage %N -> %N", player, bot);
+			AddTankDamage(player, bot);
+			ClearTankDamage(player);
+		}
+	}
+}
+
+void AddTankDamage(int iTankPlayer, int iTankBot)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_iTankDamage[iTankBot][i] += g_iTankDamage[iTankPlayer][i];
+	}
+}
+
 void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	static int iAttacker, iVictim;
@@ -269,7 +306,7 @@ void ShowTankDamageRank(int iTank)
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsValidSur(i))
+		if (g_iTankDamage[iTank][i] > 0)
 		{
 			iTankDamageData[iPlayerCount][0] = i;
 			iTankDamageData[iPlayerCount][1] = g_iTankDamage[iTank][i];
@@ -277,20 +314,23 @@ void ShowTankDamageRank(int iTank)
 			iPlayerCount++;
 		}
 	}
-	//PrintToChatAll("克总伤害: %i", iTankTotalDamage);
+	//LogMessage("[DeBug] 克总伤害: %i", iTankTotalDamage);
 	if (iPlayerCount > 0 && iTankTotalDamage > 0)
 	{
 		int client, iTankDamage;
-		CPrintToChatAll("{default}[{blue}Tank Damage{default}]:");
+
+		if (!IsFakeClient(iTank))
+			CPrintToChatAll("{default}[{olive}Tank {default}({red}%N{default}) Damage]:", iTank);
+		else CPrintToChatAll("{default}[{olive}%N {default}Damage]:", iTank);
+
 		SortCustom2D(iTankDamageData, iPlayerCount, SortByDamageDesc);
 		for (int i; i < iPlayerCount; i++)
 		{
 			client = iTankDamageData[i][0];
 			iTankDamage = iTankDamageData[i][1];
-			if (iTankDamage > 0)
-			{
+
+			if (IsClientInGame(client) && GetClientTeam(client) == 2)
 				CPrintToChatAll("{blue}[{yellow}%i{blue}] ({yellow}%i{default}%%{blue})  {olive}%N", iTankDamage, RoundToNearest((float(iTankDamage)/float(iTankTotalDamage))*100.0), client);
-			}
 		}
 	}
 }
@@ -300,7 +340,7 @@ void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
 	int iWitch = event.GetInt("witchid");
 	if (IsValidEntityEx(iWitch))
 	{
-		g_bWitchAlive[iWitch] = true;
+		g_fWitchHealth[iWitch] = float(g_iWitchMaxHealth);
 		ClearWitchDamage(iWitch);
 		SDKUnhook(iWitch, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive_Witch);
 		SDKHook(iWitch, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive_Witch);
@@ -309,22 +349,22 @@ void Event_WitchSpawn(Event event, const char[] name, bool dontBroadcast)
 
 Action OnTakeDamageAlive_Witch(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if (damage <= 0.0 || !g_bWitchAlive[victim]) return Plugin_Continue;
+	if (damage <= 0.0 || g_fWitchHealth[victim] <= 0.0) return Plugin_Continue;
 
 	if (IsValidEntityEx(victim))
 	{
 		if (IsValidSur(attacker) && IsPlayerAlive(attacker))
 		{
-			static float fVictimHealth;
-			fVictimHealth = float(GetEntProp(victim, Prop_Data, "m_iHealth"));
-			if (damage >= fVictimHealth)
+			if (damage >= g_fWitchHealth[victim])
 			{
-				g_bWitchAlive[victim] = false;
-				if (g_bTotalDamageWithWitch) g_iTotalDamage[attacker] += RoundToNearest(fVictimHealth);
-				if (g_bWitchDamageAnnounce) g_fWitchDamage[victim][attacker] += fVictimHealth;
+				if (g_bTotalDamageWithWitch) g_iTotalDamage[attacker] += RoundToNearest(g_fWitchHealth[victim]);
+				if (g_bWitchDamageAnnounce) g_fWitchDamage[victim][attacker] += g_fWitchHealth[victim];
+
+				g_fWitchHealth[victim] = 0.0;
 			}
 			else
 			{
+				g_fWitchHealth[victim] -= damage;
 				if (g_bTotalDamageWithWitch) g_iTotalDamage[attacker] += RoundToNearest(damage);
 				if (g_bWitchDamageAnnounce) g_fWitchDamage[victim][attacker] += damage;
 			}
@@ -338,7 +378,7 @@ void Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
 	int iAttacker = GetClientOfUserId(event.GetInt("userid"));
 	int iWitch = event.GetInt("witchid");
 
-	g_bWitchAlive[iWitch] = false;
+	g_fWitchHealth[iWitch] = 0.0;
 
 	if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker))
 	{
@@ -357,7 +397,7 @@ void ShowWitchDamageRank(int iWitch)
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsValidSur(i))
+		if (g_fWitchDamage[iWitch][i] > 0.0)
 		{
 			fWitchDamageData[iPlayerCount][0] = float(i);
 			fWitchDamageData[iPlayerCount][1] = g_fWitchDamage[iWitch][i];
@@ -365,7 +405,7 @@ void ShowWitchDamageRank(int iWitch)
 			iPlayerCount++;
 		}
 	}
-	//PrintToChatAll("witch总伤害: %.1f", fWitchTotalDamage);
+	//LogMessage("[DeBug] witch总伤害: %.3f", fWitchTotalDamage);
 	if (iPlayerCount > 0 && fWitchTotalDamage > 0.0)
 	{
 		int client;
@@ -376,10 +416,9 @@ void ShowWitchDamageRank(int iWitch)
 		{
 			client = RoundToNearest(fWitchDamageData[i][0]);
 			fWitchDamage = fWitchDamageData[i][1];
-			if (fWitchDamage > 0.0)
-			{
-				CPrintToChatAll("{blue}[{yellow}%.0f{blue}] ({yellow}%i{default}%%{blue})  {olive}%N", fWitchDamage, RoundToNearest((fWitchDamage/fWitchTotalDamage)*100.0), client);
-			}
+
+			if (IsClientInGame(client) && GetClientTeam(client) == 2)
+				CPrintToChatAll("{blue}[{yellow}%i{blue}] ({yellow}%i{default}%%{blue})  {olive}%N", RoundToNearest(fWitchDamage), RoundToNearest((fWitchDamage/fWitchTotalDamage)*100.0), client);
 		}
 	}
 }
