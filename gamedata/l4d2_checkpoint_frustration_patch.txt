@@ -1,0 +1,29 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"MemPatches"
+		{
+			"CTerrorPlayer::UpdateZombieFrustration::IsAnySurvivorInExitCheckpoint"
+			{
+				"signature" "CTerrorPlayer::UpdateZombieFrustration"
+
+				"linux"
+				{
+					"offset"	"1ABh"
+					"verify"	"\x0F\x85\x75\xFE\xFF\xFF"
+					"patch"		"\x90\x90\x90\x90\x90\x90"
+				}
+			}
+		}
+
+		"Signatures"
+		{
+			"CTerrorPlayer::UpdateZombieFrustration"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer23UpdateZombieFrustrationEv"
+			}
+		}
+	}
+}
