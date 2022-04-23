@@ -5,7 +5,7 @@
 #include <sdktools>
 #include <sdkhooks>
 
-#define VERSION "0.5"
+#define VERSION "0.6"
 
 ConVar g_cvGlow, g_cvSkullIcon, g_cvSurMaxIncapCount;
 int g_iSurMaxIncapCount;
@@ -98,11 +98,13 @@ Action PlayerSpawn_Timer(Handle timer, int userid)
 void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	int NewTeam = event.GetInt("team");
+	int newTeam = event.GetInt("team");
+	int oldTeam = event.GetInt("oldteam");
 
-	if (client > 0 && NewTeam == 2)
+	if (client > 0)
 	{
-		CreateTimer(0.1, BlackAndWhiteCheck_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
+		if (newTeam == 2 || oldTeam == 2)
+			CreateTimer(0.1, BlackAndWhiteCheck_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
@@ -118,33 +120,30 @@ Action BlackAndWhiteCheck_Timer(Handle timer)
 	for (i = 1; i <= MaxClients; i++)
 	{
 		RemoveIcon(i);
+		if (IsClientInGame(i))
+			ResetGlow(i);
 	}
 
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && IsBlackAndWhite(i))
 		{
-			if (IsBlackAndWhite(i))
-			{
-				if (g_bGlow) SetGlow(i);
-				if (g_bSkullIcon) SetSkullIcon(i);
-			}
-			else ResetGlow(i);
+			if (g_bGlow) SetGlow(i);
+			if (g_bSkullIcon) SetSkullIcon(i);
 		}
 	}
 
 	return Plugin_Continue;
 }
 
-Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsValidSur(client))
+	if (client > 0 && client <= MaxClients && IsClientInGame(client))
 	{
 		RemoveIcon(client);
 		ResetGlow(client);
 	}
-	return Plugin_Continue;
 }
 
 void ResetGlow(int client)
