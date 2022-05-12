@@ -6,9 +6,8 @@
 #include <sdktools>
 #include <dhooks>
 #include <multicolors>
-#include <sourcescramble> // https://github.com/nosoop/SMExt-SourceScramble
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 
 ConVar
 	g_cvGameMode,
@@ -33,6 +32,7 @@ bool
 	g_bAdminImmunity;
 
 Handle
+	g_hFrustrationCheck,
 	g_hSpawnSITimer[MAXPLAYERS+1],
 	g_hSurGlowCheck,
 	g_hSDKSetPreSpawnClass;
@@ -121,6 +121,9 @@ public void OnPluginStart()
 	HookEvent("finale_vehicle_leaving", Event_RoundEnd); //救援载具离开之时  (没有触发round_end)
 
 	g_aJoinTankList = new ArrayList();
+
+	delete g_hFrustrationCheck;
+	g_hFrustrationCheck = CreateTimer(0.2, FrustrationCheck_Timer, _, TIMER_REPEAT);
 }
 
 void LoadGameData()
@@ -128,12 +131,6 @@ void LoadGameData()
 	GameData hGameData = new GameData("l4d2_control_zombies");
 	if (hGameData == null)
 		SetFailState("加载 l4d2_control_zombies.txt 文件失败");
-
-	MemoryPatch mPatch = MemoryPatch.CreateFromConf(hGameData, "CTerrorPlayer::UpdateZombieFrustration::TryOfferingTankBot");
-	if (!mPatch.Validate())
-		SetFailState("Verify patch failed.");
-	if (!mPatch.Enable())
-		SetFailState("Enable patch failed.");
 
 	g_dSpawnPlayerZombieScan = DynamicDetour.FromConf(hGameData, "ForEachTerrorPlayer<SpawnablePZScan>");
 	if (g_dSpawnPlayerZombieScan == null)
@@ -518,6 +515,28 @@ Action JoinTankCheck_Timer(Handle timer, int userid)
 }
 
 // 避免坦克无限控制权
+Action FrustrationCheck_Timer(Handle timer)
+{
+	static int i;
+	for (i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == 3 && GetEntProp(i, Prop_Send, "m_zombieClass") == 8)
+		{
+			if (IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated") && !GetEntProp(i, Prop_Send, "m_isGhost"))
+			{
+				int m_frustration = GetEntProp(i, Prop_Send, "m_frustration");
+				if (m_frustration >= 100)
+				{
+					Event event = CreateEvent("tank_frustrated", true);
+					event.SetInt("userid", GetClientUserId(i));
+					event.Fire(false);
+				}
+			}
+		}
+	}
+	return Plugin_Continue;
+}
+
 void Event_TankFrustrated(Event event, const char[] name, bool dontBroadcast)
 {
 	RequestFrame(OnNextFrame, event.GetInt("userid"));
@@ -842,3 +861,5 @@ public Action L4D_OnMaterializeFromGhostPre(int client)
 	}
 	return Plugin_Continue;
 }
+
+
