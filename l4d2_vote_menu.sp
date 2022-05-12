@@ -5,9 +5,17 @@
 #include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 
-bool g_bAdminImmunity;
+ConVar
+	g_cvAdminImmunity,
+	g_cvKickBanMinutes;
+
+bool
+	g_bAdminImmunity;
+
+int
+	g_iKickBanMinutes;
 
 public Plugin myinfo = 
 {
@@ -19,10 +27,27 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	CreateConVar("l4d2_vote_menu_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-	g_bAdminImmunity = CreateConVar("l4d2_vote_menu_kick_immunity", "1", "管理员免疫被踢", FCVAR_NONE).BoolValue;
+	g_cvAdminImmunity = CreateConVar("l4d2_vote_menu_kick_immunity", "1", "管理员免疫被踢");
+	g_cvKickBanMinutes = FindConVar("sv_vote_kick_ban_duration");
+
+	GetCvars();
+
+	g_cvAdminImmunity.AddChangeHook(OnConVarChanged);
+	g_cvKickBanMinutes.AddChangeHook(OnConVarChanged);
 
 	RegConsoleCmd("sm_v", Cmd_Vote);
 	RegConsoleCmd("sm_votes", Cmd_Vote);
+}
+
+void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	GetCvars();
+}
+
+void GetCvars()
+{
+	g_bAdminImmunity = g_cvAdminImmunity.BoolValue;
+	g_iKickBanMinutes = g_cvKickBanMinutes.IntValue;
 }
 
 public void OnConfigsExecuted()
@@ -174,7 +199,14 @@ void ReHealth_VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, in
 					{
 						if (GetClientTeam(i) == 2 || GetClientTeam(i) == 3)
 						{
+							Event event = CreateEvent("heal_success", true);
+							event.SetInt("userid", GetClientUserId(i));
+							event.SetInt("subject", GetClientUserId(i));
+							event.SetInt("health_restored", GetEntProp(i, Prop_Send, "m_iMaxHealth") - GetEntProp(i, Prop_Send, "m_iHealth"));
+
 							CheatCommand(i, "give", "health");
+
+							event.Fire(false);
 						}
 					}
 				}
@@ -257,7 +289,9 @@ void KickPlayer_VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, 
 				int iTarget = GetClientOfUserId(vote.Value);
 				if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && !IsFakeClient(iTarget) && !IsClientInKickQueue(iTarget))
 				{
-					KickClient(iTarget, "你已被投票踢出");
+					ServerCommand("banid %i %i", g_iKickBanMinutes, GetClientUserId(iTarget));
+					ServerExecute();
+					KickClient(iTarget, "你已被投票踢出, %i分钟内不能再次进入服务器", g_iKickBanMinutes);
 				}
 			}
 			else vote.SetFail();
