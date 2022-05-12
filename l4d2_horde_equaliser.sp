@@ -125,7 +125,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 					if (!g_bAnnounceRemain && (g_iHordeLimit - g_iCommInfCount <= g_iAnnounceNum))
 					{
 						g_bAnnounceRemain = true;
-						CPrintToChatAll("{default}[{olive}Horde{default}] {yellow}%i {default}commons remaining..", g_iAnnounceNum);
+						CPrintToChatAll("{default}[{yellow}Horde{default}] {yellow}%i {default}commons remaining..", g_iAnnounceNum);
 					}
 				}
 			}
@@ -148,7 +148,7 @@ public Action L4D_OnSpawnMob(int &amount)
 			if (!g_bAnnounceStart)
 			{
 				g_bAnnounceStart = true;
-				CPrintToChatAll("{default}[{olive}Horde{default}] A {blue}finite event{default} of {yellow}%i {default}commons has started!", g_iHordeLimit);
+				CPrintToChatAll("{default}[{yellow}Horde{default}] A {blue}finite event{default} of {yellow}%i {default}commons has started!", g_iHordeLimit);
 			}
 
 			if (g_iCommInfCount >= g_iHordeLimit)
