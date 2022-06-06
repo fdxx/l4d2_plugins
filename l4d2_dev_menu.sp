@@ -3,11 +3,9 @@
 
 #include <sourcemod>
 #include <adminmenu>
-#include <sdktools>
-#include <sdkhooks>
 #include <left4dhooks>
 
-#define VERSION "0.4"
+#define VERSION "0.5"
 
 static const char g_sWeapons[][][] = 
 {
@@ -97,11 +95,6 @@ TopMenuObject
 	g_TopObj_Deprive,
 	g_TopObj_Freeze;
 
-ConVar
-	g_cvBlockSpecialSpawn,
-	g_cvBlockTankSpawn,
-	g_cvBlockWitchSpawn;
-
 int
 	g_iGiveItemMenuPos[MAXPLAYERS+1][4],
 	g_iSpecialClassMenuPos[MAXPLAYERS+1],
@@ -111,10 +104,14 @@ int
 	g_iGiveItemType[MAXPLAYERS+1];
 
 bool
+	g_bGodMode[MAXPLAYERS+1],
 	g_bAutoSpawn[MAXPLAYERS+1],
-	g_bSpawnType[MAXPLAYERS+1];
+	g_bSpawnType[MAXPLAYERS+1],
+	g_bSpecialSpawnControl,
+	g_bBossSpawnControl;
 	
-StringMap g_smNameToClass;
+StringMap
+	g_smNameToClass;
 
 public Plugin myinfo = 
 {
@@ -127,6 +124,48 @@ public void OnPluginStart()
 {
 	CreateConVar("l4d2_dev_menu_version", VERSION, "version", FCVAR_NONE | FCVAR_DONTRECORD);
 	CreateStringMap();
+
+	RegAdminCmd("sm_kl", Cmd_Kill, ADMFLAG_ROOT);
+	RegAdminCmd("sm_god", Cmd_GodMode, ADMFLAG_ROOT);
+	RegAdminCmd("sm_fly", Cmd_Noclip, ADMFLAG_ROOT);
+	RegAdminCmd("sm_tele", Cmd_Teleport, ADMFLAG_ROOT);
+	RegAdminCmd("sm_givehp", Cmd_GiveHealth, ADMFLAG_ROOT);
+	RegAdminCmd("sm_rehp", Cmd_GiveHealth, ADMFLAG_ROOT);
+
+	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
+}
+
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	for (int i = 0; i <= MaxClients; i++)
+	{
+		g_bGodMode[i] = false;
+	}
+}
+
+public void OnClientDisconnect(int client)
+{
+	g_bGodMode[client] = false;
+}
+
+public void OnClientPutInServer(int client)
+{
+	g_bGodMode[client] = false;
+	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+}
+
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+	if (!g_bGodMode[victim]) return Plugin_Continue;
+
+	char sName[6];
+	if (attacker > MaxClients && GetEdictClassname(attacker, sName, sizeof(sName)) && strcmp(sName, "witch") == 0)
+	{
+		damage = 0.0;
+		return Plugin_Changed;
+	}
+	return Plugin_Continue;
 }
 
 void CreateStringMap()
@@ -144,6 +183,9 @@ void CreateStringMap()
 
 public void OnConfigsExecuted()
 {
+	g_bSpecialSpawnControl = GetFeatureStatus(FeatureType_Native, "L4D2_CanSpawnSpecial") == FeatureStatus_Available;
+	g_bBossSpawnControl = GetFeatureStatus(FeatureType_Native, "L4D2_CanSpawnBoss") == FeatureStatus_Available;
+
 	static bool shit;
 	if (shit) return;
 	shit = true;
@@ -165,13 +207,9 @@ public void OnConfigsExecuted()
 		g_TopObj_Deprive = g_TopMenu.AddItem("l4d2_dev_menu_deprive", Item_TopMenuHandler, TopObj_DevMenu, "l4d2_dev_menu_deprive", ADMFLAG_ROOT, "装备剥夺");
 		g_TopObj_Freeze = g_TopMenu.AddItem("l4d2_dev_menu_freeze", Item_TopMenuHandler, TopObj_DevMenu, "l4d2_dev_menu_freeze", ADMFLAG_ROOT, "冻结");
 	}
-	
-	g_cvBlockSpecialSpawn = FindConVar("l4d2_si_spawn_control_block_other_si_spawn");
-	g_cvBlockTankSpawn = FindConVar("l4d2_boss_spawn_control_block_other_tank_spawn");
-	g_cvBlockWitchSpawn = FindConVar("l4d2_boss_spawn_control_block_other_witch_spawn");
 }
 
-public void Category_TopMenuHandler(TopMenu topmenu, TopMenuAction action, TopMenuObject topobj_id, int param, char[] buffer, int maxlength)
+void Category_TopMenuHandler(TopMenu topmenu, TopMenuAction action, TopMenuObject topobj_id, int param, char[] buffer, int maxlength)
 {
 	switch (action)
 	{
@@ -180,7 +218,7 @@ public void Category_TopMenuHandler(TopMenu topmenu, TopMenuAction action, TopMe
 	}
 }
 
-public void Item_TopMenuHandler(TopMenu topmenu, TopMenuAction action, TopMenuObject topobj_id, int client, char[] buffer, int maxlength)
+void Item_TopMenuHandler(TopMenu topmenu, TopMenuAction action, TopMenuObject topobj_id, int client, char[] buffer, int maxlength)
 {
 	switch (action)
 	{
@@ -259,7 +297,7 @@ void Kill_TargetSelect(int client)
 	menu.DisplayAt(client, g_iKillMenuPos[client], MENU_TIME_FOREVER);
 }
 
-public int Kill_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int Kill_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -267,54 +305,7 @@ public int Kill_TargetSelect_MenuHandler(Menu menu, MenuAction action, int clien
 		{
 			switch (itemNum)
 			{
-				case 0:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3)
-						{
-							ForcePlayerSuicide(i);
-							PrintToChat(client, "[DevMenu] 处死: %N", i);
-						}
-					}
-
-					int witch = -1;
-					while ((witch = FindEntityByClassname(witch, "witch")) != INVALID_ENT_REFERENCE)
-					{
-						AcceptEntityInput(witch, "Kill");
-						PrintToChat(client, "[DevMenu] 处死: Witch");
-					}
-				}
-				case 1:
-				{
-					int inf = -1;
-					int count;
-					while ((inf = FindEntityByClassname(inf, "infected")) != INVALID_ENT_REFERENCE)
-					{
-						count++;
-						AcceptEntityInput(inf, "Kill");
-					}
-					PrintToChat(client, "[DevMenu] 处死普通感染者: %i 个", count);
-				}
-				case 2:
-				{
-					if (IsPlayerAlive(client))
-					{
-						ForcePlayerSuicide(client);
-						PrintToChat(client, "[DevMenu] 处死: %N", client);
-					}
-				}
-				case 3:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
-						{
-							ForcePlayerSuicide(i);
-							PrintToChat(client, "[DevMenu] 处死: %N", i);
-						}
-					}
-				}
+				case 0, 1, 2, 3: DoKill(client, itemNum);
 				default:
 				{
 					char sUserid[16];
@@ -350,6 +341,99 @@ public int Kill_TargetSelect_MenuHandler(Menu menu, MenuAction action, int clien
 	return 0;
 }
 
+Action Cmd_Kill(int client, int args)
+{
+	if (args != 1)
+	{
+		ReplyToCommand(client, "sm_kl <si|ci|me|sur|all>");
+		return Plugin_Handled;
+	}
+
+	int iType = -1;
+	char sTarget[32];
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	if (strcmp(sTarget, "si", false) == 0)
+		iType = 0;
+	else if (strcmp(sTarget, "ci", false) == 0)
+		iType = 1;
+	else if (strcmp(sTarget, "me", false) == 0)
+		iType = 2;
+	else if (strcmp(sTarget, "sur", false) == 0)
+		iType = 3;
+	else if (strcmp(sTarget, "all", false) == 0)
+		iType = 4;
+	
+	DoKill(client, iType);
+	return Plugin_Handled;
+}
+
+void DoKill(int client, int iType)
+{
+	switch (iType)
+	{
+		case 0:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3)
+				{
+					ForcePlayerSuicide(i);
+					PrintToChat(client, "[DevMenu] 处死: %N", i);
+				}
+			}
+
+			int witch = -1;
+			while ((witch = FindEntityByClassname(witch, "witch")) != INVALID_ENT_REFERENCE)
+			{
+				AcceptEntityInput(witch, "Kill");
+				PrintToChat(client, "[DevMenu] 处死: Witch");
+			}
+		}
+		case 1:
+		{
+			int inf = -1;
+			int count;
+			while ((inf = FindEntityByClassname(inf, "infected")) != INVALID_ENT_REFERENCE)
+			{
+				count++;
+				AcceptEntityInput(inf, "Kill");
+			}
+			PrintToChat(client, "[DevMenu] 处死普通感染者: %i 个", count);
+		}
+		case 2:
+		{
+			if (IsPlayerAlive(client))
+			{
+				ForcePlayerSuicide(client);
+				PrintToChat(client, "[DevMenu] 处死: %N", client);
+			}
+		}
+		case 3:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+				{
+					ForcePlayerSuicide(i);
+					PrintToChat(client, "[DevMenu] 处死: %N", i);
+				}
+			}
+		}
+		case 4:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && (GetClientTeam(i) == 2 || GetClientTeam(i) == 3))
+				{
+					ForcePlayerSuicide(i);
+					PrintToChat(client, "[DevMenu] 处死: %N", i);
+				}
+			}
+		}
+	}
+}
+
 void SpawnSpecial_ClassSelect(int client)
 {
 	static char sSpawnType[128], sAutoSpawn[128];
@@ -372,7 +456,7 @@ void SpawnSpecial_ClassSelect(int client)
 	menu.DisplayAt(client, g_iSpecialClassMenuPos[client], MENU_TIME_FOREVER);
 }
 
-public int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -469,7 +553,7 @@ bool GetSpawnPos(int client, int iClass, float fPos[3])
 	}
 }
 
-public bool TraceFilter(int entity, int contentsMask)
+bool TraceFilter(int entity, int contentsMask)
 {
 	return entity > MaxClients;
 }
@@ -511,7 +595,7 @@ void GodMode_TargetSelect(int client)
 	menu.DisplayAt(client, g_iGodModeMenuPos[client], MENU_TIME_FOREVER);
 }
 
-public int GodMode_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int GodMode_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -519,41 +603,7 @@ public int GodMode_TargetSelect_MenuHandler(Menu menu, MenuAction action, int cl
 		{
 			switch (itemNum)
 			{
-				case 0:
-				{
-					if (IsPlayerAlive(client))
-					{
-						switch (GetClientTeam(client))
-						{
-							case 2: SetClientGodMode(client, client);
-							case 3:
-							{
-								if (!GetEntProp(client, Prop_Send, "m_isGhost"))
-									SetClientGodMode(client, client);
-							}
-						}
-					}
-				}
-				case 1:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
-						{
-							SetClientGodMode(client, i);
-						}
-					}
-				}
-				case 2:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3 && !GetEntProp(i, Prop_Send, "m_isGhost"))
-						{
-							SetClientGodMode(client, i);
-						}
-					}
-				}
+				case 0, 1, 2: DoGodMode(client, itemNum);
 				default:
 				{
 					char sUserid[16];
@@ -590,17 +640,84 @@ public int GodMode_TargetSelect_MenuHandler(Menu menu, MenuAction action, int cl
 	return 0;
 }
 
+Action Cmd_GodMode(int client, int args)
+{
+	if (args != 1)
+	{
+		ReplyToCommand(client, "sm_god <me|sur|si>");
+		return Plugin_Handled;
+	}
+
+	int iType = -1;
+	char sTarget[32];
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	if (strcmp(sTarget, "me", false) == 0)
+		iType = 0;
+	else if (strcmp(sTarget, "sur", false) == 0)
+		iType = 1;
+	else if (strcmp(sTarget, "si", false) == 0)
+		iType = 2;
+	
+	DoGodMode(client, iType);
+	return Plugin_Handled;
+}
+
+void DoGodMode(int client, int iType)
+{
+	switch (iType)
+	{
+		case 0:
+		{
+			if (IsPlayerAlive(client))
+			{
+				switch (GetClientTeam(client))
+				{
+					case 2: SetClientGodMode(client, client);
+					case 3:
+					{
+						if (!GetEntProp(client, Prop_Send, "m_isGhost"))
+							SetClientGodMode(client, client);
+					}
+				}
+			}
+		}
+		case 1:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+				{
+					SetClientGodMode(client, i);
+				}
+			}
+		}
+		case 2:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3 && !GetEntProp(i, Prop_Send, "m_isGhost"))
+				{
+					SetClientGodMode(client, i);
+				}
+			}
+		}
+	}
+}
+
 void SetClientGodMode(int client, int iTarget)
 {
 	bool bGodMode = GetEntProp(iTarget, Prop_Data, "m_takedamage") == 0;
 
 	if (bGodMode)
 	{
+		g_bGodMode[iTarget] = false;
 		SetEntProp(iTarget, Prop_Data, "m_takedamage", 2);
 		PrintToChat(client, "[DevMenu] 关闭无敌模式: %N", iTarget);
 	}
 	else
 	{
+		g_bGodMode[iTarget] = true;
 		SetEntProp(iTarget, Prop_Data, "m_takedamage", 0);
 		PrintToChat(client, "[DevMenu] 开启无敌模式: %N", iTarget);
 	}
@@ -631,7 +748,7 @@ void NoClip_TargetSelect(int client)
 	menu.DisplayAt(client, g_iNoClipMenuPos[client], MENU_TIME_FOREVER);
 }
 
-public int NoClip_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int NoClip_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -639,33 +756,7 @@ public int NoClip_TargetSelect_MenuHandler(Menu menu, MenuAction action, int cli
 		{
 			switch (itemNum)
 			{
-				case 0:
-				{
-					if (IsPlayerAlive(client))
-					{
-						SetClientNoClip(client, client);
-					}
-				}
-				case 1:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
-						{
-							SetClientNoClip(client, i);
-						}
-					}
-				}
-				case 2:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3)
-						{
-							SetClientNoClip(client, i);
-						}
-					}
-				}
+				case 0, 1, 2: DoNoclip(client, itemNum);
 				default:
 				{
 					char sUserid[16];
@@ -697,6 +788,63 @@ public int NoClip_TargetSelect_MenuHandler(Menu menu, MenuAction action, int cli
 	return 0;
 }
 
+Action Cmd_Noclip(int client, int args)
+{
+	if (args != 1)
+	{
+		ReplyToCommand(client, "sm_fly <me|sur|si>");
+		return Plugin_Handled;
+	}
+
+	int iType = -1;
+	char sTarget[32];
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	if (strcmp(sTarget, "me", false) == 0)
+		iType = 0;
+	else if (strcmp(sTarget, "sur", false) == 0)
+		iType = 1;
+	else if (strcmp(sTarget, "si", false) == 0)
+		iType = 2;
+	
+	DoNoclip(client, iType);
+	return Plugin_Handled;
+}
+
+void DoNoclip(int client, int iType)
+{
+	switch (iType)
+	{
+		case 0:
+		{
+			if (IsPlayerAlive(client))
+			{
+				SetClientNoClip(client, client);
+			}
+		}
+		case 1:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+				{
+					SetClientNoClip(client, i);
+				}
+			}
+		}
+		case 2:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3)
+				{
+					SetClientNoClip(client, i);
+				}
+			}
+		}
+	}
+}
+
 void SetClientNoClip(int client, int iTarget)
 {
 	MoveType movetype = GetEntityMoveType(iTarget);
@@ -717,13 +865,14 @@ void Teleport_TypeSelect(int client)
 {
 	Menu menu = new Menu(Teleport_TypeSelect_MenuHandler);
 	menu.SetTitle("选择传送类型:");
-	menu.AddItem("", "传送其他人到自己");
+	menu.AddItem("", "传送幸存者到自己");
+	menu.AddItem("", "传送特感到自己");
 	menu.AddItem("", "所有幸存者到安全屋");
 	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int Teleport_TypeSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int Teleport_TypeSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -731,25 +880,7 @@ public int Teleport_TypeSelect_MenuHandler(Menu menu, MenuAction action, int cli
 		{
 			switch (itemNum)
 			{
-				case 0:
-				{
-					float fPos[3];
-					GetClientAbsOrigin(client, fPos);
-
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (i != client && IsClientInGame(i) && GetClientTeam(i) == GetClientTeam(client) && IsPlayerAlive(i))
-						{
-							TeleportEntity(i, fPos, NULL_VECTOR, NULL_VECTOR);
-							PrintToChat(client, "[DevMenu] 传送其他团队人员到自己");
-						}
-					}
-				}
-				case 1:
-				{
-					CheatCommand(client, "warp_all_survivors_to_checkpoint");
-					PrintToChat(client, "[DevMenu] 传送所有幸存者到安全屋");
-				}
+				case 0, 1, 2: DoTeleport(client, itemNum);
 			}
 
 			Teleport_TypeSelect(client);
@@ -767,6 +898,84 @@ public int Teleport_TypeSelect_MenuHandler(Menu menu, MenuAction action, int cli
 	return 0;
 }
 
+
+Action Cmd_Teleport(int client, int args)
+{
+	if (args != 1 && args != 3)
+	{
+		ReplyToCommand(client, "sm_tele <sur|si|saferoom> | sm_tele <pos0 pos1 pos2>");
+		return Plugin_Handled;
+	}
+
+	if (args == 1)
+	{
+		int iType = -1;
+		char sTarget[32];
+
+		GetCmdArg(1, sTarget, sizeof(sTarget));
+		if (strcmp(sTarget, "sur", false) == 0)
+			iType = 0;
+		else if (strcmp(sTarget, "si", false) == 0)
+			iType = 1;
+		else if (strcmp(sTarget, "saferoom", false) == 0)
+			iType = 2;
+		
+		DoTeleport(client, iType);
+	}
+
+	else if (args == 3)
+	{
+		float fPos[3];
+
+		fPos[0] = GetCmdArgFloat(1);
+		fPos[1] = GetCmdArgFloat(2);
+		fPos[2] = GetCmdArgFloat(3);
+
+		TeleportEntity(client, fPos, NULL_VECTOR, NULL_VECTOR);
+		PrintToChat(client, "[DevMenu] 传送自己到: %f %f %f", fPos[0], fPos[1], fPos[2]);
+	}
+
+	return Plugin_Handled;
+}
+
+void DoTeleport(int client, int iType)
+{
+	float fPos[3];
+	GetClientAbsOrigin(client, fPos);
+
+	switch (iType)
+	{
+		case 0:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (i != client && IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
+				{
+					TeleportEntity(i, fPos, NULL_VECTOR, NULL_VECTOR);
+					PrintToChat(client, "[DevMenu] 传送幸存者到自己");
+				}
+			}
+		}
+		case 1:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (i != client && IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
+				{
+					TeleportEntity(i, fPos, NULL_VECTOR, NULL_VECTOR);
+					PrintToChat(client, "[DevMenu] 传送特感到自己");
+				}
+			}
+		}
+		case 2:
+		{
+			CheatCommand(client, "warp_all_survivors_to_checkpoint");
+			PrintToChat(client, "[DevMenu] 传送所有幸存者到安全屋");
+		}
+	}
+}
+
+
 void GiveItem_TypeSelect(int client)
 {	
 	Menu menu = new Menu(GiveItem_TypeSelect_MenuHandler);
@@ -779,7 +988,7 @@ void GiveItem_TypeSelect(int client)
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int GiveItem_TypeSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int GiveItem_TypeSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -845,7 +1054,7 @@ void GiveItem_Select(int client)
 
 }
 
-public int GiveItem_Select_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int GiveItem_Select_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -912,7 +1121,7 @@ void GiveHp_TargetSelect(int client)
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -920,50 +1129,7 @@ public int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int cli
 		{
 			switch (itemNum)
 			{
-				case 0:
-				{
-					if (IsPlayerAlive(client))
-					{
-						switch (GetClientTeam(client))
-						{
-							case 2:
-							{
-								CheatCommand(client, "give", "health");
-								PrintToChat(client, "[DevMenu] 回血: %N", client);
-							}
-							case 3:
-							{
-								if (!GetEntProp(client, Prop_Send, "m_isGhost"))
-								{
-									CheatCommand(client, "give", "health");
-									PrintToChat(client, "[DevMenu] 回血: %N", client);
-								}	
-							}
-						}
-					}
-				}
-				case 1:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
-						{
-							CheatCommand(i, "give", "health");
-							PrintToChat(client, "[DevMenu] 回血: %N", i);
-						}
-					}
-				}
-				case 2:
-				{
-					for (int i = 1; i <= MaxClients; i++)
-					{
-						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3 && !GetEntProp(i, Prop_Send, "m_isGhost"))
-						{
-							CheatCommand(i, "give", "health");
-							PrintToChat(client, "[DevMenu] 回血: %N", i);
-						}
-					}
-				}
+				case 0, 1, 2: DoGiveHealth(client, itemNum);
 				default:
 				{
 					char sUserid[16];
@@ -1006,6 +1172,90 @@ public int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int cli
 	return 0;
 }
 
+Action Cmd_GiveHealth(int client, int args)
+{
+	if (args != 1)
+	{
+		ReplyToCommand(client, "sm_rehp <me|sur|si>");
+		return Plugin_Handled;
+	}
+
+	int iType = -1;
+	char sTarget[32];
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	if (strcmp(sTarget, "me", false) == 0)
+		iType = 0;
+	else if (strcmp(sTarget, "sur", false) == 0)
+		iType = 1;
+	else if (strcmp(sTarget, "si", false) == 0)
+		iType = 2;
+	
+	DoGiveHealth(client, iType);
+	return Plugin_Handled;
+}
+
+void DoGiveHealth(int client, int iType)
+{
+	switch (iType)
+	{
+		case 0:
+		{
+			if (IsPlayerAlive(client))
+			{
+				switch (GetClientTeam(client))
+				{
+					case 2:
+					{
+						Heal(client);
+						PrintToChat(client, "[DevMenu] 回血: %N", client);
+					}
+					case 3:
+					{
+						if (!GetEntProp(client, Prop_Send, "m_isGhost"))
+						{
+							Heal(client);
+							PrintToChat(client, "[DevMenu] 回血: %N", client);
+						}	
+					}
+				}
+			}
+		}
+		case 1:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+				{
+					Heal(i);
+					PrintToChat(client, "[DevMenu] 回血: %N", i);
+				}
+			}
+		}
+		case 2:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3 && !GetEntProp(i, Prop_Send, "m_isGhost"))
+				{
+					Heal(i);
+					PrintToChat(client, "[DevMenu] 回血: %N", i);
+				}
+			}
+		}
+	}
+}
+
+void Heal(int client)
+{
+	Event event = CreateEvent("heal_success", true);
+	event.SetInt("userid", GetClientUserId(client));
+	event.SetInt("subject", GetClientUserId(client));
+	event.SetInt("health_restored", GetEntProp(client, Prop_Send, "m_iMaxHealth") - GetEntProp(client, Prop_Send, "m_iHealth"));
+	CheatCommand(client, "give", "health");
+	event.Fire(false);
+}
+
 void FallDown_TargetSelect(int client)
 {	
 	Menu menu = new Menu(FallDown_TargetSelect_MenuHandler);
@@ -1028,7 +1278,7 @@ void FallDown_TargetSelect(int client)
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int FallDown_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int FallDown_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -1105,7 +1355,7 @@ void Respawn_TargetSelect(int client)
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int Respawn_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int Respawn_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -1182,7 +1432,7 @@ void Deprive_TargetSelect(int client)
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int Deprive_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int Deprive_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -1278,7 +1528,7 @@ void Freeze_TargetSelect(int client)
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int Freeze_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int Freeze_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -1386,49 +1636,16 @@ void CheatCommand(int client, const char[] command, const char[] args = "")
 	SetCommandFlags(command, iFlags);
 }
 
-void AllowSpawn(bool bAllow)
-{
-	static bool bDefVal[3];
-	
-	if (bAllow)
-	{
-		if (g_cvBlockSpecialSpawn != null)
-		{
-			bDefVal[0] = g_cvBlockSpecialSpawn.BoolValue;
-			g_cvBlockSpecialSpawn.BoolValue = false;
-		}
-		if (g_cvBlockTankSpawn != null)
-		{
-			bDefVal[1] = g_cvBlockTankSpawn.BoolValue;
-			g_cvBlockTankSpawn.BoolValue = false;
-		}
-		if (g_cvBlockWitchSpawn != null)
-		{
-			bDefVal[2] = g_cvBlockWitchSpawn.BoolValue;
-			g_cvBlockWitchSpawn.BoolValue = false;
-		}
-	}
-	else // 恢复默认值
-	{
-		if (g_cvBlockSpecialSpawn != null)
-			g_cvBlockSpecialSpawn.BoolValue = bDefVal[0];
-
-		if (g_cvBlockTankSpawn != null)
-			g_cvBlockTankSpawn.BoolValue = bDefVal[1];
-
-		if (g_cvBlockWitchSpawn != null)
-			g_cvBlockWitchSpawn.BoolValue = bDefVal[2];
-	}
-}
 
 public void OnMapStart()
 {
 	CreateTimer(4.0, PrecacheModel_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action PrecacheModel_Timer(Handle timer)
+Action PrecacheModel_Timer(Handle timer)
 {
-	for (int i = 0; i < sizeof(g_sWeapons); i++)
+	static int i;
+	for (i = 0; i < sizeof(g_sWeapons); i++)
 	{
 		if (!IsModelPrecached(g_sWeapons[i][ITEM_MODEL]))
 		{
@@ -1439,7 +1656,7 @@ public Action PrecacheModel_Timer(Handle timer)
 		}
 	}
 
-	for (int i = 0; i < sizeof(g_sMelees); i++)
+	for (i = 0; i < sizeof(g_sMelees); i++)
 	{
 		if (!IsModelPrecached(g_sMelees[i][ITEM_MODEL]))
 		{
@@ -1450,7 +1667,7 @@ public Action PrecacheModel_Timer(Handle timer)
 		}
 	}
 
-	for (int i = 0; i < sizeof(g_sMedicalAndThrowItem); i++)
+	for (i = 0; i < sizeof(g_sMedicalAndThrowItem); i++)
 	{
 		if (!IsModelPrecached(g_sMedicalAndThrowItem[i][ITEM_MODEL]))
 		{
@@ -1461,7 +1678,7 @@ public Action PrecacheModel_Timer(Handle timer)
 		}
 	}
 
-	for (int i = 0; i < sizeof(g_sOtherItem); i++)
+	for (i = 0; i < sizeof(g_sOtherItem); i++)
 	{
 		if (!IsModelPrecached(g_sOtherItem[i][ITEM_MODEL]))
 		{
@@ -1475,3 +1692,26 @@ public Action PrecacheModel_Timer(Handle timer)
 	return Plugin_Continue;
 }
 
+native void L4D2_CanSpawnSpecial(bool bCanSpawn);
+native void L4D2_CanSpawnBoss(int iBossType, bool bCanSpawn);
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	MarkNativeAsOptional("L4D2_CanSpawnSpecial");
+	MarkNativeAsOptional("L4D2_CanSpawnBoss");
+	return APLRes_Success;
+}
+
+void AllowSpawn(bool bAllow)
+{
+	if (g_bSpecialSpawnControl)
+	{
+		L4D2_CanSpawnSpecial(bAllow);
+	}
+
+	if (g_bBossSpawnControl)
+	{
+		L4D2_CanSpawnBoss(1, bAllow);
+		L4D2_CanSpawnBoss(2, bAllow);
+	}
+}
