@@ -3,11 +3,15 @@
 
 #include <sourcemod>
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
-ConVar CvarDelayTime;
-char g_LogPath[PLATFORM_MAX_PATH];
-float g_fDelayTime;
+ConVar
+	sv_hibernate_when_empty,
+	sb_all_bot_game,
+	g_cvDelayTime;
+
+float
+	g_fDelayTime;
 
 public Plugin myinfo =
 {
@@ -15,56 +19,67 @@ public Plugin myinfo =
 	author = "Dragokas, Harry Potter, fdxx",
 	description = "Auto restart server when the last player disconnects from the server. Only support Linux system",
 	version = VERSION,
-	url	= ""
 }
 
 public void OnPluginStart()
 {
-	BuildPath(Path_SM, g_LogPath, sizeof(g_LogPath), "logs/Restart.log");
+	sv_hibernate_when_empty = FindConVar("sv_hibernate_when_empty");
+	sb_all_bot_game = FindConVar("sb_all_bot_game");
 
 	CreateConVar("l4d2_auto_restart_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-	CvarDelayTime = CreateConVar("l4d2_auto_restart_delay", "30.0", "Restart grace period (in sec.)", FCVAR_NOTIFY);
-	g_fDelayTime = CvarDelayTime.FloatValue;
-	CvarDelayTime.AddChangeHook(ConVarChanged);
+	g_cvDelayTime = CreateConVar("l4d2_auto_restart_delay", "30.0", "Restart grace period (in sec.)", FCVAR_NOTIFY);
+	g_fDelayTime = g_cvDelayTime.FloatValue;
+	g_cvDelayTime.AddChangeHook(OnConVarChanged);
 
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
+	RegAdminCmd("sm_restart_server", Cmd_RestartServer, ADMFLAG_ROOT);
 
 	AutoExecConfig(true, "l4d2_auto_restart");
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	g_fDelayTime = CvarDelayTime.FloatValue;
+	g_fDelayTime = g_cvDelayTime.FloatValue;
 }
 
-public Action Event_PlayerDisconnect(Event event, const char[] name, bool dontBroadcast)
+Action Cmd_RestartServer(int client, int args)
+{
+	LogToFilePlus("手动重启服务器...");
+	RestartServer();
+	return Plugin_Handled;
+}
+
+void Event_PlayerDisconnect(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-
 	if (client == 0 || !IsFakeClient(client))
 	{
 		if (!HaveRealPlayer(client))
 		{
-			ServerCommand("sm_cvar sb_all_bot_game 1");
-			ServerCommand("sm_cvar sv_hibernate_when_empty 0");
+			sv_hibernate_when_empty.IntValue = 0;
+			sb_all_bot_game.IntValue = 1;
 			CreateTimer(g_fDelayTime, RestServer_Timer);
-			LogToFileEx(g_LogPath, "服务器即将重启");
+			LogToFilePlus("服务器已没有真实玩家, %.1f 秒后重启服务器", g_fDelayTime);
 		}
 	}
-	return Plugin_Continue;
 }
 
-public Action RestServer_Timer(Handle timer)
+Action RestServer_Timer(Handle timer)
 {
 	if (!HaveRealPlayer())
 	{
-		UnloadAccelerator();
-		LogToFileEx(g_LogPath, "空服后重启成功");
-		SetCommandFlags("crash", GetCommandFlags("crash") &~ FCVAR_CHEAT);
-		ServerCommand("crash");
+		LogToFilePlus("自动重启服务器...");
+		RestartServer();
 	}
-	else LogToFileEx(g_LogPath, "服务器重启失败，还有真实玩家");
+	else LogToFilePlus("服务器重启失败, 还有真实玩家");
 	return Plugin_Continue;
+}
+
+void RestartServer()
+{
+	UnloadAccelerator();
+	SetCommandFlags("crash", GetCommandFlags("crash") &~ FCVAR_CHEAT);
+	ServerCommand("crash");
 }
 
 bool HaveRealPlayer(int iExclude = 0)
@@ -107,3 +122,14 @@ int GetAcceleratorId()
 	return -1;
 }
 
+void LogToFilePlus(const char[] sMsg, any ...)
+{
+	static char sDate[32], sLogPath[PLATFORM_MAX_PATH];
+	static char sBuffer[256];
+
+	FormatTime(sDate, sizeof(sDate), "%Y%m%d");
+	BuildPath(Path_SM, sLogPath, sizeof(sLogPath), "logs/%s_logging.log", sDate);
+	VFormat(sBuffer, sizeof(sBuffer), sMsg, 2);
+
+	LogToFileEx(sLogPath, "%s", sBuffer);
+}
