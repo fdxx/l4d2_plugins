@@ -1,23 +1,21 @@
 "Games"
 {
-	/*
-	 * All windows signatures/offsets were found by Forgetest
-	 */
 	"left4dead2"
 	{
 		"Addresses"
 		{
-			"TheCount"
+			"TheNavAreas"
 			{
 				"linux"
 				{
-					"signature"    "nav_update_lighting"
-					"read"        "17"
+					"signature"	"nav_update_lighting"
+					"read"		"33"
 				}
+				
 				"windows"
 				{
-					"signature"    "nav_update_lighting"
-					"read"        "70"
+					"signature"	"nav_update_lighting"
+					"read"		"82"
 				}
 			}
 		}
@@ -26,13 +24,20 @@
 		{
 			"TerrorNavArea::ScriptGetSpawnAttributes"
 			{
-				"windows"    "296"
-				"linux"        "300"
+				"windows"	"296"
+				"linux"		"300"
 			}
+
 			"CTerrorPlayer::GetFlowDistance::m_flow"
 			{
-				"windows"    "332"
-				"linux"        "340"
+				"windows"	"332"
+				"linux"		"340"
+			}
+
+			"TheNavAreas::Count"
+			{
+				"windows"	"12"
+				"linux"		"12"
 			}
 		}
 
@@ -40,17 +45,18 @@
 		{
 			"nav_update_lighting"
 			{
-				"library"    "server"
-				"linux"        "@_ZL19nav_update_lightingRK8CCommand"
-				"windows"    "\x55\x8B\xEC\x8B\x2A\x2A\x57\x33\x2A\x83\x2A\x02"
+				"library"	"server"
+				"linux"		"@_ZL19nav_update_lightingRK8CCommand"
+				"windows"	"\x55\x8B\xEC\x8B\x2A\x2A\x57\x33\x2A\x83\x2A\x02"
 				/* 55 8B EC 8B ? ? 57 33 ? 83 ? 02 */
 			}
+
 			"TerrorNavArea::FindRandomSpot"
 			{
-				"library"    "server"
-				"linux"        "@_ZNK13TerrorNavArea14FindRandomSpotEv"
-				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x83\x2A\x2A\x56\x8B\x2A\xF3\x2A\x2A\x2A\x2A\xF3\x2A\x2A\x2A\x2A\x0F"
-						/* ? ? ? ? ? ? ? ? ? ? ? 83 ? ? 56 8B ? F3 ? ? ? ? F3 ? ? ? ? 0F */
+				"library"   "server"
+				"linux"     "@_ZNK13TerrorNavArea14FindRandomSpotEv"
+				"windows"   "\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x83\x2A\x2A\x56\x8B\x2A\xF3\x2A\x2A\x2A\x2A\xF3\x2A\x2A\x2A\x2A\x0F"
+				/* ? ? ? ? ? ? ? ? ? ? ? 83 ? ? 56 8B ? F3 ? ? ? ? F3 ? ? ? ? 0F */
 			}
 
 			/**
@@ -65,11 +71,11 @@
 			**/
 			"IsVisibleToPlayer"
 			{
-				"library"    "server"
-				"linux"        "@_Z17IsVisibleToPlayerRK6VectorP11CBasePlayeriifPK11CBaseEntityPP13TerrorNavAreaPb"
-				"windows"    "\x55\x8B\x2A\x81\xEC\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\x33\x2A\x89\x2A\x2A\x8B\x2A\x2A\x8B\x2A\x2A\x53\x8B\x2A\x2A\x56\x8B\x2A\x2A\xC6"
-						/* 55 8B ? 81 EC ? ? ? ? A1 ? ? ? ? 33 ? 89 ? ? 8B ? ? 8B ? ? 53 8B ? ? 56 8B ? ? C6 */
-			} 
+				"library"   "server"
+				"linux"     "@_Z17IsVisibleToPlayerRK6VectorP11CBasePlayeriifPK11CBaseEntityPP13TerrorNavAreaPb"
+				"windows"   "\x55\x8B\x2A\x81\xEC\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\x33\x2A\x89\x2A\x2A\x8B\x2A\x2A\x8B\x2A\x2A\x53\x8B\x2A\x2A\x56\x8B\x2A\x2A\xC6"
+				/* 55 8B ? 81 EC ? ? ? ? A1 ? ? ? ? 33 ? 89 ? ? 8B ? ? 8B ? ? 53 8B ? ? 56 8B ? ? C6 */
+			}
 		}
 	}
 }
