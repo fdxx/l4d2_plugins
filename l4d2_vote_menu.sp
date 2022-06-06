@@ -5,7 +5,7 @@
 #include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
 
-#define VERSION "0.2"
+#define VERSION "0.3"
 
 ConVar
 	g_cvAdminImmunity,
@@ -88,8 +88,8 @@ int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int client, int 
 	{
 		case MenuAction_Select:
 		{
-			char sInfo[64];
-			hCategoryMenu.GetItem(itemNum, sInfo, sizeof(sInfo));
+			char sInfo[64], sDisplay[128];
+			hCategoryMenu.GetItem(itemNum, sInfo, sizeof(sInfo), _, sDisplay, sizeof(sDisplay));
 
 			switch (sInfo[0])
 			{
@@ -102,7 +102,7 @@ int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int client, int 
 					}
 					
 					L4D2NativeVote vote = L4D2NativeVote(ReHealth_VoteHandler);
-					vote.SetDisplayText("所有人回血 ?");
+					vote.SetDisplayText("%s ?", sDisplay);
 					vote.Initiator = client;
 
 					int iPlayerCount = 0;
@@ -127,7 +127,7 @@ int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int client, int 
 				{
 					char sName[128], sUserid[16];
 					Menu menu = new Menu(KickPlayer_MenuHandler);
-					menu.SetTitle("踢出玩家:");
+					menu.SetTitle("%s:", sDisplay);
 					for (int i = 1; i <= MaxClients; i++)
 					{
 						if (IsClientInGame(i) && !IsFakeClient(i))
@@ -147,7 +147,7 @@ int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int client, int 
 				{
 					char sName[128], sUserid[16];
 					Menu menu = new Menu(ForceSpec_MenuHandler);
-					menu.SetTitle("强制玩家旁观:");
+					menu.SetTitle("%s:", sDisplay);
 					for (int i = 1; i <= MaxClients; i++)
 					{
 						if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) != 1)
