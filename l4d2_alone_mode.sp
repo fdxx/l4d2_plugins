@@ -114,7 +114,7 @@ Action CheckPlayerCount_Timer(Handle timer)
 		}
 	}
 
-	g_bAlone = iCount == 1 ? true : false;
+	g_bAlone = iCount == 1;
 	g_cvAloneTrack.BoolValue = g_bAlone;
 
 	return Plugin_Continue;
