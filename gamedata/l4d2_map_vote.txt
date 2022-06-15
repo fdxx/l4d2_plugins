@@ -1,0 +1,28 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Addresses"
+		{
+			"g_pMatchExtL4D"
+			{
+				"linux"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"44"
+				}
+				"read"	"0"
+			}
+		}
+
+		"Signatures"
+		{
+			"CTerrorGameRules::GetMissionInfo"
+			{
+				"library"	"server"
+				"linux"		"@_ZN16CTerrorGameRules14GetMissionInfoEv"
+			}
+		}
+	}
+}
+
