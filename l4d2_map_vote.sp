@@ -137,7 +137,7 @@ int ValveMap_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 	{
 		case MenuAction_Select:
 		{
-			char sTitle[256], sMap[256];
+			static char sTitle[256], sMap[256];
 
 			if (menu.GetItem(itemNum, sMap, sizeof(sMap), _, sTitle, sizeof(sTitle)))
 			{
@@ -160,7 +160,7 @@ int ValveMap_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 void ShowCustomMapMenu(int client)
 {
 	static int shit;
-	char sName[256], sTitle[256], sKvPtr[256];
+	static char sSubName[256], sTitle[256], sKey[256];
 
 	Menu menu = new Menu(CustomMapTitle_MenuHandler);
 	menu.SetTitle("选择地图:");
@@ -168,14 +168,14 @@ void ShowCustomMapMenu(int client)
 	SourceKeyValues kvMissions = SDKCall(g_hSDKGetAllMissions, g_pMatchExtL4D);
 	for (SourceKeyValues kvSub = kvMissions.GetFirstTrueSubKey(); !kvSub.IsNull(); kvSub = kvSub.GetNextTrueSubKey())
 	{
-		kvSub.GetName(sName, sizeof(sName));
-		if (!g_smExcludeMissions.GetValue(sName, shit))
+		kvSub.GetName(sSubName, sizeof(sSubName));
+		if (!g_smExcludeMissions.GetValue(sSubName, shit))
 		{
-			if (!kvSub.FindKey("modes").FindKey(g_sMode).IsNull())
+			FormatEx(sKey, sizeof(sKey), "modes/%s", g_sMode);
+			if (!kvSub.FindKey(sKey).IsNull())
 			{
 				kvSub.GetString("DisplayTitle", sTitle, sizeof(sTitle), "N/A");
-				FormatEx(sKvPtr, sizeof(sKvPtr), "%i", view_as<int>(kvSub));
-				menu.AddItem(sKvPtr, sTitle);
+				menu.AddItem(sSubName, sTitle);
 			}
 		}
 	}
@@ -190,11 +190,11 @@ int CustomMapTitle_MenuHandler(Menu menu, MenuAction action, int client, int ite
 	{
 		case MenuAction_Select:
 		{
-			char sTitle[256], sKvPtr[256];
+			static char sTitle[256], sSubName[256];
 
-			if (menu.GetItem(itemNum, sKvPtr, sizeof(sKvPtr), _, sTitle, sizeof(sTitle)))
+			if (menu.GetItem(itemNum, sSubName, sizeof(sSubName), _, sTitle, sizeof(sTitle)))
 			{
-				ShowChaptersMenu(client, sKvPtr, sTitle);
+				ShowChaptersMenu(client, sSubName, sTitle);
 			}
 		}
 		case MenuAction_Cancel:
@@ -210,15 +210,16 @@ int CustomMapTitle_MenuHandler(Menu menu, MenuAction action, int client, int ite
 	return 0;
 }
 
-void ShowChaptersMenu(int client, const char[] sKvPtr, const char[] sTitle)
+void ShowChaptersMenu(int client, const char[] sSubName, const char[] sTitle)
 {
-	SourceKeyValues kv = view_as<SourceKeyValues>(StringToInt(sKvPtr));
-	SourceKeyValues kvChapters = kv.FindKey("modes").FindKey(g_sMode);
+	static char sMap[256], sKey[256];
+	
+	FormatEx(sKey, sizeof(sKey), "%s/modes/%s", sSubName, g_sMode);
+	SourceKeyValues kvMissions = SDKCall(g_hSDKGetAllMissions, g_pMatchExtL4D);
+	SourceKeyValues kvChapters = kvMissions.FindKey(sKey);
 
 	if (!kvChapters.IsNull())
 	{
-		char sMap[256];
-
 		Menu menu = new Menu(CustomMapChapters_MenuHandler);
 		menu.SetTitle("选择章节:");
 
@@ -239,7 +240,7 @@ int CustomMapChapters_MenuHandler(Menu menu, MenuAction action, int client, int 
 	{
 		case MenuAction_Select:
 		{
-			char sTitle[256], sMap[256];
+			static char sTitle[256], sMap[256];
 
 			if (menu.GetItem(itemNum, sTitle, sizeof(sTitle), _, sMap, sizeof(sMap)))
 			{
