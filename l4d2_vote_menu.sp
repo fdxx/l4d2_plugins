@@ -5,14 +5,16 @@
 #include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 ConVar
 	g_cvAdminImmunity,
 	g_cvKickBanMinutes;
 
 bool
-	g_bAdminImmunity;
+	g_bAdminImmunity,
+	g_bCfgVote,
+	g_bMapVote;
 
 int
 	g_iKickBanMinutes;
@@ -50,6 +52,22 @@ void GetCvars()
 	g_iKickBanMinutes = g_cvKickBanMinutes.IntValue;
 }
 
+public void OnLibraryAdded(const char[] name)
+{
+	if (strcmp(name, "l4d2_config_vote") == 0)
+		g_bCfgVote = true;
+	else if (strcmp(name, "l4d2_map_vote") == 0)
+		g_bMapVote = true;
+}
+
+public void OnLibraryRemoved(const char[] name)
+{
+	if (strcmp(name, "l4d2_config_vote") == 0)
+		g_bCfgVote = false;
+	else if (strcmp(name, "l4d2_map_vote") == 0)
+		g_bMapVote = false;
+}
+
 public void OnConfigsExecuted()
 {
 	static bool shit;
@@ -72,8 +90,11 @@ Action Cmd_Vote(int client, int args)
 			menu.AddItem("ReHealth", "幸存者和特感回血");
 			menu.AddItem("KickPlayer", "踢出玩家");
 			
-			if (LibraryExists("l4d2_config_vote"))
+			if (g_bCfgVote)
 				menu.AddItem("SpecialVote", "特感投票");
+
+			if (g_bMapVote)
+				menu.AddItem("MapVote", "地图投票");
 		}
 		menu.AddItem("ForceSpec", "强制玩家旁观");
 		menu.Display(client, 20);
@@ -164,6 +185,11 @@ int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int client, int 
 				{
 					if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 1)
 						ClientCommand(client, "sm_sivote");
+				}
+				case 'M':
+				{
+					if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 1)
+						ClientCommand(client, "sm_mapvote");
 				}
 			}
 		}
