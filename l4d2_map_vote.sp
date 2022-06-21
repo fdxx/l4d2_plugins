@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 #include <sourcemod>
 #include <sdktools>
@@ -53,7 +53,9 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_mapvote", Cmd_VoteMap);
 	RegConsoleCmd("sm_votemap", Cmd_VoteMap);
 	RegConsoleCmd("sm_v3", Cmd_VoteMap);
+
 	RegAdminCmd("sm_missions_export", Cmd_Rxport, ADMFLAG_ROOT);
+	RegAdminCmd("sm_missions_reload", Cmd_Reload, ADMFLAG_ROOT);
 
 	RegPluginLibrary("l4d2_map_vote");
 }
@@ -78,6 +80,15 @@ Action Cmd_Rxport(int client, int args)
 	if (kv.SaveToFile(sFile))
 		ReplyToCommand(client, "Save to file succeeded: %s", sFile);
 	
+	return Plugin_Handled;
+}
+
+Action Cmd_Reload(int client, int args)
+{
+	ServerCommand("update_addon_paths");
+	ServerCommand("mission_reload");
+	
+	ReplyToCommand(client, "更新VPK文件");
 	return Plugin_Handled;
 }
 
