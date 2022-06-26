@@ -1,4 +1,8 @@
 
+
+// This plugin is deprecated.
+// Use better: https://github.com/fdxx/l4d2_plugins/blob/main/l4d2_charging_damage.sp
+
 #pragma semicolon 1
 #pragma newdecls required
 
