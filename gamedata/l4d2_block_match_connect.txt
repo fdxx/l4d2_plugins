@@ -1,0 +1,41 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"MemPatches"
+		{
+			"CBaseServer::ReplyReservationRequest"
+			{
+				"signature"	"CBaseServer::ReplyReservationRequest"
+
+				// if (GetNumClients() - GetNumFakeClients() > 0) Reservation request from %s rejected: server not empty.
+
+				"linux"
+				{
+					"offset"	"C9h"
+					"verify"	"\x0F\x8E"
+					"patch"		"\x90\x90\x90\x90\x90\x90"
+				}
+
+				"windows"
+				{
+					"offset"	"181h"
+					"verify"	"\x7E\x1B"
+					"patch"		"\x90\x90"
+				}
+			}
+		}
+
+		"Signatures"
+		{
+			"CBaseServer::ReplyReservationRequest"
+			{
+				"library"	"engine"
+				"linux"		"@_ZN11CBaseServer23ReplyReservationRequestER8netadr_sR7bf_read"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\x33\xC5\x89\x45\xFC\x8B\x45\x08\x53\x56\x8B\x75\x0C\x8B\xD9\x8B\x4E\x2A\x57\x89\x9D"
+				/* ? ? ? ? ? ? ? ? ? A1 ? ? ? ? 33 C5 89 45 FC 8B 45 08 53 56 8B 75 0C 8B D9 8B 4E ? 57 89 9D */
+			}
+		}
+	}
+}
+
