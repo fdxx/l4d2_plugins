@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.4"
+#define VERSION "0.5"
 
 #include <sourcemod>
 #include <sdktools>
@@ -308,7 +308,9 @@ void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 	{
 		case VoteAction_Start:
 		{
-			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", param1);
+			char sDisplay[256];
+			vote.GetDisplayText(sDisplay, sizeof(sDisplay));
+			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起投票%s", param1, sDisplay);
 		}
 		case VoteAction_PlayerVoted:
 		{
