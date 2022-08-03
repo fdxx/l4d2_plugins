@@ -1,0 +1,92 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Functions"
+		{
+			"CDirector::AreBossesProhibited"
+			{
+				"signature"		"CDirector::AreBossesProhibited"
+				"callconv"		"thiscall"
+				"return"		"bool"
+				"this"			"address"
+			}
+		}
+
+		"Addresses"
+		{
+			"TheNavAreas"
+			{
+				"linux"
+				{
+					"signature"	"nav_update_lighting"
+					"read"		"33"
+				}
+				
+				"windows"
+				{
+					"signature"	"nav_update_lighting"
+					"read"		"82"
+				}
+			}
+		}
+
+		"Offsets"
+		{
+			// From TerrorNavMesh::Update
+			"TerrorNavMesh::UnknownTimer"
+			{
+				"windows"	"1744"
+				"linux"		"1740"
+			}
+
+			// From TerrorNavArea::ScriptGetSpawnAttributes
+			"TerrorNavArea::SpawnAttributes"
+			{
+				"windows"	"296"
+				"linux"		"300"
+			}
+
+			// From CTerrorPlayer::GetFlowDistance
+			"TerrorNavArea::FlowDistance"
+			{
+				"windows"	"332"
+				"linux"		"340"
+			}
+
+			// CUtlVector<T, A>::m_Size
+			"TheNavAreas::Count"
+			{
+				"windows"	"12"
+				"linux"		"12"
+			}
+		}
+
+		"Signatures"
+		{
+			"nav_update_lighting"
+			{
+				"library"	"server"
+				"linux"		"@_ZL19nav_update_lightingRK8CCommand"
+				"windows"	"\x55\x8B\xEC\x8B\x2A\x2A\x57\x33\x2A\x83\x2A\x02"
+				/* 55 8B EC 8B ? ? 57 33 ? 83 ? 02 */
+			}
+
+			"TerrorNavArea::FindRandomSpot"
+			{
+				"library"   "server"
+				"linux"     "@_ZNK13TerrorNavArea14FindRandomSpotEv"
+				"windows"   "\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x83\x2A\x2A\x56\x8B\x2A\xF3\x2A\x2A\x2A\x2A\xF3\x2A\x2A\x2A\x2A\x0F"
+				/* ? ? ? ? ? ? ? ? ? ? ? 83 ? ? 56 8B ? F3 ? ? ? ? F3 ? ? ? ? 0F */
+			}
+
+			"CDirector::AreBossesProhibited"
+			{
+				"library"	"server"
+				"linux"		"@_ZNK9CDirector19AreBossesProhibitedEv"
+				"windows"   "\x55\x8B\xEC\x51\x56\x8B\xF1\x8B\x8E\x88\x05\x00\x00\x8D\x45\xFF\x50\xE8\x2A\x2A\x2A\x2A\x84\xC0\x74\x2A\x8A\x45\xFF\x5E\x8B\xE5\x5D\xC3\x8B\x8E\x84\x05\x00\x00"
+				/* 55 8B EC 51 56 8B F1 8B 8E 88 05 00 00 8D 45 FF 50 E8 ? ? ? ? 84 C0 74 ? 8A 45 FF 5E 8B E5 5D C3 8B 8E 84 05 00 00 */
+			}
+		}
+	}
+}
