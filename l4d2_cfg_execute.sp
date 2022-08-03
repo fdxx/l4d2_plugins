@@ -1,53 +1,77 @@
 #pragma semicolon 1
 #pragma newdecls required
 
+#define VERSION "0.2"
+
 #include <sourcemod>
+
+#define ONCE 1
+#define MANY_TIMES 2
+
+ConVar
+	g_cvExecOnce,
+	g_cvExecManyTimes;
 
 public Plugin myinfo = 
 {
 	name = "L4D2 Config execute",
 	author = "fdxx",
-	description = "",
-	version = "0.1",
-	url = ""
+	version = VERSION,
 };
 
 public void OnPluginStart()
 {
-	CreateConVar("l4d2_cfg_execute", "somethings.cfg", "在服务器启动时执行的配置文件 多个文件使用;分割 (配置文件路径left4dead2/cfg/sourcemod)", FCVAR_NONE);
+	CreateConVar("l4d2_cfg_execute_version", VERSION, "version", FCVAR_NONE | FCVAR_DONTRECORD);
+	g_cvExecOnce = CreateConVar("l4d2_cfg_execute_once", "", "CFG file to be executed once after server startup. \nUse semicolons to separate multiple files. (search path: left4dead2/cfg)", FCVAR_NONE);
+	g_cvExecManyTimes = CreateConVar("l4d2_cfg_execute_manytimes", "", "CFG file executed after each map start.", FCVAR_NONE);
+
+	RegAdminCmd("sm_cfg_exec", Cmd_cfgExec, ADMFLAG_ROOT, "Manually execute");
 	AutoExecConfig(true, "l4d2_cfg_execute");
+}
+
+Action Cmd_cfgExec(int client, int args)
+{
+	char sFile[256], sResult[256];
+	
+	GetCmdArg(1, sFile, sizeof(sFile));
+	ServerCommandEx(sResult, sizeof(sResult), "exec %s", sFile);
+	if (sResult[0] != '\0')
+		LogError("%s", sResult);
+	
+	return Plugin_Handled;
 }
 
 public void OnConfigsExecuted()
 {
-	// 插件启动后只执行一次
-	static bool bExecute = true;
-	if (bExecute)
-	{
-		bExecute = false;
-		CreateTimer(0.2 , ExecuteCfg_Timer);
-	}
+	CreateTimer(0.1, Execute_Timer, MANY_TIMES, TIMER_FLAG_NO_MAPCHANGE);
+
+	static bool shit;
+	if (shit) return;
+	shit = true;
+
+	CreateTimer(0.1, Execute_Timer, ONCE);
 }
 
-public Action ExecuteCfg_Timer(Handle timer)
+Action Execute_Timer(Handle timer, int iType)
 {
-	char sCfgs[256];
-	FindConVar("l4d2_cfg_execute").GetString(sCfgs, sizeof(sCfgs));
+	char sBuffer[1024];
 
-	if (sCfgs[0] != '\0')
+	if (iType == MANY_TIMES)
+		g_cvExecManyTimes.GetString(sBuffer, sizeof(sBuffer));
+	else g_cvExecOnce.GetString(sBuffer, sizeof(sBuffer));
+
+	if (sBuffer[0] == '\0')
+		return Plugin_Continue;
+
+	char sFiles[32][256], sResult[256];
+	int pieces = ExplodeString(sBuffer, ";", sFiles, sizeof(sFiles), sizeof(sFiles[]));
+	
+	for (int i = 0; i < pieces; i++)
 	{
-		char sCfgName[32][128], sLogMsg[128];
-		int iNumber = ExplodeString(sCfgs, ";", sCfgName, sizeof(sCfgName), sizeof(sCfgName[]));
-
-		for (int i = 0; i < iNumber; i++)
-		{
-			LogMessage("加载 %s", sCfgName[i]);
-			ServerCommandEx(sLogMsg, sizeof(sLogMsg), "exec sourcemod/%s", sCfgName[i]);
-			if (sLogMsg[0] != '\0')
-			{
-				LogError("加载 %s 错误: %s", sCfgName[i], sLogMsg);
-			}
-		}
+		sResult[0] = '\0';
+		ServerCommandEx(sResult, sizeof(sResult), "exec %s", sFiles[i]);
+		if (sResult[0] != '\0')
+			LogError("%s", sResult);
 	}
 
 	return Plugin_Continue;
