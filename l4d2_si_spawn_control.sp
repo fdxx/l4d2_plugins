@@ -2,16 +2,24 @@
 #pragma newdecls required
 
 #define DEBUG 0
-#define VERSION "2.9"
+#define VERSION "3.0"
 
 #include <sourcemod>
 #include <left4dhooks>
 #include <sdktools>
 #include <profiler>
+#include <sourcescramble> // https://github.com/nosoop/SMExt-SourceScramble
 
-#define GAMEDATA "l4d2_nav_area"
+#define GAMEDATA "l4d2_si_spawn_control"
 
 ConVar
+	z_special_limit[7],
+	z_attack_flow_range,
+	z_spawn_flow_limit,
+	director_spectate_specials,
+	z_spawn_safety_range,
+	z_finale_spawn_safety_range,
+	z_spawn_range,
 	g_cvSpecialLimit[7],
 	g_cvMaxSILimit,
 	g_cvSpawnTime,
@@ -25,7 +33,6 @@ int
 	g_iSpecialLimit[7],
 	g_iMaxSILimit,
 	g_iSpawnMaxSICount,
-	g_iNormalSpawnRange,
 	g_iSpawnAttributesOffset,
 	g_iFlowDistanceOffset,
 	g_iNavCountOffset,
@@ -36,7 +43,6 @@ float
 	g_fSpawnTime,
 	g_fFirstSpawnTime,
 	g_fKillSITime,
-	g_fMapMaxFlowDist,
 	g_fSpawnDist,
 	g_fSpecialActionTime[MAXPLAYERS+1];
 
@@ -176,6 +182,19 @@ public void OnPluginStart()
 
 	CreateConVar("l4d2_si_spawn_control_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
 
+	z_special_limit[SMOKER] = FindConVar("z_smoker_limit");
+	z_special_limit[BOOMER] = FindConVar("z_boomer_limit");
+	z_special_limit[HUNTER] = FindConVar("z_hunter_limit");
+	z_special_limit[SPITTER] = FindConVar("z_spitter_limit");
+	z_special_limit[JOCKEY] = FindConVar("z_jockey_limit");
+	z_special_limit[CHARGER] = FindConVar("z_charger_limit");
+	z_attack_flow_range = FindConVar("z_attack_flow_range");
+	z_spawn_flow_limit = FindConVar("z_spawn_flow_limit");
+	director_spectate_specials = FindConVar("director_spectate_specials");
+	z_spawn_safety_range = FindConVar("z_spawn_safety_range");
+	z_finale_spawn_safety_range = FindConVar("z_finale_spawn_safety_range");
+	z_spawn_range = FindConVar("z_spawn_range");
+
 	g_cvSpecialLimit[HUNTER] = CreateConVar("l4d2_si_spawn_control_hunter_limit", "1", "Hunter数量", FCVAR_NONE, true, 0.0, true, 31.0);
 	g_cvSpecialLimit[JOCKEY] = CreateConVar("l4d2_si_spawn_control_jockey_limit", "1", "jockey数量", FCVAR_NONE, true, 0.0, true, 31.0);
 	g_cvSpecialLimit[SMOKER] = CreateConVar("l4d2_si_spawn_control_smoker_limit", "1", "smoker数量", FCVAR_NONE, true, 0.0, true, 31.0);
@@ -219,8 +238,6 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_sicvar", Cmd_CvarPrint);
 	RegConsoleCmd("sm_si_cvar", Cmd_CvarPrint);
 
-	TweakSettings();
-
 	g_aClientsArray = new ArrayList();
 	g_aClassArray = new ArrayList();
 	g_aSpawnData = new ArrayList(sizeof(SpawnData));
@@ -256,34 +273,19 @@ void GetCvars()
 	g_bBlockSpawn = g_cvBlockSpawn.BoolValue;
 
 	g_bRadicalSpawn = g_cvRadicalSpawn.BoolValue;
-	g_iNormalSpawnRange = g_cvNormalSpawnRange.IntValue;
+	z_spawn_range.IntValue = g_cvNormalSpawnRange.IntValue;
 }
 
 public void OnConfigsExecuted()
 {
-	TweakSettings(); //防止地图加载后重置cvar
-}
+	for (int i = 1; i <= 6; i++)
+		z_special_limit[i].IntValue = 0;
 
-void TweakSettings()
-{
-	//某些地图固定路段依然会刷特感 (如c2m1下坡，c2m3过山车)，使用l4d2_si_spawn_control_block_other_si_spawn阻止.
-	FindConVar("z_smoker_limit").SetInt(0);
-	FindConVar("z_boomer_limit").SetInt(0);
-	FindConVar("z_hunter_limit").SetInt(0);
-	FindConVar("z_spitter_limit").SetInt(0);
-	FindConVar("z_jockey_limit").SetInt(0);
-	FindConVar("z_charger_limit").SetInt(0);
-
-	FindConVar("z_attack_flow_range").SetInt(50000);
-	FindConVar("z_spawn_flow_limit").SetInt(50000);
-	FindConVar("director_spectate_specials").SetInt(1);
-
-	if (!g_bRadicalSpawn)
-	{
-		FindConVar("z_spawn_safety_range").SetInt(1);
-		FindConVar("z_finale_spawn_safety_range").SetInt(1);
-		FindConVar("z_spawn_range").SetInt(g_iNormalSpawnRange);
-	}
+	z_attack_flow_range.IntValue = 50000;
+	z_spawn_flow_limit.IntValue = 50000;
+	director_spectate_specials.IntValue = 1;
+	z_spawn_safety_range.IntValue = 1;
+	z_finale_spawn_safety_range.IntValue = 1;
 }
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -293,8 +295,7 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	delete g_hKillSICheckTimer;
 	g_hKillSICheckTimer = CreateTimer(2.0, KillSICheck_Timer, _, TIMER_REPEAT);
 
-	if (g_bRadicalSpawn)
-		CreateTimer(2.0, RoundStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(2.0, RoundStart_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 Action RoundStart_Timer(Handle timer)
@@ -303,8 +304,6 @@ Action RoundStart_Timer(Handle timer)
 	if (g_iNavAreaCount <= 0) LogError("当前地图Nav区域数量为0, 可能是某些测试地图");
 
 	g_bFinalMap = L4D_IsMissionFinalMap();
-	g_fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
-
 	return Plugin_Continue;
 }
 
@@ -491,7 +490,7 @@ bool GetSpawnPosByNavArea(float fPos[3])
 {
 	static TheNavAreas pTheNavAreas;
 	static NavArea pArea;
-	static float fSpawnPos[3], fFlow, fDist;
+	static float fSpawnPos[3], fFlow, fDist, fMapMaxFlowDist;
 	static bool bFindValidPos;
 	static int iArrayIndex, i;
 	static SpawnData data;
@@ -500,6 +499,7 @@ bool GetSpawnPosByNavArea(float fPos[3])
 	bFindValidPos = false;
 	GetSurPos();
 	g_aSpawnData.Clear();
+	fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
 
 	for (i = 0; i < g_iNavAreaCount; i++)
 	{
@@ -509,7 +509,7 @@ bool GetSpawnPosByNavArea(float fPos[3])
 			if (IsValidFlags(pArea.SpawnAttributes))
 			{
 				fFlow = pArea.GetFlow();
-				if (0.0 < fFlow < g_fMapMaxFlowDist)
+				if (0.0 < fFlow < fMapMaxFlowDist)
 				{
 					pArea.GetSpawnPos(fSpawnPos);
 					if (IsNearTheSur(fFlow, fSpawnPos, fDist))
@@ -816,17 +816,6 @@ public Action L4D_OnSpawnSpecial(int &zombieClass, const float vecPos[3], const 
 	return Plugin_Continue;
 }
 
- //解锁最大特感数量限制
-public Action L4D_OnGetScriptValueInt(const char[] key, int &retVal)
-{
-	if (strcmp(key, "MaxSpecials", false) == 0 || strcmp(key, "cm_MaxSpecials", false) == 0 || strcmp(key, "DominatorLimit", false) == 0 || strcmp(key, "cm_DominatorLimit", false) == 0)
-	{
-		retVal = 31;
-		return Plugin_Handled;
-	}
-	return Plugin_Continue;
-}
-
 Action kickbot(Handle timer, int userid)
 {
 	static int client;
@@ -844,13 +833,13 @@ void Init()
 	if (hGameData == null)
 		SetFailState("Failed to load \"%s.txt\" gamedata.", GAMEDATA);
 
-	g_iSpawnAttributesOffset = hGameData.GetOffset("TerrorNavArea::ScriptGetSpawnAttributes");
+	g_iSpawnAttributesOffset = hGameData.GetOffset("TerrorNavArea::SpawnAttributes");
 	if (g_iSpawnAttributesOffset == -1)
-		SetFailState("Failed to find offset: TerrorNavArea::ScriptGetSpawnAttributes");
+		SetFailState("Failed to find offset: TerrorNavArea::SpawnAttributes");
 
-	g_iFlowDistanceOffset = hGameData.GetOffset("CTerrorPlayer::GetFlowDistance::m_flow");
+	g_iFlowDistanceOffset = hGameData.GetOffset("TerrorNavArea::FlowDistance");
 	if(g_iFlowDistanceOffset == -1)
-		SetFailState("Failed to find offset: CTerrorPlayer::GetFlowDistance::m_flow");
+		SetFailState("Failed to find offset: TerrorNavArea::FlowDistance");
 
 	g_iNavCountOffset = hGameData.GetOffset("TheNavAreas::Count");
 	if(g_iNavCountOffset == -1)
@@ -884,6 +873,12 @@ void Init()
 	if (g_hSDKIsVisibleToPlayer == null)
 		SetFailState("Failed to create SDKCall: IsVisibleToPlayer");
 
+	MemoryPatch mPatch = MemoryPatch.CreateFromConf(hGameData, "CDirector::GetMaxPlayerZombies");
+	if (!mPatch.Validate())
+		SetFailState("Verify patch failed.");
+	if (!mPatch.Enable())
+		SetFailState("Enable patch failed.");
+
 	delete hGameData;
 }
 
@@ -915,6 +910,7 @@ Action Cmd_CvarPrint(int client, int args)
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	CreateNative("L4D2_CanSpawnSpecial", Native_CanSpawnSpecial);
+	RegPluginLibrary("l4d2_si_spawn_control");
 	return APLRes_Success;
 }
 
