@@ -7,6 +7,10 @@
 
 #define VERSION "0.5"
 
+#define	BOSS_TYPE_TANK	0
+#define	BOSS_TYPE_WITCH	1
+
+
 static const char g_sWeapons[][][] = 
 {
 	{"weapon_shotgun_chrome",		"铁喷",			"models/w_models/weapons/w_pumpshotgun_A.mdl"},
@@ -1711,7 +1715,7 @@ void AllowSpawn(bool bAllow)
 
 	if (g_bBossSpawnControl)
 	{
-		L4D2_CanSpawnBoss(1, bAllow);
-		L4D2_CanSpawnBoss(2, bAllow);
+		L4D2_CanSpawnBoss(BOSS_TYPE_TANK, bAllow);
+		L4D2_CanSpawnBoss(BOSS_TYPE_WITCH, bAllow);
 	}
 }
