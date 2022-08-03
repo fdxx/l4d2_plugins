@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 
 #include <sourcemod>
 #include <multicolors>
@@ -29,15 +29,13 @@ float
 #define	CHARGER 6
 #define	TANK	8
 
-#define	BOSS_TYPE_TANK	1
-#define	BOSS_TYPE_WITCH	2
+#define	BOSS_TYPE_TANK	0
+#define	BOSS_TYPE_WITCH	1
 
-native bool L4D2_IsBossSpawnMap(int iBossType, const char[] sMapName);
 native float L4D2_GetBossSpawnFlow(int iBossType);
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	MarkNativeAsOptional("L4D2_IsBossSpawnMap");
 	MarkNativeAsOptional("L4D2_GetBossSpawnFlow");
 	return APLRes_Success;
 }
@@ -178,6 +176,11 @@ void DrawSpecials(Panel panel)
 	panel.DrawText(sBuffer);
 }
 
+#define FLOW_DISABLED	-3.0
+#define FLOW_DEFAULT	-2.0
+#define FLOW_STATIC		-1.0
+#define FLOW_NONE		0.0
+
 void DrawFlow(Panel panel)
 {
 	char sBuffer[256];
@@ -202,29 +205,31 @@ void DrawFlow(Panel panel)
 
 	if (!g_bCanGetBossSpawnFlow) return;
 
-	if (L4D2_IsBossSpawnMap(BOSS_TYPE_TANK, CurrentMap()))
-	{
-		float fTankSpawnFlow = L4D2_GetBossSpawnFlow(BOSS_TYPE_TANK);
-		if (fTankSpawnFlow > 0.0)
-		{
-			FormatEx(sBuffer, sizeof(sBuffer), "Tank: %i%%", RoundToNearest(fTankSpawnFlow * 100.0));
-			panel.DrawText(sBuffer);
-		}
-		else panel.DrawText("Tank: None");
-	}
-	else panel.DrawText("Tank: Default");
+	float fTankSpawnFlow = L4D2_GetBossSpawnFlow(BOSS_TYPE_TANK);
+	if (fTankSpawnFlow == FLOW_DISABLED)
+		FormatEx(sBuffer, sizeof(sBuffer), "Tank: Disabled");
+	else if (fTankSpawnFlow == FLOW_DEFAULT)
+		FormatEx(sBuffer, sizeof(sBuffer), "Tank: Default");
+	else if (fTankSpawnFlow == FLOW_STATIC)
+		FormatEx(sBuffer, sizeof(sBuffer), "Tank: Static");
+	else if (fTankSpawnFlow == FLOW_NONE)
+		FormatEx(sBuffer, sizeof(sBuffer), "Tank: None");
+	else if (fTankSpawnFlow > 0.0)
+		FormatEx(sBuffer, sizeof(sBuffer), "Tank: %i%%", RoundToNearest(fTankSpawnFlow * 100.0));
+	panel.DrawText(sBuffer);
 
-	if (L4D2_IsBossSpawnMap(BOSS_TYPE_WITCH, CurrentMap()))
-	{
-		float fWitchSpawnFlow = L4D2_GetBossSpawnFlow(BOSS_TYPE_WITCH);
-		if (fWitchSpawnFlow > 0.0)
-		{
-			FormatEx(sBuffer, sizeof(sBuffer), "Witch: %i%%", RoundToNearest(fWitchSpawnFlow * 100.0));
-			panel.DrawText(sBuffer);
-		}
-		else panel.DrawText("Witch: None");
-	}
-	else panel.DrawText("Witch: Default");
+	float fWitchSpawnFlow = L4D2_GetBossSpawnFlow(BOSS_TYPE_WITCH);
+	if (fWitchSpawnFlow == FLOW_DISABLED)
+		FormatEx(sBuffer, sizeof(sBuffer), "Witch: Disabled");
+	else if (fWitchSpawnFlow == FLOW_DEFAULT)
+		FormatEx(sBuffer, sizeof(sBuffer), "Witch: Default");
+	else if (fWitchSpawnFlow == FLOW_STATIC)
+		FormatEx(sBuffer, sizeof(sBuffer), "Witch: Static");
+	else if (fWitchSpawnFlow == FLOW_NONE)
+		FormatEx(sBuffer, sizeof(sBuffer), "Witch: None");
+	else if (fWitchSpawnFlow > 0.0)
+		FormatEx(sBuffer, sizeof(sBuffer), "Witch: %i%%", RoundToNearest(fWitchSpawnFlow * 100.0));
+	panel.DrawText(sBuffer);
 }
 
 void DrawTankStatus(Panel panel)
@@ -319,12 +324,5 @@ float GetSurMaxFlow()
 bool IsValidSur(int client)
 {
 	return (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 2);
-}
-
-char[] CurrentMap()
-{
-	static char sMapName[128];
-	GetCurrentMap(sMapName, sizeof(sMapName));
-	return sMapName;
 }
 
