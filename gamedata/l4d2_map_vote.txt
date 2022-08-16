@@ -11,18 +11,25 @@
 					"signature"	"CTerrorGameRules::GetMissionInfo"
 					"read"		"44"
 				}
+				"windows"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"42"
+				}
 				"read"	"0"
 			}
 		}
 
 		"Signatures"
 		{
+			/* CTerrorGameRules::GetMissionInfo(CTerrorGameRules *__hidden this) */
 			"CTerrorGameRules::GetMissionInfo"
 			{
 				"library"	"server"
 				"linux"		"@_ZN16CTerrorGameRules14GetMissionInfoEv"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x8B\x2A\x8B\x2A\x2A\x56\xFF\x2A\x8B\x2A\x8B\x2A\x8B\x2A\x2A\x6A\x2A\xFF\x2A\x8B\x2A\x85\x2A\x75\x2A\x5E"
+				/* ? ? ? ? ? ? ? ? ? ? 8B ? 8B ? ? 56 FF ? 8B ? 8B ? 8B ? ? 6A ? FF ? 8B ? 85 ? 75 ? 5E */
 			}
 		}
 	}
 }
-
