@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.5"
+#define VERSION "0.6"
 
 #include <sourcemod>
 #include <sdktools>
@@ -9,28 +9,45 @@
 #include <l4d2_source_keyvalues>	// https://github.com/fdxx/l4d2_source_keyvalues
 #include <multicolors>
 
-Address g_pMatchExtL4D;
-Handle g_hSDKGetAllMissions;
-StringMap g_smExcludeMissions;
-ConVar mp_gamemode;
+Address
+	g_pMatchExtL4D,
+	g_pTheDirector;
+
+Handle
+	g_hSDKGetAllMissions,
+	g_hSDKChangeChapter;
+
+StringMap
+	g_smTranslate,
+	g_smExcludeMissions;
+
+ConVar
+	mp_gamemode,
+	g_cvSafeChange;
+
+int
+	g_iType[MAXPLAYERS],
+	g_iPos[MAXPLAYERS][2];
+
 char g_sMode[128];
+bool g_bSafeChange;
 
 char g_sValveMaps[][][] = 
 {
-	{"c1m1_hotel",			"C1M1 死亡中心"},
-	{"c2m1_highway",		"C2M1 黑色嘉年华"},
-	{"c3m1_plankcountry",	"C3M1 沼泽激战"},
-	{"c4m1_milltown_a",		"C4M1 暴风骤雨"},
-	{"c5m1_waterfront",		"C5M1 教区"},
-	{"c6m1_riverbank",		"C6M1 短暂时刻"},
-	{"c7m1_docks",			"C7M1 牺牲"},
-	{"c8m1_apartment",		"C8M1 毫不留情"},
-	{"c9m1_alleys",			"C9M1 坠机险途"},
-	{"c10m1_caves",			"C10M1 死亡丧钟"},
-	{"c11m1_greenhouse",	"C11M1 寂静时分"},
-	{"c12m1_hilltop",		"C12M1 血腥收获"},
-	{"c13m1_alpinecreek",	"C13M1 刺骨寒溪"},
-	{"c14m1_junkyard",		"C14M1 临死一搏"},
+	{"#L4D360UI_CampaignName_C1",	"C1M1 死亡中心"},
+	{"#L4D360UI_CampaignName_C2",	"C2M1 黑色嘉年华"},
+	{"#L4D360UI_CampaignName_C3",	"C3M1 沼泽激战"},
+	{"#L4D360UI_CampaignName_C4",	"C4M1 暴风骤雨"},
+	{"#L4D360UI_CampaignName_C5",	"C5M1 教区"},
+	{"#L4D360UI_CampaignName_C6",	"C6M1 短暂时刻"},
+	{"#L4D360UI_CampaignName_C7",	"C7M1 牺牲"},
+	{"#L4D360UI_CampaignName_C8",	"C8M1 毫不留情"},
+	{"#L4D360UI_CampaignName_C9",	"C9M1 坠机险途"},
+	{"#L4D360UI_CampaignName_C10",	"C10M1 死亡丧钟"},
+	{"#L4D360UI_CampaignName_C11",	"C11M1 寂静时分"},
+	{"#L4D360UI_CampaignName_C12",	"C12M1 血腥收获"},
+	{"#L4D360UI_CampaignName_C13",	"C13M1 刺骨寒溪"},
+	{"#L4D360UI_CampaignName_C14",	"C14M1 临死一搏"},
 };
 
 public Plugin myinfo = 
@@ -45,9 +62,12 @@ public void OnPluginStart()
 	Init();
 
 	CreateConVar("l4d2_map_vote_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-
+	g_cvSafeChange = CreateConVar("l4d2_map_vote_safe_change", "1");
 	mp_gamemode = FindConVar("mp_gamemode");
-	mp_gamemode.GetString(g_sMode, sizeof(g_sMode));
+
+	OnConVarChanged(null, "", "");
+
+	g_cvSafeChange.AddChangeHook(OnConVarChanged);
 	mp_gamemode.AddChangeHook(OnConVarChanged);
 
 	RegConsoleCmd("sm_mapvote", Cmd_VoteMap);
@@ -62,6 +82,7 @@ public void OnPluginStart()
 
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
+	g_bSafeChange = g_cvSafeChange.BoolValue;
 	mp_gamemode.GetString(g_sMode, sizeof(g_sMode));
 }
 
@@ -114,11 +135,11 @@ int MapType_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 	{
 		case MenuAction_Select:
 		{
-			switch (itemNum)
-			{
-				case 0: ShowValveMapMenu(client);
-				case 1: ShowCustomMapMenu(client);
-			}
+			g_iType[client] = itemNum;
+			g_iPos[client][0] = 0;
+			g_iPos[client][1] = 0;
+
+			ShowMapMenu(client);
 		}
 		case MenuAction_End:
 		{
@@ -128,79 +149,50 @@ int MapType_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 	return 0;
 }
 
-void ShowValveMapMenu(int client)
-{
-	Menu menu = new Menu(ValveMap_MenuHandler);
-	menu.SetTitle("选择地图:");
-
-	for (int i; i < sizeof(g_sValveMaps); i++)
-	{
-		menu.AddItem(g_sValveMaps[i][0], g_sValveMaps[i][1]);
-	}
-
-	menu.ExitBackButton = true;
-	menu.Display(client, 20);
-}
-
-int ValveMap_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
-{
-	switch (action)
-	{
-		case MenuAction_Select:
-		{
-			static char sTitle[256], sMap[256];
-
-			if (menu.GetItem(itemNum, sMap, sizeof(sMap), _, sTitle, sizeof(sTitle)))
-			{
-				StartVoteMap(client, sTitle, sMap);
-			}
-		}
-		case MenuAction_Cancel:
-		{
-			if (itemNum == MenuCancel_ExitBack)
-				Cmd_VoteMap(client, 0);
-		}
-		case MenuAction_End:
-		{
-			delete menu;
-		}
-	}
-	return 0;
-}
-
-void ShowCustomMapMenu(int client)
+void ShowMapMenu(int client)
 {
 	static int shit;
 	static char sSubName[256], sTitle[256], sKey[256];
 
-	Menu menu = new Menu(CustomMapTitle_MenuHandler);
+	Menu menu = new Menu(Title_MenuHandler);
 	menu.SetTitle("选择地图:");
 
 	SourceKeyValues kvMissions = SDKCall(g_hSDKGetAllMissions, g_pMatchExtL4D);
 	for (SourceKeyValues kvSub = kvMissions.GetFirstTrueSubKey(); !kvSub.IsNull(); kvSub = kvSub.GetNextTrueSubKey())
 	{
 		kvSub.GetName(sSubName, sizeof(sSubName));
-		if (!g_smExcludeMissions.GetValue(sSubName, shit))
+		if (g_smExcludeMissions.GetValue(sSubName, shit))
+			continue;
+
+		FormatEx(sKey, sizeof(sKey), "modes/%s", g_sMode);
+		if (kvSub.FindKey(sKey).IsNull())
+			continue;
+
+		if (g_iType[client] == 0 && kvSub.GetInt("builtin"))
 		{
-			FormatEx(sKey, sizeof(sKey), "modes/%s", g_sMode);
-			if (!kvSub.FindKey(sKey).IsNull())
-			{
-				kvSub.GetString("DisplayTitle", sTitle, sizeof(sTitle), "N/A");
-				menu.AddItem(sSubName, sTitle);
-			}
+			kvSub.GetString("DisplayTitle", sTitle, sizeof(sTitle), "N/A");
+			g_smTranslate.GetString(sTitle, sTitle, sizeof(sTitle));
+			menu.AddItem(sSubName, sTitle);
+		}
+		else if (g_iType[client] == 1 && !kvSub.GetInt("builtin"))
+		{
+			kvSub.GetString("DisplayTitle", sTitle, sizeof(sTitle), "N/A");
+			menu.AddItem(sSubName, sTitle);
 		}
 	}
 	
 	menu.ExitBackButton = true;
-	menu.Display(client, 20);
+	menu.DisplayAt(client, g_iPos[client][g_iType[client]], 30);
 }
 
-int CustomMapTitle_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int Title_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
+			g_iPos[client][g_iType[client]] = menu.Selection;
+
 			static char sTitle[256], sSubName[256];
 
 			if (menu.GetItem(itemNum, sSubName, sizeof(sSubName), _, sTitle, sizeof(sTitle)))
@@ -231,7 +223,7 @@ void ShowChaptersMenu(int client, const char[] sSubName, const char[] sTitle)
 
 	if (!kvChapters.IsNull())
 	{
-		Menu menu = new Menu(CustomMapChapters_MenuHandler);
+		Menu menu = new Menu(Chapters_MenuHandler);
 		menu.SetTitle("选择章节:");
 
 		for (SourceKeyValues kvSub = kvChapters.GetFirstTrueSubKey(); !kvSub.IsNull(); kvSub = kvSub.GetNextTrueSubKey())
@@ -241,11 +233,11 @@ void ShowChaptersMenu(int client, const char[] sSubName, const char[] sTitle)
 		}
 
 		menu.ExitBackButton = true;
-		menu.Display(client, 20);
+		menu.Display(client, 30);
 	}
 }
 
-int CustomMapChapters_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
+int Chapters_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 {
 	switch (action)
 	{
@@ -261,7 +253,7 @@ int CustomMapChapters_MenuHandler(Menu menu, MenuAction action, int client, int 
 		case MenuAction_Cancel:
 		{
 			if (itemNum == MenuCancel_ExitBack)
-				ShowCustomMapMenu(client);
+				ShowMapMenu(client);
 		}
 		case MenuAction_End:
 		{
@@ -279,7 +271,7 @@ void StartVoteMap(int client, const char[] sTitle, const char[] sMap)
 		return;
 	}
 	
-	L4D2NativeVote vote = L4D2NativeVote(VoteHandler);
+	L4D2NativeVote vote = L4D2NativeVote(Vote_Handler);
 	vote.SetDisplayText("更换地图: %s (%s)", sTitle, sMap);
 	vote.Initiator = client;
 	vote.SetInfoString(sMap);
@@ -302,7 +294,7 @@ void StartVoteMap(int client, const char[] sTitle, const char[] sMap)
 		LogError("发起投票失败");
 }
 
-void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
+void Vote_Handler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 {
 	switch (action)
 	{
@@ -322,13 +314,27 @@ void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 			{
 				vote.SetPass("加载中...");
 
-				char sMap[256], sMsg[256];
+				char sMap[256];
 				vote.GetInfoString(sMap, sizeof(sMap));
-				ServerCommandEx(sMsg, sizeof(sMsg), "changelevel %s", sMap);
-				if (sMsg[0] != '\0')
+
+				if (g_bSafeChange)
 				{
-					CPrintToChatAll("{default}[{red}提示{default}] 换图失败");
-					LogError("更换 %s 地图失败: %s", sMap, sMsg);
+					// 使用安全的方法更换地图，避免内存泄漏
+					if (!SDKCall(g_hSDKChangeChapter, g_pTheDirector, sMap))
+					{
+						CPrintToChatAll("{default}[{red}提示{default}] 更换 %s 地图失败", sMap);
+						LogError("更换 %s 地图失败", sMap);
+					}
+				}
+				else
+				{
+					char sBuffer[128];
+					ServerCommandEx(sBuffer, sizeof(sBuffer), "changelevel %s", sMap);
+					if (sBuffer[0] != '\0')
+					{
+						CPrintToChatAll("{default}[{red}提示{default}] 更换 %s 地图失败: %s", sMap, sBuffer);
+						LogError("更换 %s 地图失败: %s", sMap, sBuffer);
+					}
 				}
 			}
 			else vote.SetFail();
@@ -346,6 +352,10 @@ void Init()
 	if (g_pMatchExtL4D == Address_Null)
 		SetFailState("Failed to get address: \"g_pMatchExtL4D\"");
 
+	g_pTheDirector = hGameData.GetAddress("TheDirector");
+	if (g_pTheDirector == Address_Null)
+		SetFailState("Failed to get address: \"TheDirector\"");
+
 	StartPrepSDKCall(SDKCall_Raw);
 	PrepSDKCall_SetVirtual(0);
 	PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
@@ -353,15 +363,21 @@ void Init()
 	if (g_hSDKGetAllMissions == null)
 		SetFailState("Failed to create SDKCall: MatchExtL4D::GetAllMissions");
 
+	StartPrepSDKCall(SDKCall_Raw);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CDirector::OnChangeChapterVote");
+	PrepSDKCall_AddParameter(SDKType_String, SDKPass_Pointer);
+	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
+	g_hSDKChangeChapter = EndPrepSDKCall();
+	if (g_hSDKChangeChapter == null)
+		SetFailState("Failed to create SDKCall: CDirector::OnChangeChapterVote");
+
 	delete hGameData;
 
-	char sBuffer[128];
+	g_smTranslate = new StringMap();
+	for (int i; i < sizeof(g_sValveMaps); i++)
+		g_smTranslate.SetString(g_sValveMaps[i][0], g_sValveMaps[i][1]);
+
 	g_smExcludeMissions = new StringMap();
-	for (int i = 1; i <= 14; i++)
-	{
-		FormatEx(sBuffer, sizeof(sBuffer), "L4D2C%i", i);
-		g_smExcludeMissions.SetValue(sBuffer, 1);
-	}
 	g_smExcludeMissions.SetValue("credits", 1);
 	g_smExcludeMissions.SetValue("HoldoutChallenge", 1);
 	g_smExcludeMissions.SetValue("HoldoutTraining", 1);
