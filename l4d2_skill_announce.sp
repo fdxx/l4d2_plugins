@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 
 #include <sourcemod>
 #include <sdkhooks>
@@ -214,7 +214,7 @@ Action OnTakeDamageAlive(int victim, int &attacker, int &inflictor, float &damag
 	return Plugin_Continue;
 }
 
-MRESReturn mreOnEventKilledPre(int client)
+MRESReturn mreOnEventKilledPre(int client, DHookParam hParams)
 {
 	if (IsValidSI(client))
 	{
@@ -230,7 +230,7 @@ MRESReturn mreOnEventKilledPre(int client)
 	return MRES_Ignored;
 }
 
-MRESReturn mreOnEventKilledPost(int client)
+MRESReturn mreOnEventKilledPost(int client, DHookParam hParams)
 {
 	g_bSkeetDead[client] = false;
 	return MRES_Ignored;
