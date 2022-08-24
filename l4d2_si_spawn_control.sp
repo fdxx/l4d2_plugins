@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define DEBUG 0
-#define VERSION "3.0"
+#define VERSION "3.1"
 
 #include <sourcemod>
 #include <left4dhooks>
@@ -857,6 +857,8 @@ void Init()
 	if(g_hSDKFindRandomSpot == null)
 		SetFailState("Failed to create SDKCall: TerrorNavArea::FindRandomSpot");
 
+	// IsVisibleToPlayer(Vector const&, CBasePlayer *, int, int, float, CBaseEntity const*, TerrorNavArea **, bool *);
+	// SDKCall(g_hSDKIsVisibleToPlayer, fTargetPos, i, 2, 3, 0.0, 0, pArea, true);
 	StartPrepSDKCall(SDKCall_Static);
 	if (!PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "IsVisibleToPlayer"))
 		SetFailState("Failed to find signature: IsVisibleToPlayer");
@@ -865,7 +867,7 @@ void Init()
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);								// 客户端团队
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);								// 目标点位团队, 如果为0将考虑客户端的角度
 	PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);										// 不清楚
-	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer, VDECODE_FLAG_ALLOWWORLD);	// 不清楚
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);								// 不清楚
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Pointer);							// 目标点位 NavArea 区域
 	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Pointer);									// 如果为 false，将自动获取目标点位的 NavArea (GetNearestNavArea)
 	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
