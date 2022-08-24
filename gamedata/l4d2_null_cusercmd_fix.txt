@@ -2,46 +2,27 @@
 {
 	"left4dead2"
 	{
-		"Functions"
+		"MemPatches"
 		{
 			"CLagCompensationManager::StartLagCompensation"
 			{
-				"signature"		"CLagCompensationManager::StartLagCompensation"
-				"callconv"		"thiscall"
-				"return"		"void"
-				"this"			"address"
-				"arguments"
-				{
-					"CBasePlayer"
-					{
-						"type"		"cbaseentity"
-					}
-					"LagCompensationType"
-					{
-						"type"		"int"
-					}
-					"weaponPos"
-					{
-						"type"		"vectorptr"
-					}
-					"weaponAngles"
-					{
-						"type"		"vectorptr"
-					}
-					"weaponRange"
-					{
-						"type"		"float"
-					}
-				}
-			}
-		}
+				"signature"	"CLagCompensationManager::StartLagCompensation"
 
-		"Offsets"
-		{
-			"CBasePlayer::GetCurrentUserCommand"
-			{
-				"linux"		"8164"
-				"windows"	"8168"
+				// if (!cmd) jump to the return branch.
+
+				"linux"
+				{
+					"offset"	"6CEh"
+					"verify"	"\xC7"
+					"patch"		"\xE9\x32\xFC\xFF\xFF\x90\x90"
+				}
+
+				"windows"
+				{
+					"offset"	"477h"
+					"verify"	"\x68"
+					"patch"		"\xE9\x96\x02\x00\x00"
+				}
 			}
 		}
 
