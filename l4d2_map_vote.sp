@@ -18,8 +18,7 @@ Handle
 	g_hSDKChangeChapter;
 
 StringMap
-	g_smTranslate,
-	g_smExcludeMissions;
+	g_smTranslate;
 
 ConVar
 	mp_gamemode,
@@ -151,7 +150,6 @@ int MapType_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 
 void ShowMapMenu(int client)
 {
-	static int shit;
 	static char sSubName[256], sTitle[256], sKey[256];
 
 	Menu menu = new Menu(Title_MenuHandler);
@@ -161,20 +159,18 @@ void ShowMapMenu(int client)
 	for (SourceKeyValues kvSub = kvMissions.GetFirstTrueSubKey(); !kvSub.IsNull(); kvSub = kvSub.GetNextTrueSubKey())
 	{
 		kvSub.GetName(sSubName, sizeof(sSubName));
-		if (g_smExcludeMissions.GetValue(sSubName, shit))
-			continue;
 
 		FormatEx(sKey, sizeof(sKey), "modes/%s", g_sMode);
 		if (kvSub.FindKey(sKey).IsNull())
 			continue;
 
-		if (g_iType[client] == 0 && kvSub.GetInt("builtin"))
+		if (g_iType[client] == 0 && !kvSub.GetInt("addon"))
 		{
 			kvSub.GetString("DisplayTitle", sTitle, sizeof(sTitle), "N/A");
 			g_smTranslate.GetString(sTitle, sTitle, sizeof(sTitle));
 			menu.AddItem(sSubName, sTitle);
 		}
-		else if (g_iType[client] == 1 && !kvSub.GetInt("builtin"))
+		else if (g_iType[client] == 1 && kvSub.GetInt("addon"))
 		{
 			kvSub.GetString("DisplayTitle", sTitle, sizeof(sTitle), "N/A");
 			menu.AddItem(sSubName, sTitle);
@@ -376,12 +372,5 @@ void Init()
 	g_smTranslate = new StringMap();
 	for (int i; i < sizeof(g_sValveMaps); i++)
 		g_smTranslate.SetString(g_sValveMaps[i][0], g_sValveMaps[i][1]);
-
-	g_smExcludeMissions = new StringMap();
-	g_smExcludeMissions.SetValue("credits", 1);
-	g_smExcludeMissions.SetValue("HoldoutChallenge", 1);
-	g_smExcludeMissions.SetValue("HoldoutTraining", 1);
-	g_smExcludeMissions.SetValue("parishdash", 1);
-	g_smExcludeMissions.SetValue("shootzones", 1);
 }
 
