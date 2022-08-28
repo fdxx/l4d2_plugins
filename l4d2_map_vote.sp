@@ -15,7 +15,8 @@ Address
 
 Handle
 	g_hSDKGetAllMissions,
-	g_hSDKChangeChapter;
+	g_hSDKChangeChapter,
+	g_hSDKClearTeamScores;
 
 StringMap
 	g_smTranslate,
@@ -319,6 +320,8 @@ void Vote_Handler(L4D2NativeVote vote, VoteAction action, int param1, int param2
 
 				if (g_bSafeChange)
 				{
+					// 清空比分
+					SDKCall(g_hSDKClearTeamScores, g_pTheDirector, true);
 					// 使用安全的方法更换地图，避免内存泄漏
 					if (!SDKCall(g_hSDKChangeChapter, g_pTheDirector, sMap))
 					{
@@ -371,6 +374,13 @@ void Init()
 	if (g_hSDKChangeChapter == null)
 		SetFailState("Failed to create SDKCall: CDirector::OnChangeChapterVote");
 
+	StartPrepSDKCall(SDKCall_Raw);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CDirector::ClearTeamScores");
+	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
+	g_hSDKClearTeamScores = EndPrepSDKCall();
+	if (g_hSDKClearTeamScores == null)
+		SetFailState("Failed to create SDKCall: CDirector::ClearTeamScores");
+
 	delete hGameData;
 
 	g_smTranslate = new StringMap();
@@ -384,4 +394,3 @@ void Init()
 	g_smExcludeMissions.SetValue("parishdash", 1);
 	g_smExcludeMissions.SetValue("shootzones", 1);
 }
-
