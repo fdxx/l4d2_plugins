@@ -34,20 +34,20 @@ bool g_bSafeChange;
 
 char g_sValveMaps[][][] = 
 {
-	{"#L4D360UI_CampaignName_C1",	"C1M1 死亡中心"},
-	{"#L4D360UI_CampaignName_C2",	"C2M1 黑色嘉年华"},
-	{"#L4D360UI_CampaignName_C3",	"C3M1 沼泽激战"},
-	{"#L4D360UI_CampaignName_C4",	"C4M1 暴风骤雨"},
-	{"#L4D360UI_CampaignName_C5",	"C5M1 教区"},
-	{"#L4D360UI_CampaignName_C6",	"C6M1 短暂时刻"},
-	{"#L4D360UI_CampaignName_C7",	"C7M1 牺牲"},
-	{"#L4D360UI_CampaignName_C8",	"C8M1 毫不留情"},
-	{"#L4D360UI_CampaignName_C9",	"C9M1 坠机险途"},
-	{"#L4D360UI_CampaignName_C10",	"C10M1 死亡丧钟"},
-	{"#L4D360UI_CampaignName_C11",	"C11M1 寂静时分"},
-	{"#L4D360UI_CampaignName_C12",	"C12M1 血腥收获"},
-	{"#L4D360UI_CampaignName_C13",	"C13M1 刺骨寒溪"},
-	{"#L4D360UI_CampaignName_C14",	"C14M1 临死一搏"},
+	{"C1",	"C1M1 死亡中心"},
+	{"C2",	"C2M1 黑色嘉年华"},
+	{"C3",	"C3M1 沼泽激战"},
+	{"C4",	"C4M1 暴风骤雨"},
+	{"C5",	"C5M1 教区"},
+	{"C6",	"C6M1 短暂时刻"},
+	{"C7",	"C7M1 牺牲"},
+	{"C8",	"C8M1 毫不留情"},
+	{"C9",	"C9M1 坠机险途"},
+	{"C10",	"C10M1 死亡丧钟"},
+	{"C11",	"C11M1 寂静时分"},
+	{"C12",	"C12M1 血腥收获"},
+	{"C13",	"C13M1 刺骨寒溪"},
+	{"C14",	"C14M1 临死一搏"},
 };
 
 public Plugin myinfo = 
@@ -171,7 +171,7 @@ void ShowMapMenu(int client)
 		if (g_iType[client] == 0 && kvSub.GetInt("builtin"))
 		{
 			kvSub.GetString("DisplayTitle", sTitle, sizeof(sTitle), "N/A");
-			g_smTranslate.GetString(sTitle, sTitle, sizeof(sTitle));
+			g_smTranslate.GetString(sTitle[23], sTitle, sizeof(sTitle));
 			menu.AddItem(sSubName, sTitle);
 		}
 		else if (g_iType[client] == 1 && !kvSub.GetInt("builtin"))
