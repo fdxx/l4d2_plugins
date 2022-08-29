@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.2"
+#define VERSION "0.3"
 
 #include <sourcemod>
 
@@ -43,16 +43,16 @@ Action Cmd_cfgExec(int client, int args)
 
 public void OnConfigsExecuted()
 {
-	CreateTimer(0.1, Execute_Timer, MANY_TIMES, TIMER_FLAG_NO_MAPCHANGE);
+	RequestFrame(NextFrame, MANY_TIMES);
 
 	static bool shit;
 	if (shit) return;
 	shit = true;
 
-	CreateTimer(0.1, Execute_Timer, ONCE);
+	RequestFrame(NextFrame, ONCE);
 }
 
-Action Execute_Timer(Handle timer, int iType)
+void NextFrame(int iType)
 {
 	char sBuffer[1024];
 
@@ -61,7 +61,7 @@ Action Execute_Timer(Handle timer, int iType)
 	else g_cvExecOnce.GetString(sBuffer, sizeof(sBuffer));
 
 	if (sBuffer[0] == '\0')
-		return Plugin_Continue;
+		return;
 
 	char sFiles[32][256], sResult[256];
 	int pieces = ExplodeString(sBuffer, ";", sFiles, sizeof(sFiles), sizeof(sFiles[]));
@@ -73,6 +73,4 @@ Action Execute_Timer(Handle timer, int iType)
 		if (sResult[0] != '\0')
 			LogError("%s", sResult);
 	}
-
-	return Plugin_Continue;
 }
