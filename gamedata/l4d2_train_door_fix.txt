@@ -1,0 +1,48 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Functions"
+		{
+			"CBaseEntity::AcceptInput"
+			{
+				"offset"	"CBaseEntity::AcceptInput"
+				"hooktype"	"entity"
+				"this"		"entity"
+				"return"	"bool"
+				"arguments"
+				{
+					"a1"
+					{
+						"type"	"charptr"
+					}
+					"a2"
+					{
+						"type"	"cbaseentity"
+					}
+					"a3"
+					{
+						"type"	"cbaseentity"
+					}
+					"a4"
+					{
+						"type"	"objectptr"
+					}
+					"a5"
+					{
+						"type"	"int"
+					}
+				}
+			}
+		}
+
+		"Offsets"
+		{
+			"CBaseEntity::AcceptInput"
+			{
+				"linux"		"45"
+				"windows"	"44"
+			}
+		}
+	}
+}
