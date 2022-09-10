@@ -54,12 +54,12 @@
 				/* 55 8B EC 83 EC ? 56 57 8B F9 8B 0D ? ? ? ? E8 ? ? ? ? 84 C0 0F */
 			}
 
-			"CDirector::OnChangeChapterVote"
+			"CDirector::OnChangeMissionVote"
 			{
 				"library"	"server"
-				"linux"		"@_ZN9CDirector19OnChangeChapterVoteEPKc"
-				"windows"	"\x55\x8B\xEC\x56\x8B\xF1\x8B\x0D\x2A\x2A\x2A\x2A\x8B\x01\x8B\x50\x04"
-				/* 55 8B EC 56 8B F1 8B 0D ? ? ? ? 8B 01 8B 50 04 */
+				"linux"		"@_ZN9CDirector19OnChangeMissionVoteEPKc"
+				"windows"	"\x55\x8B\xEC\x53\x56\x8B\xF1\x8B\x0D\x2A\x2A\x2A\x2A\x8B\x01\x8B\x50\x28"
+				/* 55 8B EC 53 56 8B F1 8B 0D ? ? ? ? 8B 01 8B 50 28 */
 			}
 
 			"CDirector::ClearTeamScores"

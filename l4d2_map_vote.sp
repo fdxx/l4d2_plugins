@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.6"
+#define VERSION "0.7"
 
 #include <sourcemod>
 #include <sdktools>
@@ -15,23 +15,22 @@ Address
 
 Handle
 	g_hSDKGetAllMissions,
-	g_hSDKChangeChapter,
+	g_hSDKChangeMission,
 	g_hSDKClearTeamScores;
 
 StringMap
 	g_smTranslate,
-	g_smExcludeMissions;
+	g_smExcludeMissions,
+	g_smFirstMap;
 
 ConVar
-	mp_gamemode,
-	g_cvSafeChange;
+	mp_gamemode;
 
 int
 	g_iType[MAXPLAYERS],
 	g_iPos[MAXPLAYERS][2];
 
 char g_sMode[128];
-bool g_bSafeChange;
 
 char g_sValveMaps[][][] = 
 {
@@ -63,12 +62,9 @@ public void OnPluginStart()
 	Init();
 
 	CreateConVar("l4d2_map_vote_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
-	g_cvSafeChange = CreateConVar("l4d2_map_vote_safe_change", "1");
 	mp_gamemode = FindConVar("mp_gamemode");
 
 	OnConVarChanged(null, "", "");
-
-	g_cvSafeChange.AddChangeHook(OnConVarChanged);
 	mp_gamemode.AddChangeHook(OnConVarChanged);
 
 	RegConsoleCmd("sm_mapvote", Cmd_VoteMap);
@@ -77,14 +73,44 @@ public void OnPluginStart()
 
 	RegAdminCmd("sm_missions_export", Cmd_Rxport, ADMFLAG_ROOT);
 	RegAdminCmd("sm_missions_reload", Cmd_Reload, ADMFLAG_ROOT);
+	RegAdminCmd("sm_clear_scores", Cmd_ClearScores, ADMFLAG_ROOT);
 
 	RegPluginLibrary("l4d2_map_vote");
 }
 
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	g_bSafeChange = g_cvSafeChange.BoolValue;
 	mp_gamemode.GetString(g_sMode, sizeof(g_sMode));
+}
+
+public void OnConfigsExecuted()
+{
+	static bool shit;
+	if (shit) return;
+	shit = true;
+
+	SetFirstMapString();
+}
+
+void SetFirstMapString()
+{
+	delete g_smFirstMap;
+	g_smFirstMap = new StringMap();
+
+	char sKey[64], sMissionName[256], sFirstMap[256];
+
+	SourceKeyValues kvMissions = SDKCall(g_hSDKGetAllMissions, g_pMatchExtL4D);
+	for (SourceKeyValues kvSub = kvMissions.GetFirstTrueSubKey(); !kvSub.IsNull(); kvSub = kvSub.GetNextTrueSubKey())
+	{
+		FormatEx(sKey, sizeof(sKey), "modes/%s/1/Map", g_sMode);
+		SourceKeyValues kvFirstMap = kvSub.FindKey(sKey);
+		if (!kvFirstMap.IsNull())
+		{
+			kvSub.GetName(sMissionName, sizeof(sMissionName));
+			kvFirstMap.GetString(NULL_STRING, sFirstMap, sizeof(sFirstMap));
+			g_smFirstMap.SetString(sFirstMap, sMissionName);
+		}
+	}
 }
 
 Action Cmd_Rxport(int client, int args)
@@ -109,8 +135,17 @@ Action Cmd_Reload(int client, int args)
 {
 	ServerCommand("update_addon_paths");
 	ServerCommand("mission_reload");
-	
+	ServerExecute();
+	SetFirstMapString();
+
 	ReplyToCommand(client, "更新VPK文件");
+	return Plugin_Handled;
+}
+
+Action Cmd_ClearScores(int client, int args)
+{
+	SDKCall(g_hSDKClearTeamScores, g_pTheDirector, true);
+	ReplyToCommand(client, "清除分数");
 	return Plugin_Handled;
 }
 
@@ -315,29 +350,16 @@ void Vote_Handler(L4D2NativeVote vote, VoteAction action, int param1, int param2
 			{
 				vote.SetPass("加载中...");
 
-				char sMap[256];
+				char sMap[256], sMissionName[256];
 				vote.GetInfoString(sMap, sizeof(sMap));
 
-				if (g_bSafeChange)
+				if (g_smFirstMap.GetString(sMap, sMissionName, sizeof(sMissionName)))
 				{
-					// 清空比分
-					SDKCall(g_hSDKClearTeamScores, g_pTheDirector, true);
-					// 使用安全的方法更换地图，避免内存泄漏
-					if (!SDKCall(g_hSDKChangeChapter, g_pTheDirector, sMap))
-					{
-						CPrintToChatAll("{default}[{red}提示{default}] 更换 %s 地图失败", sMap);
-						LogError("更换 %s 地图失败", sMap);
-					}
+					SDKCall(g_hSDKChangeMission, g_pTheDirector, sMissionName);
 				}
 				else
 				{
-					char sBuffer[128];
-					ServerCommandEx(sBuffer, sizeof(sBuffer), "changelevel %s", sMap);
-					if (sBuffer[0] != '\0')
-					{
-						CPrintToChatAll("{default}[{red}提示{default}] 更换 %s 地图失败: %s", sMap, sBuffer);
-						LogError("更换 %s 地图失败: %s", sMap, sBuffer);
-					}
+					ServerCommand("changelevel %s", sMap);
 				}
 			}
 			else vote.SetFail();
@@ -365,14 +387,13 @@ void Init()
 	g_hSDKGetAllMissions = EndPrepSDKCall();
 	if (g_hSDKGetAllMissions == null)
 		SetFailState("Failed to create SDKCall: MatchExtL4D::GetAllMissions");
-
+	
 	StartPrepSDKCall(SDKCall_Raw);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CDirector::OnChangeChapterVote");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CDirector::OnChangeMissionVote");
 	PrepSDKCall_AddParameter(SDKType_String, SDKPass_Pointer);
-	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
-	g_hSDKChangeChapter = EndPrepSDKCall();
-	if (g_hSDKChangeChapter == null)
-		SetFailState("Failed to create SDKCall: CDirector::OnChangeChapterVote");
+	g_hSDKChangeMission = EndPrepSDKCall();
+	if (g_hSDKChangeMission == null)
+		SetFailState("Failed to create SDKCall: CDirector::OnChangeMissionVote");
 
 	StartPrepSDKCall(SDKCall_Raw);
 	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CDirector::ClearTeamScores");
