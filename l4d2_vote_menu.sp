@@ -5,7 +5,7 @@
 #include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
 #include <multicolors>
 
-#define VERSION "0.4"
+#define VERSION "0.5"
 
 ConVar
 	g_cvAdminImmunity,
@@ -225,14 +225,7 @@ void ReHealth_VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, in
 					{
 						if (GetClientTeam(i) == 2 || GetClientTeam(i) == 3)
 						{
-							Event event = CreateEvent("heal_success", true);
-							event.SetInt("userid", GetClientUserId(i));
-							event.SetInt("subject", GetClientUserId(i));
-							event.SetInt("health_restored", GetEntProp(i, Prop_Send, "m_iMaxHealth") - GetEntProp(i, Prop_Send, "m_iHealth"));
-
-							CheatCommand(i, "give", "health");
-
-							event.Fire(false);
+							RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
 						}
 					}
 				}
@@ -240,6 +233,25 @@ void ReHealth_VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, in
 			else vote.SetFail();
 		}
 	}
+}
+
+void RestoreHealth(int client, int iHealth)
+{
+	Event event = CreateEvent("heal_success", true);
+	event.SetInt("userid", GetClientUserId(client));
+	event.SetInt("subject", GetClientUserId(client));
+	event.SetInt("health_restored", iHealth - GetEntProp(client, Prop_Send, "m_iHealth"));
+
+	int iflags = GetCommandFlags("give");
+	SetCommandFlags("give", iflags & ~FCVAR_CHEAT);
+	FakeClientCommand(client, "give health");
+	SetCommandFlags("give", iflags);
+
+	SetEntProp(client, Prop_Send, "m_iHealth", iHealth);
+	SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 0.0);
+	SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", GetGameTime());
+
+	event.Fire();
 }
 
 int KickPlayer_MenuHandler(Menu hKickMenu, MenuAction action, int client, int itemNum)
@@ -405,14 +417,6 @@ void ForceSpec_VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, i
 			else vote.SetFail();
 		}
 	}
-}
-
-void CheatCommand(int client, const char[] command, const char[] args = "")
-{
-	int iFlags = GetCommandFlags(command);
-	SetCommandFlags(command, iFlags & ~FCVAR_CHEAT);
-	FakeClientCommand(client, "%s %s", command, args);
-	SetCommandFlags(command, iFlags);
 }
 
 bool IsAdminClient(int client)

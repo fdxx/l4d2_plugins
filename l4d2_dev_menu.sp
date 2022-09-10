@@ -5,7 +5,7 @@
 #include <adminmenu>
 #include <left4dhooks>
 
-#define VERSION "0.5"
+#define VERSION "0.6"
 
 #define	BOSS_TYPE_TANK	0
 #define	BOSS_TYPE_WITCH	1
@@ -1102,20 +1102,11 @@ void GiveHp_TargetSelect(int client)
 		{
 			switch (GetClientTeam(i))
 			{
-				case 2:
+				case 2, 3:
 				{
 					FormatEx(sName, sizeof(sName), "%N", i);
 					FormatEx(sUserid, sizeof(sUserid), "%i", GetClientUserId(i));
 					menu.AddItem(sUserid, sName);
-				}
-				case 3:
-				{
-					if (!GetEntProp(i, Prop_Send, "m_isGhost"))
-					{
-						FormatEx(sName, sizeof(sName), "%N", i);
-						FormatEx(sUserid, sizeof(sUserid), "%i", GetClientUserId(i));
-						menu.AddItem(sUserid, sName);
-					}
 				}
 			}
 		}
@@ -1133,7 +1124,33 @@ int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, in
 		{
 			switch (itemNum)
 			{
-				case 0, 1, 2: DoGiveHealth(client, itemNum);
+				case 0:
+				{
+					RestoreHealth(client, GetEntProp(client, Prop_Send, "m_iMaxHealth"));
+					PrintToChat(client, "[DevMenu] 回血: %N", client);
+				}
+				case 1:
+				{
+					for (int i = 1; i <= MaxClients; i++)
+					{
+						if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
+						{
+							RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
+							PrintToChat(client, "[DevMenu] 回血: %N", i);
+						}
+					}
+				}
+				case 2:
+				{
+					for (int i = 1; i <= MaxClients; i++)
+					{
+						if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
+						{
+							RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
+							PrintToChat(client, "[DevMenu] 回血: %N", i);
+						}
+					}
+				}
 				default:
 				{
 					char sUserid[16];
@@ -1141,22 +1158,8 @@ int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, in
 					int iTarget = GetClientOfUserId(StringToInt(sUserid));
 					if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && IsPlayerAlive(iTarget))
 					{
-						switch (GetClientTeam(iTarget))
-						{
-							case 2:
-							{
-								CheatCommand(iTarget, "give", "health");
-								PrintToChat(client, "[DevMenu] 回血: %N", iTarget);
-							}
-							case 3:
-							{
-								if (!GetEntProp(iTarget, Prop_Send, "m_isGhost"))
-								{
-									CheatCommand(iTarget, "give", "health");
-									PrintToChat(client, "[DevMenu] 回血: %N", iTarget);
-								}
-							}
-						}
+						RestoreHealth(iTarget, GetEntProp(iTarget, Prop_Send, "m_iMaxHealth"));
+						PrintToChat(client, "[DevMenu] 回血: %N", iTarget);
 					}
 				}
 			}
@@ -1195,43 +1198,20 @@ Action Cmd_GiveHealth(int client, int args)
 	else if (strcmp(sTarget, "si", false) == 0)
 		iType = 2;
 	
-	DoGiveHealth(client, iType);
-	return Plugin_Handled;
-}
-
-void DoGiveHealth(int client, int iType)
-{
 	switch (iType)
 	{
 		case 0:
 		{
-			if (IsPlayerAlive(client))
-			{
-				switch (GetClientTeam(client))
-				{
-					case 2:
-					{
-						Heal(client);
-						PrintToChat(client, "[DevMenu] 回血: %N", client);
-					}
-					case 3:
-					{
-						if (!GetEntProp(client, Prop_Send, "m_isGhost"))
-						{
-							Heal(client);
-							PrintToChat(client, "[DevMenu] 回血: %N", client);
-						}	
-					}
-				}
-			}
+			RestoreHealth(client, GetEntProp(client, Prop_Send, "m_iMaxHealth"));
+			PrintToChat(client, "[DevMenu] 回血: %N", client);
 		}
 		case 1:
 		{
 			for (int i = 1; i <= MaxClients; i++)
 			{
-				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
+				if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
 				{
-					Heal(i);
+					RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
 					PrintToChat(client, "[DevMenu] 回血: %N", i);
 				}
 			}
@@ -1240,24 +1220,35 @@ void DoGiveHealth(int client, int iType)
 		{
 			for (int i = 1; i <= MaxClients; i++)
 			{
-				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3 && !GetEntProp(i, Prop_Send, "m_isGhost"))
+				if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
 				{
-					Heal(i);
+					RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
 					PrintToChat(client, "[DevMenu] 回血: %N", i);
 				}
 			}
 		}
+
 	}
+	return Plugin_Handled;
 }
 
-void Heal(int client)
+void RestoreHealth(int client, int iHealth)
 {
 	Event event = CreateEvent("heal_success", true);
 	event.SetInt("userid", GetClientUserId(client));
 	event.SetInt("subject", GetClientUserId(client));
-	event.SetInt("health_restored", GetEntProp(client, Prop_Send, "m_iMaxHealth") - GetEntProp(client, Prop_Send, "m_iHealth"));
-	CheatCommand(client, "give", "health");
-	event.Fire(false);
+	event.SetInt("health_restored", iHealth - GetEntProp(client, Prop_Send, "m_iHealth"));
+
+	int iflags = GetCommandFlags("give");
+	SetCommandFlags("give", iflags & ~FCVAR_CHEAT);
+	FakeClientCommand(client, "give health");
+	SetCommandFlags("give", iflags);
+
+	SetEntProp(client, Prop_Send, "m_iHealth", iHealth);
+	SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 0.0);
+	SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", GetGameTime());
+
+	event.Fire();
 }
 
 void FallDown_TargetSelect(int client)
