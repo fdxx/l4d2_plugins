@@ -22,8 +22,7 @@ public Action ChangeMap(Handle timer)
 {
 	if (!HaveRealPlayer())
 	{
-		SetRandomSeed(GetTime()); // 更好的随机
-		switch (GetRandomInt(1, 14))
+		switch (GetRandomIntEx(1, 14))
 		{
 			case 1: ServerCommand("changelevel c1m1_hotel");
 			case 2: ServerCommand("changelevel c2m1_highway");
@@ -56,4 +55,15 @@ bool HaveRealPlayer()
 		}
 	}
 	return false;
+}
+
+// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
+int GetRandomIntEx(int min, int max)
+{
+	int random = GetURandomInt();
+
+	if (random == 0)
+		random++;
+
+	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
 }

@@ -428,8 +428,7 @@ void SetTankSpawnFlow(const char[] sMap)
 		return;
 	}
 
-	SetRandomSeed(GetTime());
-	index = GetRandomInt(0, g_aSpawnData.Length - 1);
+	index = GetRandomIntEx(0, g_aSpawnData.Length - 1);
 	g_aSpawnData.GetArray(index, data);
 	g_fSpawnFlow[TANK] = data.fFlow;
 	g_fSpawnPos[TANK] = data.fPos;
@@ -467,7 +466,7 @@ void SetWitchSpawnFlow(const char[] sMap)
 
 	for (i = 0; i < 200; i++)
 	{
-		g_aSpawnData.GetArray(GetRandomInt(0, g_aSpawnData.Length - 1), data);
+		g_aSpawnData.GetArray(GetRandomIntEx(0, g_aSpawnData.Length - 1), data);
 
 		//Tank和Witch间隔一定距离
 		if (FloatAbs(g_fSpawnFlow[TANK] - data.fFlow) > TANK_WITCH_SAFE_FLOW)
@@ -825,3 +824,15 @@ any Native_GetBossSpawnFlow(Handle plugin, int numParams)
 	int iBossType = GetNativeCell(1);
 	return g_fSpawnFlow[iBossType];
 }
+
+// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
+int GetRandomIntEx(int min, int max)
+{
+	int random = GetURandomInt();
+
+	if (random == 0)
+		random++;
+
+	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+}
+

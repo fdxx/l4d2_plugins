@@ -675,7 +675,6 @@ int FindSpawnClass()
 {
 	int iClass, iSpecialCount[7];
 	ArrayList g_aClassArray = new ArrayList();
-	SetRandomSeed(GetTime());
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -701,7 +700,7 @@ int FindSpawnClass()
 
 	if (g_aClassArray.Length > 0)
 	{
-		iClass = g_aClassArray.Get(GetRandomInt(0, g_aClassArray.Length - 1));
+		iClass = g_aClassArray.Get(GetRandomIntEx(0, g_aClassArray.Length - 1));
 	}
 	
 	delete g_aClassArray;
@@ -729,7 +728,7 @@ int GetJoinTankClient()
 
 	if (aTemList.Length > 0)
 	{
-		client = aTemList.Get(GetRandomInt(0, aTemList.Length - 1));
+		client = aTemList.Get(GetRandomIntEx(0, aTemList.Length - 1));
 	}
 	
 	delete aTemList;
@@ -862,4 +861,14 @@ public Action L4D_OnMaterializeFromGhostPre(int client)
 	return Plugin_Continue;
 }
 
+// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
+int GetRandomIntEx(int min, int max)
+{
+	int random = GetURandomInt();
+
+	if (random == 0)
+		random++;
+
+	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+}
 
