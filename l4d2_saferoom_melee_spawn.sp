@@ -4,31 +4,36 @@
 #include <sourcemod>
 #include <l4d2_weapons_spawn> // https://github.com/fdxx/l4d2_plugins/blob/main/include/l4d2_weapons_spawn.inc
 
-ConVar g_cvMeleeWeapons;
+ConVar g_cvMeleeWeapons, g_cvGoldenCrowbar;
 char g_sMeleeWeapons[512];
+bool g_bGoldenCrowbar;
 
 public Plugin myinfo =
 {
 	name = "Melee In The Saferoom",
 	author = "$atanic $pirit, N3wton, fdxx",
 	description = "Spawns melee weapons in the saferoom, at the start of each round.",
-	version = "0.4"
+	version = "0.5"
 }
 
 public void OnPluginStart()
 {
-	g_cvMeleeWeapons = CreateConVar("l4d2_saferoom_melee_spawn_class", "fireaxe;katana;katana;machete;pitchfork;shovel", "产生的近战种类", FCVAR_NONE);
-	g_cvMeleeWeapons.GetString(g_sMeleeWeapons, sizeof(g_sMeleeWeapons));
-	g_cvMeleeWeapons.AddChangeHook(ConVarChanged);
+	g_cvMeleeWeapons = CreateConVar("l4d2_saferoom_melee_spawn_class", "fireaxe;katana;katana;machete;pitchfork;shovel;crowbar", "产生的近战种类", FCVAR_NONE);
+	g_cvGoldenCrowbar = CreateConVar("l4d2_saferoom_melee_golden_crowbar", "1", "黄金撬棍", FCVAR_NONE);
+
+	OnConVarChanged(null, "", "");
+
+	g_cvMeleeWeapons.AddChangeHook(OnConVarChanged);
+	g_cvGoldenCrowbar.AddChangeHook(OnConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
-
 	AutoExecConfig(true, "l4d2_saferoom_melee_spawn");
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	g_cvMeleeWeapons.GetString(g_sMeleeWeapons, sizeof(g_sMeleeWeapons));
+	g_bGoldenCrowbar = g_cvGoldenCrowbar.BoolValue;
 }
 
 public void OnMapStart()
@@ -36,29 +41,31 @@ public void OnMapStart()
 	L4D2Wep_PrecacheModel();
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if (g_sMeleeWeapons[0] != '\0')
 		CreateTimer(1.0, SpawnMelee_Timer, _, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
 }
 
-public Action SpawnMelee_Timer(Handle timer)
+Action SpawnMelee_Timer(Handle timer)
 {
 	int client = GetInGameClient();
 	if (client > 0)
 	{
 		float fPos[3]; 
 		char sMelee[16][64];
-		int pieces;
+		int pieces, entity;
 		
 		GetClientEyePosition(client, fPos);
 		pieces = ExplodeString(g_sMeleeWeapons, ";", sMelee, sizeof(sMelee), sizeof(sMelee[]));
 
 		for (int i; i < pieces; i++)
 		{
-			L4D2Wep_Spawn(sMelee[i], fPos);
-		}
+			entity = L4D2Wep_Spawn(sMelee[i], fPos);
 
+			if (g_bGoldenCrowbar && !strcmp(sMelee[i], "crowbar") && entity > MaxClients)
+				SetEntProp(entity, Prop_Send, "m_nSkin", 1);
+		}
 		return Plugin_Stop;
 	}
 	return Plugin_Continue;
