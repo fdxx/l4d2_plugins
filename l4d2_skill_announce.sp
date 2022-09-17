@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "1.2"
+#define VERSION "1.3"
 
 #include <sourcemod>
 #include <sdkhooks>
@@ -65,6 +65,7 @@ public void OnPluginStart()
 	HookEvent("player_death", Event_PlayerDeath, EventHookMode_Pre);
 	HookEvent("weapon_fire", Event_WeaponFire);
 	HookEvent("player_spawn", Event_PlayerSpawn);
+	HookEvent("lunge_pounce", Event_LungePounce);
 }
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -164,6 +165,22 @@ void Event_TonguePullStopped(Event event, const char[] name, bool dontBroadcast)
 					case CUT_SLASH: CPrintToChatAll("{orange}★★★ {olive}%N {blue}cut {olive}%N{default}'s tongue", iStopTonguePlayer, iSmoker);
 				}
 			}
+		}
+	}
+}
+
+void Event_LungePounce(Event event, const char[] name, bool dontBroadcast)
+{
+	int damage = event.GetInt("damage");
+	if (damage >= 20)
+	{
+		int client = GetClientOfUserId(event.GetInt("userid"));
+		int victim = GetClientOfUserId(event.GetInt("victim"));
+		//int distance = event.GetInt("distance");
+
+		if (IsValidSI(client) && IsValidSur(victim))
+		{
+			CPrintToChatAll("{orange}★★★ {olive}%N {red}high-pounced {olive}%N {orange}%i {default}damage", client, victim, damage);
 		}
 	}
 }
