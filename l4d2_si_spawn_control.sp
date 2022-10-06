@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #define DEBUG 0
-#define VERSION "3.1"
+#define VERSION "3.2"
 
 #include <sourcemod>
 #include <left4dhooks>
@@ -27,7 +27,8 @@ ConVar
 	g_cvKillSITime,
 	g_cvBlockSpawn,
 	g_cvRadicalSpawn,
-	g_cvNormalSpawnRange;
+	g_cvNormalSpawnRange,
+	g_cvTogetherSpawn;
 
 int
 	g_iSpecialLimit[7],
@@ -52,7 +53,8 @@ bool
 	g_bRadicalSpawn,
 	g_bFinalMap,
 	g_bLeftSafeArea,
-	g_bMark[MAXPLAYERS+1];
+	g_bMark[MAXPLAYERS+1],
+	g_bTogetherSpawn;
 
 Handle
 	g_hSpawnSITimer[MAXPLAYERS+1],
@@ -60,7 +62,8 @@ Handle
 	g_hFirstSpawnSITimer,
 	g_hSpawnMaxSITimer,
 	g_hSDKIsVisibleToPlayer,
-	g_hSDKFindRandomSpot;
+	g_hSDKFindRandomSpot,
+	g_hTogetherSpawnTimer;
 
 ArrayList
 	g_aClientsArray,
@@ -211,6 +214,8 @@ public void OnPluginStart()
 	g_cvRadicalSpawn = CreateConVar("l4d2_si_spawn_control_radical_spawn", "0", "开启特感阴间找位, 将会在距离生还者最近的地方产生", FCVAR_NONE, true, 0.0, true, 1.0);
 	g_cvNormalSpawnRange = CreateConVar("l4d2_si_spawn_control_spawn_range_normal", "1500", "普通特感产生范围，从1到这个范围随机产生", FCVAR_NONE, true, 1.0);
 	
+	g_cvTogetherSpawn = CreateConVar("l4d2_si_spawn_control_together_spawn", "0", "每波特感一起刷", FCVAR_NONE);
+
 	GetCvars();
 
 	for (int i = 1; i <= 6; i++)
@@ -224,6 +229,7 @@ public void OnPluginStart()
 	g_cvBlockSpawn.AddChangeHook(ConVarChanged);
 	g_cvRadicalSpawn.AddChangeHook(ConVarChanged);
 	g_cvNormalSpawnRange.AddChangeHook(ConVarChanged);
+	g_cvTogetherSpawn.AddChangeHook(ConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("round_end", Event_RoundEnd, EventHookMode_PostNoCopy);
@@ -274,6 +280,8 @@ void GetCvars()
 
 	g_bRadicalSpawn = g_cvRadicalSpawn.BoolValue;
 	z_spawn_range.IntValue = g_cvNormalSpawnRange.IntValue;
+
+	g_bTogetherSpawn = g_cvTogetherSpawn.BoolValue;
 }
 
 public void OnConfigsExecuted()
@@ -329,6 +337,7 @@ void Reset()
 	delete g_hFirstSpawnSITimer;
 	delete g_hSpawnMaxSITimer;
 	delete g_hKillSICheckTimer;
+	delete g_hTogetherSpawnTimer;
 
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
@@ -392,7 +401,9 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 				{
 					case SMOKER, BOOMER, HUNTER, SPITTER, JOCKEY, CHARGER:
 					{
-						SpecialDeathSpawn(g_fSpawnTime);
+						if (g_bTogetherSpawn)
+							RequestFrame(PlayerDeath_NextFrame);
+						else SpecialDeathSpawn(g_fSpawnTime);
 
 						// 踢出bot释放客户端索引，排除spitter避免无声痰
 						if (iClass != SPITTER) CreateTimer(0.2, kickbot, userid);
@@ -402,6 +413,25 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 		}
 		g_bMark[client] = false;
 	}
+}
+
+void PlayerDeath_NextFrame()
+{
+	if (GetAllSpecialsTotal() == 0)
+	{
+		delete g_hTogetherSpawnTimer;
+		g_hTogetherSpawnTimer = CreateTimer(g_fSpawnTime, TogetherSpawn_Timer);
+	}
+}
+
+Action TogetherSpawn_Timer(Handle timer)
+{
+	delete g_hSpawnMaxSITimer;
+	g_iSpawnMaxSICount = 0;
+	g_hSpawnMaxSITimer = CreateTimer(0.1, SpawnMaxSI_Timer, _, TIMER_REPEAT);
+
+	g_hTogetherSpawnTimer = null;
+	return Plugin_Continue;
 }
 
 void SpecialDeathSpawn(float fTime)
@@ -903,6 +933,7 @@ Action Cmd_CvarPrint(int client, int args)
 	ReplyToCommand(client, "l4d2_si_spawn_control_block_other_si_spawn = %i", FindConVar("l4d2_si_spawn_control_block_other_si_spawn").IntValue);
 	ReplyToCommand(client, "l4d2_si_spawn_control_radical_spawn = %b", FindConVar("l4d2_si_spawn_control_radical_spawn").BoolValue);
 	ReplyToCommand(client, "l4d2_si_spawn_control_spawn_range_normal = %i", FindConVar("l4d2_si_spawn_control_spawn_range_normal").IntValue);
+	ReplyToCommand(client, "l4d2_si_spawn_control_together_spawn = %b", FindConVar("l4d2_si_spawn_control_together_spawn").BoolValue);
 	ReplyToCommand(client, "--------------");
 
 	return Plugin_Handled;
