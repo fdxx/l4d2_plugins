@@ -3,10 +3,10 @@
 
 #include <sourcemod>
 #include <sdkhooks>
-#include <dhooks>
+#include <sdktools>
 #include <sourcescramble>	// https://github.com/nosoop/SMExt-SourceScramble
 
-#define PLUGIN_VERSION "0.1"
+#define PLUGIN_VERSION "0.2"
 
 #define SOUND_GIVE		"ui/bigreward.wav"
 #define SOUND_RECEIVE	"ui/littlereward.wav"
@@ -55,10 +55,6 @@ ConVar
 	g_cvDelayTransfer,
 	z_use_belt_item_tolerance;
 
-bool
-	g_bCanGive[MAXPLAYERS][5],
-	g_bCanReceive[MAXPLAYERS][5];
-
 float
 	g_fBotGiveDist,
 	g_fPlayerGiveDist,
@@ -106,7 +102,7 @@ public void OnPluginStart()
 	g_cvPlayerGiveDist =	CreateConVar("l4d2_gear_transfer_player_give_dist",	"256.0", "How close the player must be to transfer the item.");
 	g_cvGrabDist =			CreateConVar("l4d2_gear_transfer_dist_grab",		"150.0", "How close the bots need to be for them to pick up an item.");
 	g_cvCheckTime =			CreateConVar("l4d2_gear_transfer_check_time",		"1.0",	"How often to check bot for auto grab/give. 0.0=disable auto grab/give");
-	g_cvDelayCheck =		CreateConVar("l4d2_gear_transfer_delay_check",		"-1.0", "How many seconds to delay auto grab/give after a new round starts. -1.0=PlayerLeftSafeArea, 0.0=NoDelay, GreaterThan 0.0=DelayTime.");
+	g_cvDelayCheck =		CreateConVar("l4d2_gear_transfer_delay_check",		"0.6", "How many seconds to delay auto grab/give after a new round starts. -1.0=PlayerLeftSafeArea, 0.0=NoDelay, GreaterThan 0.0=DelayTime.");
 	g_cvDelayTransfer =		CreateConVar("l4d2_gear_transfer_delay_transfer",	"10.0", "How many seconds after the bot receives the given item before it can transfer the item again.");
 	
 	OnConVarChanged(null, "", "");
@@ -152,6 +148,9 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	delete g_hAutoTransferTimer;
 	delete g_hRoundStartDelayTimer;
 
+	if (g_fCheckTime <= 0.0)
+		return;
+
 	if (g_fDelayCheck == 0.0)
 		g_hAutoTransferTimer = CreateTimer(g_fCheckTime, AutoTransfer_Timer, _, TIMER_REPEAT);
 
@@ -170,7 +169,7 @@ Action RoundStartDelay_Timer(Handle timer)
 
 void Event_PlayerLeftSafeArea(Event event, const char[] name, bool dontBroadcast)
 {
-	if (g_fDelayCheck < 0.0)
+	if (g_fDelayCheck < 0.0 && g_fCheckTime > 0.0)
 	{
 		delete g_hAutoTransferTimer;
 		g_hAutoTransferTimer = CreateTimer(g_fCheckTime, AutoTransfer_Timer, _, TIMER_REPEAT);
@@ -254,16 +253,8 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 Action AutoTransfer_Timer(Handle timer)
 {
-	// ------ Initialize ------
-	for (int i; i <= MaxClients; i++)
-	{
-		for (int slot; slot <= 4; slot++)
-		{
-			g_bCanGive[i][slot] = false;
-			g_bCanReceive[i][slot] = false;
-		}
-	}
-
+	bool bCanGive[33][5];
+	bool bCanReceive[33][5];
 	int iBotCount;
 	
 	for (int i = 1; i <= MaxClients; i++)
@@ -284,8 +275,8 @@ Action AutoTransfer_Timer(Handle timer)
 			{
 				int ent = GetPlayerWeaponSlot(i, slot);
 				if (ent > MaxClients && IsValidEntity(ent))
-					g_bCanGive[i][slot] = true;
-				else g_bCanReceive[i][slot] = true;
+					bCanGive[i][slot] = true;
+				else bCanReceive[i][slot] = true;
 			}
 		}
 	}
@@ -321,7 +312,7 @@ Action AutoTransfer_Timer(Handle timer)
 	{
 		for (int slot = 2; slot <= 4; slot++)
 		{
-			if (g_bCanReceive[graber][slot] && IsFakeClient(graber))
+			if (bCanReceive[graber][slot] && IsFakeClient(graber))
 			{
 				for (int i; i < len; i++)
 				{
@@ -334,7 +325,7 @@ Action AutoTransfer_Timer(Handle timer)
 							data.bCanGrab = false;
 							g_aEntData.SetArray(i, data);
 
-							g_bCanReceive[graber][slot] = false;
+							bCanReceive[graber][slot] = false;
 
 							SDKCall(g_hDoAnimationEvent, graber, ANIMEVENT_USE, 0);
 							SDKCall(g_hUseEntity, ent, graber, graber, Use_On, 0.0);
@@ -363,19 +354,19 @@ Action AutoTransfer_Timer(Handle timer)
 	{
 		for (int slot = 2; slot <= 4; slot++)
 		{
-			if (g_bCanGive[giver][slot] && IsFakeClient(giver) && fNow - g_fLastReceivedTime[giver] > g_fDelayTransfer)
+			if (bCanGive[giver][slot] && IsFakeClient(giver) && fNow - g_fLastReceivedTime[giver] > g_fDelayTransfer)
 			{
 				for (int target = 1; target <= MaxClients; target++)
 				{
-					if (g_bCanReceive[target][slot] && !IsFakeClient(target))
+					if (bCanReceive[target][slot] && !IsFakeClient(target))
 					{
 						if (GetVectorDistance(g_fEyePos[giver], g_fEyePos[target]) < g_fBotGiveDist && SDKCall(g_hSDKIsVisibleToPlayer, g_fEyePos[target], giver, 2, 3, 0.0, 0, 0, false))
 						{
 							int ent = GetPlayerWeaponSlot(giver, slot);
 							if (ent > MaxClients && IsValidEntity(ent))
 							{
-								g_bCanGive[giver][slot] = false;
-								g_bCanReceive[target][slot] = false;
+								bCanGive[giver][slot] = false;
+								bCanReceive[target][slot] = false;
 
 								SetEntPropEnt(giver, Prop_Send, "m_hActiveWeapon", ent);
 								SDKCall(g_hGiveActiveWeapon, giver, target);
@@ -384,7 +375,7 @@ Action AutoTransfer_Timer(Handle timer)
 							}
 							else
 							{
-								g_bCanGive[giver][slot] = false;
+								bCanGive[giver][slot] = false;
 								break;
 							}
 						}
