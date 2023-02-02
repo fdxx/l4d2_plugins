@@ -1,3 +1,11 @@
+/*=======================================================================================
+
+Credits:
+	- https://github.com/umlka/l4d2/blob/main/l4d2_unreservelobby/l4d2_unreservelobby.sp
+	- https://forums.alliedmods.net/showthread.php?t=94415
+
+=======================================================================================*/
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -15,7 +23,7 @@
 #define RMFLAG_FORCE_OFFICIAL_MAP		8	// unofficial map -> official map
 
 #define UNRESERVE_ALWAYS	1
-#define UNRESERVE_DYNAMIC	2
+#define UNRESERVE_DYNAMIC	2	
 
 ConVar
 	mp_gamemode,
