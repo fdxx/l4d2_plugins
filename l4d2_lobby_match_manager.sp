@@ -231,6 +231,9 @@ Action Cmd_Status(int client, int args)
 
 Action Cmd_Set(int client, int args)
 {
+	if (args != 3)
+		return Plugin_Handled;
+
 	char sCookie[20];
 	GetCmdArg(1, sCookie, sizeof(sCookie));
 	
@@ -239,11 +242,8 @@ Action Cmd_Set(int client, int args)
 	else
 		L4D_SetLobbyReservation(sCookie);
 
-	if (args == 2)
-		sv_allow_lobby_connect_only.BoolValue = GetCmdArgInt(2) > 0;
-
-	if (args == 3)
-		sv_hosting_lobby.BoolValue = GetCmdArgInt(3) > 0;
+	sv_allow_lobby_connect_only.BoolValue = GetCmdArgInt(2) > 0;
+	sv_hosting_lobby.BoolValue = GetCmdArgInt(3) > 0;
 	
 	Cmd_Status(client, 0);
 	return Plugin_Handled;
