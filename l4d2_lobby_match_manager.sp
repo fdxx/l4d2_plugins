@@ -15,7 +15,7 @@ Credits:
 #include <sourcescramble>			// https://github.com/nosoop/SMExt-SourceScramble
 #include <l4d2_source_keyvalues>	// https://github.com/fdxx/l4d2_source_keyvalues
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 
 #define RMFLAG_NO_MODE_CHANGE			1
 #define RMFLAG_NO_DIFFICULTY_CHANGE		2
@@ -23,12 +23,13 @@ Credits:
 #define RMFLAG_FORCE_OFFICIAL_MAP		8	// unofficial map -> official map
 
 #define UNRESERVE_ALWAYS	1
-#define UNRESERVE_DYNAMIC	2	
+#define UNRESERVE_DYNAMIC	2
 
 ConVar
 	mp_gamemode,
 	z_difficulty,
 	sv_allow_lobby_connect_only,
+	sv_hosting_lobby,
 	g_cvUnreserveType,
 	g_cvReserveModifyFlags;
 
@@ -64,6 +65,9 @@ public void OnPluginStart()
 	mp_gamemode = FindConVar("mp_gamemode");
 	z_difficulty = FindConVar("z_difficulty");
 	sv_allow_lobby_connect_only = FindConVar("sv_allow_lobby_connect_only");
+
+	// By default, the game sets this cvar to follow the reservation state. But what's the use of this?
+	sv_hosting_lobby = FindConVar("sv_hosting_lobby"); 
 
 	CreateConVar("l4d2_lobby_match_manager_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	g_cvUnreserveType =			CreateConVar("l4d2_lmm_unreserve_type",				"2",	"-1=Default, 1=Always unreserve, \n2=Dynamic unreserve (Allow reservation. Unreserve when the players is greater than the lobby slots, and recover when less than).");
@@ -103,8 +107,9 @@ public void OnConfigsExecuted()
 {
 	if (g_iUnreserveType == UNRESERVE_ALWAYS)
 	{
-		sv_allow_lobby_connect_only.IntValue = 0;
 		L4D_LobbyUnreserve();
+		sv_allow_lobby_connect_only.IntValue = 0;
+		sv_hosting_lobby.IntValue = 0;
 	}
 }
 
@@ -151,8 +156,9 @@ public void OnClientConnected(int client)
 	{
 		if (L4D_LobbyIsReserved())
 			L4D_GetLobbyReservation(g_sReservationCookie, sizeof(g_sReservationCookie));
-		sv_allow_lobby_connect_only.IntValue = 0;
 		L4D_LobbyUnreserve();
+		sv_allow_lobby_connect_only.IntValue = 0;
+		sv_hosting_lobby.IntValue = 0;
 	}
 }
 
@@ -176,8 +182,9 @@ void Event_PlayerDisconnect(Event event, const char[] name, bool dontBroadcast)
 
 		if (!L4D_LobbyIsReserved() && !IsServerLobbyFull(client) && g_sReservationCookie[0])
 		{
-			L4D_SetLobbyReservation(g_sReservationCookie);
+			L4D_SetLobbyReservation(g_sReservationCookie); // Write directly to memory, CBaseServer::SetReservationCookie was not called.
 			sv_allow_lobby_connect_only.IntValue = 1;
+			sv_hosting_lobby.IntValue = 1;
 		}
 	}
 }
@@ -217,7 +224,7 @@ Action Cmd_Status(int client, int args)
 	if (bReserved) L4D_GetLobbyReservation(sCookie, sizeof(sCookie));
 	iMaxLobbySlots = GetMaxLobbySlots(g_sGameMode);
 	
-	ReplyToCommand(client, "iPlayers = %i, iMaxLobbySlots = %i, sv_allow_lobby_connect_only = %i, sCookie = %s", iPlayers, iMaxLobbySlots, sv_allow_lobby_connect_only.IntValue, bReserved?sCookie:"Unreserve");
+	ReplyToCommand(client, "iPlayers = %i, iMaxLobbySlots = %i, sv_allow_lobby_connect_only = %i, sv_hosting_lobby = %i, sCookie = %s", iPlayers, iMaxLobbySlots, sv_allow_lobby_connect_only.IntValue, sv_hosting_lobby.IntValue, bReserved?sCookie:"Unreserve");
 
 	return Plugin_Handled;
 }
@@ -234,6 +241,9 @@ Action Cmd_Set(int client, int args)
 
 	if (args == 2)
 		sv_allow_lobby_connect_only.BoolValue = GetCmdArgInt(2) > 0;
+
+	if (args == 3)
+		sv_hosting_lobby.BoolValue = GetCmdArgInt(3) > 0;
 	
 	Cmd_Status(client, 0);
 	return Plugin_Handled;
