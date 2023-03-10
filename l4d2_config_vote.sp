@@ -2,31 +2,27 @@
 #pragma newdecls required
 
 #include <sourcemod>
-#include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
-#include <multicolors>
+#include <l4d2_nativevote>	// https://github.com/fdxx/l4d2_nativevote
+#include <multicolors> 		
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
-KeyValues g_kv;
+char g_sConfig[PLATFORM_MAX_PATH];
 
 public Plugin myinfo = 
 {
 	name = "L4D2 Config vote",
 	author = "vintik, Sir, fdxx",
-	description = "自定义配置投票",
 	version = VERSION,
 }
 
 public void OnPluginStart()
 {
-	CreateConVar("l4d2_config_vote_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+	CreateConVar("l4d2_config_vote_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	
-	char sPath[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sPath, sizeof(sPath), "data/l4d2_config_vote.cfg");
-
-	g_kv = new KeyValues("Config");
-	if (!g_kv.ImportFromFile(sPath))
-		SetFailState("Couldn't load l4d2_config_vote.cfg!");
+	BuildPath(Path_SM, g_sConfig, sizeof(g_sConfig), "data/l4d2_config_vote.cfg");
+	if (!FileExists(g_sConfig))
+		SetFailState("%s file does not exist!", g_sConfig);
 
 	RegConsoleCmd("sm_sivote", Cmd_Vote);
 	RegConsoleCmd("sm_votesi", Cmd_Vote);
@@ -36,71 +32,89 @@ public void OnPluginStart()
 
 Action Cmd_Vote(int client, int args)
 {
-	if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 1)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client))
 	{
-		Menu menu = new Menu(Category_MenuHandler);
-		menu.SetTitle("选择投票类型");
-
-		g_kv.Rewind();
-		char sCategory[64];
-		if (g_kv.GotoFirstSubKey())
+		if (GetClientTeam(client) != 1 || CheckCommandAccess(client, "sm_admin", ADMFLAG_ROOT))
 		{
-			do
+			KeyValues kv = new KeyValues("");
+			if (!kv.ImportFromFile(g_sConfig))
+				ThrowError("Failed to import %s file into KeyValues", g_sConfig);
+
+			Menu menu1 = new Menu(Level1_MenuHandler);
+			menu1.SetTitle("选择投票类型");
+			
+			if (kv.GotoFirstSubKey())
 			{
-				g_kv.GetSectionName(sCategory, sizeof(sCategory));
-				menu.AddItem(sCategory, sCategory);
+				char sName[64];
+
+				do
+				{
+					kv.GetSectionName(sName, sizeof(sName));
+					menu1.AddItem(sName, sName);
+				}
+				while (kv.GotoNextKey());
 			}
-			while (g_kv.GotoNextKey());
+
+			menu1.Display(client, 20);
+
+			delete kv;
+			return Plugin_Handled;
 		}
-		menu.Display(client, 20);
-		return Plugin_Handled;
 	}
 
-	CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
+	CPrintToChat(client, "{lightgreen}旁观无法进行投票.");
 	return Plugin_Handled;
 }
 
-int Category_MenuHandler(Menu hCategoryMenu, MenuAction action, int param1, int param2)
+int Level1_MenuHandler(Menu menu1, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
-			char sCategory[64], sCfgPath[256], sDisplay[64];
-			hCategoryMenu.GetItem(param2, sCategory, sizeof(sCategory));
-			g_kv.Rewind();
-			if (g_kv.JumpToKey(sCategory) && g_kv.GotoFirstSubKey())
+			KeyValues kv = new KeyValues("");
+			if (!kv.ImportFromFile(g_sConfig))
+				ThrowError("Failed to import %s file into KeyValues", g_sConfig);
+
+			char sName[64], sCfgPath[PLATFORM_MAX_PATH];
+			menu1.GetItem(param2, sName, sizeof(sName));
+
+			if (kv.JumpToKey(sName) && kv.GotoFirstSubKey())
 			{
-				Menu menu = new Menu(Item_MenuHandler);
-				menu.SetTitle(sCategory);
+				Menu menu2 = new Menu(Level2_MenuHandler);
+				menu2.SetTitle(sName);
+
 				do
 				{
-					g_kv.GetSectionName(sCfgPath, sizeof(sCfgPath));
-					g_kv.GetString("name", sDisplay, sizeof(sDisplay));
-					menu.AddItem(sCfgPath, sDisplay);
+					kv.GetSectionName(sCfgPath, sizeof(sCfgPath));
+					kv.GetString("name", sName, sizeof(sName));
+					menu2.AddItem(sCfgPath, sName);
 				}
-				while (g_kv.GotoNextKey());
-				menu.ExitBackButton = true;
-				menu.Display(param1, 20);
+				while (kv.GotoNextKey());
+
+				menu2.ExitBackButton = true;
+				menu2.Display(param1, 20);
 			}
+
+			delete kv;
 		}
 		case MenuAction_End:
 		{
-			delete hCategoryMenu;
+			delete menu1;
 		}
 	}
 	return 0;
 }
 
-int Item_MenuHandler(Menu hItemMenu, MenuAction action, int param1, int param2)
+int Level2_MenuHandler(Menu menu2, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_Select:
 		{
-			char sCfgPath[256], sDisplay[64];
-			hItemMenu.GetItem(param2, sCfgPath, sizeof(sCfgPath), _, sDisplay, sizeof(sDisplay));
-			StartVote(param1, sDisplay, sCfgPath);
+			char sName[64], sCfgPath[PLATFORM_MAX_PATH];
+			menu2.GetItem(param2, sCfgPath, sizeof(sCfgPath), _, sName, sizeof(sName));
+			StartVote(param1, sName, sCfgPath);
 		}
 		case MenuAction_Cancel:
 		{
@@ -109,7 +123,7 @@ int Item_MenuHandler(Menu hItemMenu, MenuAction action, int param1, int param2)
 		}
 		case MenuAction_End:
 		{
-			delete hItemMenu;
+			delete menu2;
 		}
 	}
 	return 0;
@@ -119,11 +133,11 @@ void StartVote(int client, const char[] sDisplay, const char[] sCfgPath)
 {
 	if (!L4D2NativeVote_IsAllowNewVote())
 	{
-		CPrintToChat(client, "{default}[{yellow}提示{default}] 投票正在进行中，暂不能发起新的投票");
+		CPrintToChat(client, "{lightgreen}投票正在进行中, 暂不能发起新的投票.");
 		return;
 	}
 	
-	L4D2NativeVote vote = L4D2NativeVote(VoteHandler);
+	L4D2NativeVote vote = L4D2NativeVote(Vote_Handler);
 	vote.SetDisplayText("将配置更改为: %s ?", sDisplay);
 	vote.Initiator = client;
 	vote.SetInfoString(sCfgPath);
@@ -146,13 +160,13 @@ void StartVote(int client, const char[] sDisplay, const char[] sCfgPath)
 		LogError("发起投票失败");
 }
 
-void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
+void Vote_Handler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case VoteAction_Start:
 		{
-			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", param1);
+			CPrintToChatAll("{blue}[Vote] {olive}%N {default}发起了一个投票.", param1);
 		}
 		case VoteAction_PlayerVoted:
 		{
@@ -164,16 +178,20 @@ void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 			{
 				vote.SetPass("加载中...");
 
-				char sCfgPath[256], sMsg[128];
+				char sCfgPath[PLATFORM_MAX_PATH], sBuffer[PLATFORM_MAX_PATH];
 				vote.GetInfoString(sCfgPath, sizeof(sCfgPath));
-				ServerCommandEx(sMsg, sizeof(sMsg), "exec %s", sCfgPath);
-				if (sMsg[0] != '\0')
+				FormatEx(sBuffer, PLATFORM_MAX_PATH, "cfg/%s", sCfgPath);
+
+				if (FileExists(sBuffer))
+					ServerCommand("exec %s", sCfgPath);
+				else
 				{
-					CPrintToChatAll("{default}[{red}提示{default}] 加载配置失败");
-					LogError("加载 %s 失败: %s", sCfgPath, sMsg);
+					CPrintToChatAll("{blue}[Vote] {default}加载配置失败.");
+					LogError("%s file does not exist", sCfgPath);
 				}
 			}
-			else vote.SetFail();
+			else
+				vote.SetFail();
 		}
 	}
 }
