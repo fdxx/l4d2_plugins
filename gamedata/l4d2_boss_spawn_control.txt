@@ -29,17 +29,30 @@
 					"read"		"82"
 				}
 			}
+
+			// From TerrorNavMesh::Update
+			"TerrorNavMesh::UnknownTimer"
+			{
+				"linux"
+				{
+					"signature" "CommandNavSave"
+					"read"		"25"
+					"read"		"0"		// TheNavMesh
+					"offset"	"1740"
+				}
+
+				"windows"
+				{
+					"signature" "CommandNavSave"
+					"read"		"11"
+					"read"		"0"
+					"offset"	"1744"
+				}
+			}
 		}
 
 		"Offsets"
 		{
-			// From TerrorNavMesh::Update
-			"TerrorNavMesh::UnknownTimer"
-			{
-				"windows"	"1744"
-				"linux"		"1740"
-			}
-
 			// From TerrorNavArea::ScriptGetSpawnAttributes
 			"TerrorNavArea::SpawnAttributes"
 			{
@@ -86,6 +99,14 @@
 				"linux"		"@_ZNK9CDirector19AreBossesProhibitedEv"
 				"windows"   "\x55\x8B\xEC\x51\x56\x8B\xF1\x8B\x8E\x88\x05\x00\x00\x8D\x45\xFF\x50\xE8\x2A\x2A\x2A\x2A\x84\xC0\x74\x2A\x8A\x45\xFF\x5E\x8B\xE5\x5D\xC3\x8B\x8E\x84\x05\x00\x00"
 				/* 55 8B EC 51 56 8B F1 8B 8E 88 05 00 00 8D 45 FF 50 E8 ? ? ? ? 84 C0 74 ? 8A 45 FF 5E 8B E5 5D C3 8B 8E 84 05 00 00 */
+			}
+
+			"CommandNavSave"
+			{
+				"library"	"server"
+				"linux"		"@_Z14CommandNavSavev"
+				"windows"	"\xE8\x2A\x2A\x2A\x2A\x84\xC0\x74\x2A\x8B\x0D\x2A\x2A\x2A\x2A\x8B\x01\x8B\x50\x2A\xFF\xD2\x8B\x0D\x2A\x2A\x2A\x2A\x84\xC0"
+				// E8 ? ? ? ? 84 C0 74 ? 8B 0D ? ? ? ? 8B 01 8B 50 ? FF D2 8B 0D ? ? ? ? 84 C0
 			}
 		}
 	}
