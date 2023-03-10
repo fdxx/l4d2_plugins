@@ -9,6 +9,9 @@ Change Log:
 	- After changing the SI spawn time, immediately spawn SI at the set time.
 	- Fix the number of SI spawn may be abnormal.
 
+3.4
+	- Add more spawn mode.
+
 =======================================================================================*/
 
 #pragma semicolon 1
@@ -20,7 +23,8 @@ Change Log:
 //#include <profiler>
 #include <sourcescramble> // https://github.com/nosoop/SMExt-SourceScramble
 
-#define VERSION "3.3"
+#define VERSION "3.4"
+#define DEBUG 1
 
 #define	SMOKER	1
 #define	BOOMER	2
@@ -33,13 +37,20 @@ Change Log:
 #define BOT			0
 #define PLAYER		1
 
-#define MODE_NORMAL		0
-#define MODE_NEAREST	1
-
 #define SPAWN_NO_HANDLE 0
 #define SPAWN_MAX_PRE	1
 #define SPAWN_MAX		2
 #define SPAWN_REVIVE	10
+
+#define NEAREST_RANGE_ADD 400.0
+
+enum
+{
+	SpawnMode_Normal			= 0, // L4D_GetRandomPZSpawnPosition + l4d2_si_spawn_control_spawn_range_normal
+	SpawnMode_NavAreaNearest	= 1, // GetSpawnPosByNavArea + nearest invisible place
+	SpawnMode_NavArea			= 2, // GetSpawnPosByNavArea + l4d2_si_spawn_control_spawn_range_navarea
+	spawnmode_NormalEnhanced	= 3, // SpawnMode_Normal + SpawnMode_NavArea auto switch.
+}
 
 ConVar
 	z_special_limit[SI_CLASS_SIZE],
@@ -49,6 +60,7 @@ ConVar
 	z_spawn_safety_range,
 	z_finale_spawn_safety_range,
 	z_spawn_range,
+	z_discard_range,
 	g_cvSpecialLimit[SI_CLASS_SIZE],
 	g_cvMaxSILimit,
 	g_cvSpawnTime,
@@ -57,6 +69,7 @@ ConVar
 	g_cvBlockSpawn,
 	g_cvSpawnMode,
 	g_cvNormalSpawnRange,
+	g_cvNavAreaSpawnRange,
 	g_cvTogetherSpawn;
 
 int
@@ -73,7 +86,9 @@ float
 	g_fSpawnTime,
 	g_fFirstSpawnTime,
 	g_fKillSITime,
-	g_fSpawnDist,
+	g_fNormalSpawnRange,
+	g_fNavAreaSpawnRange,
+	g_fNearestSpawnRange,
 	g_fSpecialActionTime[MAXPLAYERS+1];
 
 bool
@@ -88,6 +103,9 @@ Handle
 	g_hSpawnTimer[MAXPLAYERS+1],
 	g_hSDKIsVisibleToPlayer,
 	g_hSDKFindRandomSpot;
+
+Address
+	g_pPanicEventStage; 
 
 ArrayList g_aSurPosData;
 int g_iSurPosDataLen;
@@ -209,6 +227,7 @@ public void OnPluginStart()
 	z_spawn_safety_range =			FindConVar("z_spawn_safety_range");
 	z_finale_spawn_safety_range =	FindConVar("z_finale_spawn_safety_range");
 	z_spawn_range =					FindConVar("z_spawn_range");
+	z_discard_range =				FindConVar("z_discard_range");
 
 	g_cvSpecialLimit[HUNTER] =	CreateConVar("l4d2_si_spawn_control_hunter_limit",	"1", "Hunter limit.", FCVAR_NONE, true, 0.0, true, 32.0);
 	g_cvSpecialLimit[JOCKEY] =	CreateConVar("l4d2_si_spawn_control_jockey_limit",	"1", "Jockey limit.", FCVAR_NONE, true, 0.0, true, 32.0);
@@ -222,8 +241,9 @@ public void OnPluginStart()
 	g_cvFirstSpawnTime =	CreateConVar("l4d2_si_spawn_control_first_spawn_time",		"10.0",	"SI first spawn time (after leaving the safe area).", FCVAR_NONE, true, 0.1);
 	g_cvKillSITime =		CreateConVar("l4d2_si_spawn_control_kill_si_time",			"25.0",	"Auto kill SI time. if it 'slack off'.", FCVAR_NONE, true, 0.1);
 	g_cvBlockSpawn = 		CreateConVar("l4d2_si_spawn_control_block_other_si_spawn",	"1",	"Block other SI spawn (by L4D_OnSpawnSpecial).", FCVAR_NONE, true, 0.0, true, 1.0);
-	g_cvSpawnMode =			CreateConVar("l4d2_si_spawn_control_spawn_mode",			"0",	"Spawn mode, 0=normal, 1=nearest invisible place.");
+	g_cvSpawnMode =			CreateConVar("l4d2_si_spawn_control_spawn_mode",			"0",	"Spawn mode, See enum SpawnMode_*");
 	g_cvNormalSpawnRange =	CreateConVar("l4d2_si_spawn_control_spawn_range_normal",	"1500", "Normal mode spawn range, randomly spawn from 1 to this range.", FCVAR_NONE, true, 1.0);
+	g_cvNavAreaSpawnRange =	CreateConVar("l4d2_si_spawn_control_spawn_range_navarea",	"1500", "NavArea mode spawn range, randomly spawn from 1 to this range.", FCVAR_NONE, true, 1.0);
 	g_cvTogetherSpawn =		CreateConVar("l4d2_si_spawn_control_together_spawn",		"0",	"After SI dies, wait for other SI to spawn together.", FCVAR_NONE, true, 0.0, true, 1.0);
 
 	GetCvars();
@@ -239,6 +259,7 @@ public void OnPluginStart()
 	g_cvBlockSpawn.AddChangeHook(ConVarChanged);
 	g_cvSpawnMode.AddChangeHook(ConVarChanged);
 	g_cvNormalSpawnRange.AddChangeHook(ConVarChanged);
+	g_cvNavAreaSpawnRange.AddChangeHook(ConVarChanged);
 	g_cvTogetherSpawn.AddChangeHook(ConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
@@ -291,8 +312,11 @@ void GetCvars()
 	g_fKillSITime = g_cvKillSITime.FloatValue;
 	g_bBlockSpawn = g_cvBlockSpawn.BoolValue;
 	g_iSpawnMode = g_cvSpawnMode.IntValue;
-	z_spawn_range.IntValue = g_cvNormalSpawnRange.IntValue;
+	g_fNormalSpawnRange = g_cvNormalSpawnRange.FloatValue;
+	g_fNavAreaSpawnRange = g_cvNavAreaSpawnRange.FloatValue;
 	g_bTogetherSpawn = g_cvTogetherSpawn.BoolValue;
+
+	z_spawn_range.IntValue = RoundToNearest(g_fNormalSpawnRange);
 }
 
 public void OnConfigsExecuted()
@@ -325,7 +349,7 @@ public void OnMapEnd()
 void Reset()
 {
 	g_bLeftSafeArea = false;
-	g_fSpawnDist = 1500.0;
+	g_fNearestSpawnRange = L4D2_GetScriptValueFloat("ZombieDiscardRange", z_discard_range.FloatValue);
 
 	for (int i; i <= MAXPLAYERS; i++)
 	{
@@ -446,10 +470,11 @@ void SpawnSpecial()
 		return;
 
 	static float fSpawnPos[3];
-	static int client, iClass, index;
+	static int iClass, iPanicEventStage, index;
 	static bool bFound;
 
 	bFound = false;
+	index = -1;
 
 	if (GetAllSpecialsTotal() < g_iMaxSILimit)
 	{
@@ -458,15 +483,36 @@ void SpawnSpecial()
 		{
 			switch (g_iSpawnMode)
 			{
-				case MODE_NORMAL:
+				case SpawnMode_Normal:
+					bFound = L4D_GetRandomPZSpawnPosition(GetRandomSur(), iClass, 30, fSpawnPos);
+				
+				case spawnmode_NormalEnhanced:
 				{
-					client = GetRandomSur();
-					if (client > 0)
-						bFound = L4D_GetRandomPZSpawnPosition(client, iClass, 30, fSpawnPos);
+					iPanicEventStage = LoadFromAddress(g_pPanicEventStage, NumberType_Int8);
+
+					if (!g_bFinalMap && iPanicEventStage > 0)
+					{
+						// After the panic event starts,
+						// The GetRandomPZSpawnPosition function spawn SI very far away.
+						// c8m3, c3m2...
+						bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNormalSpawnRange);
+					}
+					else
+					{
+						bFound = L4D_GetRandomPZSpawnPosition(GetRandomSur(), iClass, 7, fSpawnPos);
+						if (!bFound)
+						{
+							// Use GetRandomPZSpawnPosition first, use GetSpawnPosByNavArea when it fails.
+							bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNormalSpawnRange);
+						}
+					}
 				}
-					
-				case MODE_NEAREST:
-					bFound = GetSpawnPosByNavArea(fSpawnPos);
+
+				case SpawnMode_NavArea:
+					bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNavAreaSpawnRange);
+
+				case SpawnMode_NavAreaNearest:
+					bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNearestSpawnRange, true);
 			}
 			
 			if (bFound)
@@ -485,18 +531,24 @@ void SpawnSpecial()
 			if (!bFound || index < 1)
 			{
 				CreateTimer(1.0, SpawnSpecial_Timer, SPAWN_NO_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
+
+				#if DEBUG
+				char sMap[128];
+				GetCurrentMap(sMap, sizeof(sMap));
+				LogMessage("Failed to SpawnSpecial, map = %s, SpawnMode = %i, bFound = %b, index = %i", sMap, g_iSpawnMode, bFound, index);
+				#endif
 			}
 		}
 	}
 }
 
-bool GetSpawnPosByNavArea(float fPos[3])
+bool GetSpawnPosByNavArea(float fPos[3], float fSpawnRange, bool bNearest = false)
 {
 	static TheNavAreas pTheNavAreas;
 	static NavArea pArea;
 	static float fSpawnPos[3], fFlow, fDist, fMapMaxFlowDist;
-	static bool bFound;
-	static int i, iAreaCount, iArrayIndex;
+	static bool bFound, bFinaleArea;
+	static int i, iAreaCount, iArrayLen, iMaxRandomBound;
 	static SpawnData data;
 
 	if (!GetSurPosData())
@@ -506,17 +558,18 @@ bool GetSpawnPosByNavArea(float fPos[3])
 	pTheNavAreas = view_as<TheNavAreas>(g_pTheNavAreas.Dereference());
 	fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
 	iAreaCount = g_pTheNavAreas.Count();
+	bFinaleArea = g_bFinalMap && L4D2_GetCurrentFinaleStage() < 18;
 
 	for (i = 0; i < iAreaCount; i++)
 	{
 		pArea = pTheNavAreas.GetArea(i, false);
-		if (pArea && IsValidFlags(pArea.SpawnAttributes))
+		if (pArea && IsValidFlags(pArea.SpawnAttributes, bFinaleArea))
 		{
 			fFlow = pArea.GetFlow();
 			if (fFlow > 0.0 && fFlow < fMapMaxFlowDist)
 			{
 				pArea.GetSpawnPos(fSpawnPos);
-				if (IsNearTheSur(fFlow, fSpawnPos, fDist))
+				if (IsNearTheSur(fSpawnRange, fFlow, fSpawnPos, fDist))
 				{
 					if (!IsVisible(fSpawnPos, pArea) && !WillStuck(fSpawnPos))
 					{
@@ -529,21 +582,27 @@ bool GetSpawnPosByNavArea(float fPos[3])
 		}
 	}
 
-	if (array.Length > 0)
+	iArrayLen = array.Length;
+	if (iArrayLen > 0)
 	{
-		array.Sort(Sort_Ascending, Sort_Float);
-
-		if (array.Length > 2) iArrayIndex = GetRandomIntEx(0, 2);
-		else iArrayIndex = 0;
-
-		array.GetArray(iArrayIndex, data);
+		if (bNearest)
+		{
+			array.Sort(Sort_Ascending, Sort_Float);
+			iMaxRandomBound = iArrayLen > 2 ? 2 : 0;
+		}
+		else
+			iMaxRandomBound = iArrayLen-1;
+		
+		array.GetArray(GetRandomIntEx(0, iMaxRandomBound), data);
 		fPos = data.fPos;
-		g_fSpawnDist = data.fDist + 400.0;
+		if (bNearest)
+			g_fNearestSpawnRange = data.fDist + NEAREST_RANGE_ADD;
 		bFound = true;
 	}
 	else
 	{
-		g_fSpawnDist = 1500.0;
+		if (bNearest)
+			g_fNearestSpawnRange = L4D2_GetScriptValueFloat("ZombieDiscardRange", z_discard_range.FloatValue);
 		bFound = false;
 	}
 
@@ -594,20 +653,20 @@ bool GetSurPosData()
 	return g_iSurPosDataLen > 0;
 }
 
-bool IsValidFlags(int iFlags)
+bool IsValidFlags(int iFlags, bool bFinaleArea)
 {
 	if (iFlags)
 	{
-		if (g_bFinalMap && L4D2_GetCurrentFinaleStage() != 18)
+		if (bFinaleArea)
 		{
-			return (iFlags & TERROR_NAV_RESCUE_CLOSET == 0) && (iFlags & TERROR_NAV_FINALE);
+			return (iFlags & TERROR_NAV_FINALE) && (iFlags & (TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE) == 0);
 		}
-		return (iFlags & TERROR_NAV_RESCUE_CLOSET == 0);
-	}
+		return (iFlags & (TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE) == 0);
+	} 
 	return true;
 }
 
-bool IsNearTheSur(float fFlow, const float fPos[3], float &fDist)
+bool IsNearTheSur(float fSpawnRange, float fFlow, const float fPos[3], float &fDist)
 {
 	static SurPosData data;
 	static int i;
@@ -615,10 +674,10 @@ bool IsNearTheSur(float fFlow, const float fPos[3], float &fDist)
 	for (i = 0; i < g_iSurPosDataLen; i++)
 	{
 		g_aSurPosData.GetArray(i, data);
-		if (FloatAbs(fFlow - data.fFlow) < g_fSpawnDist)
+		if (FloatAbs(fFlow - data.fFlow) < fSpawnRange)
 		{
 			fDist = GetVectorDistance(data.fPos, fPos);
-			if (fDist < g_fSpawnDist)
+			if (fDist < fSpawnRange)
 			{
 				return true;
 			}
@@ -701,7 +760,7 @@ int GetSpawnClass()
 
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i) && g_bMark[i])
+		if (g_bMark[i] && IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
 		{
 			iClass = GetZombieClass(i);
 			if (iClass > 0 && iClass < SI_CLASS_SIZE)
@@ -737,7 +796,7 @@ int GetAllSpecialsTotal()
 
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i) && g_bMark[i])
+		if (g_bMark[i] && IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
 		{
 			iClass = GetZombieClass(i);
 			if (iClass > 0 && iClass < SI_CLASS_SIZE)
@@ -832,7 +891,7 @@ int GetZombieClass(int client)
 
 static const char g_sSpecialName[][] =
 {
-	"", "smoker", "boomer", "hunter", "spitter", "jockey", "charger"
+	"", "Smoker", "Boomer", "Hunter", "Spitter", "Jockey", "Charger"
 };
 
 public Action L4D_OnSpawnSpecial(int &zombieClass, const float vecPos[3], const float vecAng[3])
@@ -855,41 +914,50 @@ Action KickBot_Timer(Handle timer, int userid)
 	return Plugin_Continue;
 }
 
+void GetOffset(GameData hGameData, int &offset, const char[] name)
+{
+	offset = hGameData.GetOffset(name);
+	if (offset == -1)
+		SetFailState("Failed to get offset: %s", name);
+}
+
+void GetAddress(GameData hGameData, Address &address, const char[] name)
+{
+	address = hGameData.GetAddress(name);
+	if (address == Address_Null)
+		SetFailState("Failed to get address: %s", name);
+}
+
 void Init()
 {
-	GameData hGameData = new GameData("l4d2_si_spawn_control");
+	char sBuffer[128];
+
+	strcopy(sBuffer, sizeof(sBuffer), "l4d2_si_spawn_control");
+	GameData hGameData = new GameData(sBuffer);
 	if (hGameData == null)
-		SetFailState("Failed to load \"l4d2_si_spawn_control.txt\" gamedata.");
+		SetFailState("Failed to load \"%s.txt\" gamedata.", sBuffer);
 
-	g_iSpawnAttributesOffset = hGameData.GetOffset("TerrorNavArea::SpawnAttributes");
-	if (g_iSpawnAttributesOffset == -1)
-		SetFailState("Failed to find offset: TerrorNavArea::SpawnAttributes");
+	GetOffset(hGameData, g_iSpawnAttributesOffset, "TerrorNavArea::SpawnAttributes");
+	GetOffset(hGameData, g_iFlowDistanceOffset, "TerrorNavArea::FlowDistance");
+	GetOffset(hGameData, g_iNavCountOffset, "TheNavAreas::Count");
+	
+	GetAddress(hGameData, view_as<Address>(g_pTheNavAreas), "TheNavAreas");
+	GetAddress(hGameData, g_pPanicEventStage, "CDirectorScriptedEventManager::m_PanicEventStage");
 
-	g_iFlowDistanceOffset = hGameData.GetOffset("TerrorNavArea::FlowDistance");
-	if(g_iFlowDistanceOffset == -1)
-		SetFailState("Failed to find offset: TerrorNavArea::FlowDistance");
-
-	g_iNavCountOffset = hGameData.GetOffset("TheNavAreas::Count");
-	if(g_iNavCountOffset == -1)
-		SetFailState("Failed to find offset: TheNavAreas::Count");
-
-	g_pTheNavAreas = view_as<TheNavAreas>(hGameData.GetAddress("TheNavAreas"));
-	if (!g_pTheNavAreas)
-		SetFailState("Failed to get address: TheNavAreas");	
-
+	// Vector CNavArea::GetRandomPoint( void ) const
+	strcopy(sBuffer, sizeof(sBuffer), "TerrorNavArea::FindRandomSpot");
 	StartPrepSDKCall(SDKCall_Raw);
-	if(!PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "TerrorNavArea::FindRandomSpot"))
-		SetFailState("Failed to find signature: TerrorNavArea::FindRandomSpot");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, sBuffer);
 	PrepSDKCall_SetReturnInfo(SDKType_Vector, SDKPass_ByValue);
 	g_hSDKFindRandomSpot = EndPrepSDKCall();
 	if(g_hSDKFindRandomSpot == null)
-		SetFailState("Failed to create SDKCall: TerrorNavArea::FindRandomSpot");
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
 
 	// IsVisibleToPlayer(Vector const&, CBasePlayer *, int, int, float, CBaseEntity const*, TerrorNavArea **, bool *);
 	// SDKCall(g_hSDKIsVisibleToPlayer, fTargetPos, i, 2, 3, 0.0, 0, pArea, true);
+	strcopy(sBuffer, sizeof(sBuffer), "IsVisibleToPlayer");
 	StartPrepSDKCall(SDKCall_Static);
-	if (!PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "IsVisibleToPlayer"))
-		SetFailState("Failed to find signature: IsVisibleToPlayer");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, sBuffer);
 	PrepSDKCall_AddParameter(SDKType_Vector, SDKPass_ByRef);			// target position
 	PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);		// client
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);		// client team
@@ -901,14 +969,15 @@ void Init()
 	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
 	g_hSDKIsVisibleToPlayer = EndPrepSDKCall();
 	if (g_hSDKIsVisibleToPlayer == null)
-		SetFailState("Failed to create SDKCall: IsVisibleToPlayer");
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
 
 	// Unlock Max SI limit.
-	MemoryPatch mPatch = MemoryPatch.CreateFromConf(hGameData, "CDirector::GetMaxPlayerZombies");
+	strcopy(sBuffer, sizeof(sBuffer), "CDirector::GetMaxPlayerZombies");
+	MemoryPatch mPatch = MemoryPatch.CreateFromConf(hGameData, sBuffer);
 	if (!mPatch.Validate())
-		SetFailState("Verify patch failed.");
+		SetFailState("Failed to verify patch: %s", sBuffer);
 	if (!mPatch.Enable())
-		SetFailState("Enable patch failed.");
+		SetFailState("Failed to Enable patch: %s", sBuffer);
 
 	delete hGameData;
 }
@@ -927,4 +996,3 @@ int Native_CanSpawnSpecial(Handle plugin, int numParams)
 	g_bCanSpawn = bCanSpawn;
 	return 0;
 }
-
