@@ -7,7 +7,7 @@
 #include <sdktools>
 #include <l4d2_nativevote>			// https://github.com/fdxx/l4d2_nativevote
 #include <l4d2_source_keyvalues>	// https://github.com/fdxx/l4d2_source_keyvalues
-#include <multicolors>
+#include <multicolors>  
 
 Address
 	g_pMatchExtL4D,
@@ -24,12 +24,14 @@ StringMap
 	g_smFirstMap;
 
 ConVar
-	mp_gamemode;
+	mp_gamemode,
+	g_cvAdminChangeDirectly;
 
 int
 	g_iType[MAXPLAYERS],
 	g_iPos[MAXPLAYERS][2];
 
+bool g_bAdminChangeDirectly;
 char g_sMode[128];
 
 char g_sValveMaps[][][] = 
@@ -61,10 +63,13 @@ public void OnPluginStart()
 {
 	Init();
 
-	CreateConVar("l4d2_map_vote_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+	CreateConVar("l4d2_map_vote_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	g_cvAdminChangeDirectly = CreateConVar("l4d2_map_vote_admin_change_directly", "1", "Admin change directly, no votes required.");
 	mp_gamemode = FindConVar("mp_gamemode");
 
 	OnConVarChanged(null, "", "");
+
+	g_cvAdminChangeDirectly.AddChangeHook(OnConVarChanged);
 	mp_gamemode.AddChangeHook(OnConVarChanged);
 
 	RegConsoleCmd("sm_mapvote", Cmd_VoteMap);
@@ -81,6 +86,7 @@ public void OnPluginStart()
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	mp_gamemode.GetString(g_sMode, sizeof(g_sMode));
+	g_bAdminChangeDirectly = g_cvAdminChangeDirectly.BoolValue;
 }
 
 public void OnConfigsExecuted()
@@ -151,17 +157,20 @@ Action Cmd_ClearScores(int client, int args)
 
 Action Cmd_VoteMap(int client, int args)
 {
-	if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) != 1)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client))
 	{
-		Menu menu = new Menu(MapType_MenuHandler);
-		menu.SetTitle("选择地图类型:");
-		menu.AddItem("", "官方地图");
-		menu.AddItem("", "第三方地图");
-		menu.Display(client, 20);
-		return Plugin_Handled;
+		if (GetClientTeam(client) != 1 || CheckCommandAccess(client, "sm_admin", ADMFLAG_ROOT))
+		{
+			Menu menu = new Menu(MapType_MenuHandler);
+			menu.SetTitle("选择地图类型:");
+			menu.AddItem("", "官方地图");
+			menu.AddItem("", "第三方地图");
+			menu.Display(client, 20);
+			return Plugin_Handled;
+		}
 	}
 
-	CPrintToChat(client, "{default}[{yellow}提示{default}] 旁观无法进行投票");
+	CPrintToChat(client, "{lightgreen}旁观无法进行投票.");
 	return Plugin_Handled;
 }
 
@@ -301,9 +310,20 @@ int Chapters_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 
 void StartVoteMap(int client, const char[] sTitle, const char[] sMap)
 {
+	if (g_bAdminChangeDirectly && CheckCommandAccess(client, "sm_admin", ADMFLAG_ROOT))
+	{
+		char sMissionName[256];
+		if (g_smFirstMap.GetString(sMap, sMissionName, sizeof(sMissionName)))
+			SDKCall(g_hSDKChangeMission, g_pTheDirector, sMissionName);
+		else
+			ServerCommand("changelevel %s", sMap);
+			
+		return;
+	}
+
 	if (!L4D2NativeVote_IsAllowNewVote())
 	{
-		CPrintToChat(client, "{default}[{yellow}提示{default}] 投票正在进行中，暂不能发起新的投票");
+		CPrintToChat(client, "{lightgreen}投票正在进行中, 暂不能发起新的投票.");
 		return;
 	}
 	
@@ -338,7 +358,7 @@ void Vote_Handler(L4D2NativeVote vote, VoteAction action, int param1, int param2
 		{
 			char sDisplay[256];
 			vote.GetDisplayText(sDisplay, sizeof(sDisplay));
-			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起投票%s", param1, sDisplay);
+			CPrintToChatAll("{blue}[Vote] {olive}%N {default}发起投票%s", param1, sDisplay);
 		}
 		case VoteAction_PlayerVoted:
 		{
@@ -354,13 +374,10 @@ void Vote_Handler(L4D2NativeVote vote, VoteAction action, int param1, int param2
 				vote.GetInfoString(sMap, sizeof(sMap));
 
 				if (g_smFirstMap.GetString(sMap, sMissionName, sizeof(sMissionName)))
-				{
 					SDKCall(g_hSDKChangeMission, g_pTheDirector, sMissionName);
-				}
 				else
-				{
 					ServerCommand("changelevel %s", sMap);
-				}
+
 			}
 			else vote.SetFail();
 		}
