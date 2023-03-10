@@ -2,40 +2,72 @@
 #pragma newdecls required
 
 #include <sourcemod>
-#include <left4dhooks>
-#include <sdktools>
+#include <sdkhooks>
 #include <dhooks>
-#include <multicolors>
+#include <multicolors>		
+#include <sourcescramble>	// https://github.com/nosoop/SMExt-SourceScramble
+#include <left4dhooks>
 
-#define VERSION "1.2"
+#define VERSION "1.3"
+
+#define STATE_GHOST 8
+#define EF_NODRAW	32
+#define FSOLID_NOT_SOLID 4
+
+#define TEAM_NONE	0
+#define TEAM_SPEC	1
+#define TEAM_SUR	2
+#define TEAM_INF	3
+
+#define COLOR_RED		{255, 0, 0}
+#define COLOR_GREEN		{0, 255, 0}
+#define COLOR_WHITE		{255, 255, 255}
+#define COLOR_PURPLE	{255, 0, 255}
+
+#define	SMOKER	1
+#define	BOOMER	2
+#define	HUNTER	3
+#define	SPITTER	4
+#define	JOCKEY	5
+#define	CHARGER 6
+#define	TANK	8
+#define	MAX_CLASS	9
 
 ConVar
-	g_cvGameMode,
-	g_cvSpawnTime,
 	g_cvMaxSpecialLimit,
-	g_cvSpecialLimit[9],
-	g_cvBlockOtherRespawn,
+	g_cvSpecialLimit[MAX_CLASS],
+	g_cvSpawnTime,
 	g_cvAdminImmunity,
-	g_cvSurMaxIncapCount;
+	g_cvBlockOtherRespawn,
+	g_cvIgniteFrustr,
+	mp_gamemode,
+	z_scrimmage_sphere,
+	z_max_player_zombies,
+	sb_all_bot_game,
+	allow_all_bot_survivor_team,
+	survivor_max_incapacitated_count;
 
 int
 	g_iMaxSpecialLimit,
-	g_iSpecialLimit[9],
+	g_iSpecialLimit[MAX_CLASS],
 	g_iSpawnCountDown[MAXPLAYERS+1],
 	g_iSpawnTime,
-	g_iGlowEntRef[MAXPLAYERS+1],
+	g_iGlowEntRef[MAXPLAYERS+1] = {-1, ...},
 	g_iSurMaxIncapCount;
 
 bool
-	g_bBlockOtherRespawn,
 	g_bLeftSafeArea,
-	g_bAdminImmunity;
+	g_bAdminImmunity,
+	g_bBlockOtherRespawn,
+	g_bIgniteFrustr;
 
 Handle
-	g_hFrustrationCheck,
-	g_hSpawnSITimer[MAXPLAYERS+1],
-	g_hSurGlowCheck,
-	g_hSDKSetPreSpawnClass;
+	g_hSpawnTimer[MAXPLAYERS+1],
+	g_hSDK_SetPreSpawnClass,
+	g_hSDK_IsGenericCoopMode,
+	g_hSDK_StateTransition,
+	g_hSDK_ReplaceWithBot,
+	g_hSDK_TakeOverZombieBot;
 
 float
 	g_fBugExploitTime[MAXPLAYERS+1][2];
@@ -44,22 +76,10 @@ ArrayList
 	g_aJoinTankList;
 
 char
-	g_sDefMode[128];
+	g_sMode[128];
 
-DynamicDetour
-	g_dPlayerZombieAbortControl,
-	g_dSpawnPlayerZombieScan;
-
-enum
-{
-	SMOKER	= 1,
-	BOOMER	= 2,
-	HUNTER	= 3,
-	SPITTER	= 4,
-	JOCKEY	= 5,
-	CHARGER	= 6,
-	TANK	= 8,
-};
+MemoryPatch
+	g_mIgniteFrustr;
 
 public Plugin myinfo = 
 {
@@ -70,140 +90,459 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	LoadGameData();
-	g_cvGameMode = FindConVar("mp_gamemode");
-	g_cvSurMaxIncapCount = FindConVar("survivor_max_incapacitated_count");
+	Init();
 
-	CreateConVar("l4d2_cz_version", VERSION, "version", FCVAR_NONE | FCVAR_DONTRECORD);
-	g_cvSpawnTime = CreateConVar("l4d2_cz_spawn_time", "15", "重生时间", FCVAR_NONE);
-	g_cvBlockOtherRespawn = CreateConVar("l4d2_cz_block_other_pz_respawn", "1", "阻止其他插件通过z_spawn等方式复活特感玩家", FCVAR_NONE);
-	g_cvAdminImmunity = CreateConVar("l4d2_cz_admin_immunity", "1", "管理员加入特感团队不受最大人数限制", FCVAR_NONE);
+	CreateConVar("l4d2_control_zombies_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 
-	g_cvMaxSpecialLimit = CreateConVar("l4d2_cz_max_special_limit", "1", "感染玩家人数最大限制", FCVAR_NONE);
-	g_cvSpecialLimit[SMOKER] = CreateConVar("l4d2_cz_smoker_limit", "0", "Smoker玩家限制", FCVAR_NONE);
-	g_cvSpecialLimit[BOOMER] = CreateConVar("l4d2_cz_boomer_limit", "0", "Boomer玩家限制", FCVAR_NONE);
-	g_cvSpecialLimit[HUNTER] = CreateConVar("l4d2_cz_hunter_limit", "1", "Hunter玩家限制", FCVAR_NONE);
-	g_cvSpecialLimit[SPITTER] = CreateConVar("l4d2_cz_spitter_limit", "0", "Spitter玩家限制", FCVAR_NONE);
-	g_cvSpecialLimit[JOCKEY] = CreateConVar("l4d2_cz_jockey_limit", "0", "Jockey玩家限制", FCVAR_NONE);
-	g_cvSpecialLimit[CHARGER] = CreateConVar("l4d2_cz_charger_limit", "0", "Charger玩家限制", FCVAR_NONE);
-	g_cvSpecialLimit[TANK] = CreateConVar("l4d2_cz_tank_limit", "1", "Tank玩家限制", FCVAR_NONE);
+	g_cvMaxSpecialLimit =		CreateConVar("l4d2_cz_max_special_limit",	"1", "Max SI limit");
+	g_cvSpecialLimit[SMOKER] =	CreateConVar("l4d2_cz_smoker_limit",		"0", "Smoker limit.");
+	g_cvSpecialLimit[BOOMER] =	CreateConVar("l4d2_cz_boomer_limit",		"0", "Boomer limit.");
+	g_cvSpecialLimit[HUNTER] =	CreateConVar("l4d2_cz_hunter_limit",		"1", "Hunter limit.");
+	g_cvSpecialLimit[SPITTER] =	CreateConVar("l4d2_cz_spitter_limit",		"0", "Spitter limit.");
+	g_cvSpecialLimit[JOCKEY] =	CreateConVar("l4d2_cz_jockey_limit",		"0", "Jockey limit.");
+	g_cvSpecialLimit[CHARGER] =	CreateConVar("l4d2_cz_charger_limit",		"0", "Charger limit.");
+	g_cvSpecialLimit[TANK] =	CreateConVar("l4d2_cz_tank_limit",			"1", "Tank limit.");
 
-	GetCvars();
+	g_cvSpawnTime = CreateConVar("l4d2_cz_spawn_time", "15", "Spawn time");
+	g_cvAdminImmunity = CreateConVar("l4d2_cz_admin_immunity", "1", "Admin join infected team without limit.");
+	g_cvBlockOtherRespawn = CreateConVar("l4d2_cz_block_other_pz_respawn", "1", "Block infected player spawned by z_spawn_old command.");
+	g_cvIgniteFrustr = CreateConVar("l4d2_cz_ignite_frustration", "1", "Allow frustration when TANK is ignited?");
 
-	g_cvSurMaxIncapCount.AddChangeHook(ConVarChanged);
-	g_cvSpawnTime.AddChangeHook(ConVarChanged);
-	g_cvBlockOtherRespawn.AddChangeHook(ConVarChanged);
-	g_cvMaxSpecialLimit.AddChangeHook(ConVarChanged);
-	g_cvAdminImmunity.AddChangeHook(ConVarChanged);
-	
-	for (int i = 1; i <= 8; i++)
+	mp_gamemode = FindConVar("mp_gamemode");
+	z_scrimmage_sphere = FindConVar("z_scrimmage_sphere");
+	z_max_player_zombies = FindConVar("z_max_player_zombies");
+	sb_all_bot_game = FindConVar("sb_all_bot_game");
+	allow_all_bot_survivor_team = FindConVar("allow_all_bot_survivor_team");
+	survivor_max_incapacitated_count = FindConVar("survivor_max_incapacitated_count");
+
+	OnConVarChanged(null, "", "");
+
+	for (int i = 1; i < MAX_CLASS; i++)
 	{
 		if (g_cvSpecialLimit[i] != null)
-			g_cvSpecialLimit[i].AddChangeHook(ConVarChanged);
+			g_cvSpecialLimit[i].AddChangeHook(OnConVarChanged);
 	}
 
-	RegConsoleCmd("sm_inf", Cmd_JoinTeam3);
-	RegConsoleCmd("sm_team3", Cmd_JoinTeam3);
-	RegConsoleCmd("sm_taketank", Cmd_JoinTank);
-	RegConsoleCmd("sm_tk", Cmd_JoinTank);
+	g_cvMaxSpecialLimit.AddChangeHook(OnConVarChanged);
+	g_cvSpawnTime.AddChangeHook(OnConVarChanged);
+	g_cvAdminImmunity.AddChangeHook(OnConVarChanged);
+	g_cvBlockOtherRespawn.AddChangeHook(OnConVarChanged);
+	g_cvIgniteFrustr.AddChangeHook(OnConVarChanged);
+	survivor_max_incapacitated_count.AddChangeHook(OnConVarChanged);
 
 	HookEvent("player_death", Event_PlayerDeath, EventHookMode_Pre);
 	HookEvent("player_team", Event_PlayerTeam);
 	HookEvent("player_spawn", Event_PlayerSpawn);
-	HookEvent("tank_frustrated", Event_TankFrustrated);
-	//HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
-	//HookEvent("player_bot_replace", Event_BotReplacePlayer);
+	HookEvent("bot_player_replace", Event_PlayerReplacedBot);
 
-	HookEvent("round_start", Event_RoundStart);
-	HookEvent("round_end", Event_RoundEnd);
-	HookEvent("map_transition", Event_RoundEnd); //战役过关到下一关的时候 (没有触发round_end)
-	HookEvent("mission_lost", Event_RoundEnd); //战役灭团重来该关卡的时候 (之后有触发round_end)
-	HookEvent("finale_vehicle_leaving", Event_RoundEnd); //救援载具离开之时  (没有触发round_end)
+	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
+	HookEvent("round_end", Event_RoundEnd, EventHookMode_PostNoCopy);
+	HookEvent("map_transition", Event_RoundEnd, EventHookMode_PostNoCopy);
+	HookEvent("mission_lost", Event_RoundEnd, EventHookMode_PostNoCopy);
+	HookEvent("finale_vehicle_leaving", Event_RoundEnd, EventHookMode_PostNoCopy);
+	HookEvent("player_left_safe_area", Event_PlayerLeftSafeArea, EventHookMode_PostNoCopy);
 
-	g_aJoinTankList = new ArrayList();
-
-	delete g_hFrustrationCheck;
-	g_hFrustrationCheck = CreateTimer(0.2, FrustrationCheck_Timer, _, TIMER_REPEAT);
-}
-
-void LoadGameData()
-{
-	GameData hGameData = new GameData("l4d2_control_zombies");
-	if (hGameData == null)
-		SetFailState("加载 l4d2_control_zombies.txt 文件失败");
-
-	g_dSpawnPlayerZombieScan = DynamicDetour.FromConf(hGameData, "ForEachTerrorPlayer<SpawnablePZScan>");
-	if (g_dSpawnPlayerZombieScan == null)
-		SetFailState("加载 ForEachTerrorPlayer<SpawnablePZScan> 签名失败");
-	if (!g_dSpawnPlayerZombieScan.Enable(Hook_Pre, mreOnSpawnPlayerZombieScanPre))
-		SetFailState("启用 mreOnSpawnPlayerZombieScanPre 失败");
-
-	g_dPlayerZombieAbortControl = DynamicDetour.FromConf(hGameData, "CTerrorPlayer::PlayerZombieAbortControl");
-	if (g_dPlayerZombieAbortControl == null)
-		SetFailState("加载 CTerrorPlayer::PlayerZombieAbortControl 签名失败");
-	if (!g_dPlayerZombieAbortControl.Enable(Hook_Pre, mreOnPlayerZombieAbortControlPre))
-		SetFailState("启用 mreOnPlayerZombieAbortControlPre 失败");
-	if (!g_dPlayerZombieAbortControl.Enable(Hook_Post, mreOnPlayerZombieAbortControlPost))
-		SetFailState("启用 mreOnPlayerZombieAbortControlPost 失败");
+	RegConsoleCmd("sm_inf", Cmd_JoinTeam3);
+	RegConsoleCmd("sm_team3", Cmd_JoinTeam3);
 	
-	StartPrepSDKCall(SDKCall_Player);
-	if (PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CTerrorPlayer::SetPreSpawnClass") == false)
-		SetFailState("Failed to find signature: CTerrorPlayer::SetPreSpawnClass");
-	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
-	g_hSDKSetPreSpawnClass = EndPrepSDKCall();
-	if (g_hSDKSetPreSpawnClass == null)
-		SetFailState("Failed to create SDKCall: CTerrorPlayer::SetPreSpawnClass");
+	RegConsoleCmd("sm_taketank", Cmd_JoinTank);
+	RegConsoleCmd("sm_tk", Cmd_JoinTank);
 
-	delete hGameData;
+	CreateTimer(0.2, SurGlowCheck_Timer, _, TIMER_REPEAT);
+
+	for (int i = 0; i <= MaxClients; i++)
+		RemoveSurGlow(i);
 }
 
-public void OnConfigsExecuted()
+void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	if (!L4D2_IsGenericCooperativeMode())
-	{
-		SetFailState("不支持的游戏模式");
-	}
-
-	g_cvGameMode.GetString(g_sDefMode, sizeof(g_sDefMode));
-	
-	FindConVar("z_scrimmage_sphere").SetBounds(ConVarBound_Lower, true, 0.0);
-	FindConVar("z_scrimmage_sphere").SetBounds(ConVarBound_Upper, true, 0.0);
-	FindConVar("z_scrimmage_sphere").SetInt(0);
-	
-	FindConVar("z_max_player_zombies").SetBounds(ConVarBound_Lower, true, 32.0);
-	FindConVar("z_max_player_zombies").SetBounds(ConVarBound_Upper, true, 32.0);
-	FindConVar("z_max_player_zombies").SetInt(32);
-
-	FindConVar("sb_all_bot_game").SetInt(1);
-	FindConVar("allow_all_bot_survivor_team").SetInt(1);
-}
-
-void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
-{
-	GetCvars();	
-}
-
-void GetCvars()
-{
-	g_iSurMaxIncapCount = g_cvSurMaxIncapCount.IntValue;
-	g_bBlockOtherRespawn = g_cvBlockOtherRespawn.BoolValue;
-	g_iSpawnTime = g_cvSpawnTime.IntValue;
-	g_iMaxSpecialLimit = g_cvMaxSpecialLimit.IntValue;
-	g_bAdminImmunity = g_cvAdminImmunity.BoolValue;
-
-	for (int i = 1; i <= 8; i++)
+	for (int i = 1; i < MAX_CLASS; i++)
 	{
 		if (g_cvSpecialLimit[i] != null)
 			g_iSpecialLimit[i] = g_cvSpecialLimit[i].IntValue;
 	}
+
+	g_iMaxSpecialLimit = g_cvMaxSpecialLimit.IntValue;
+	g_iSpawnTime = g_cvSpawnTime.IntValue;
+	g_bAdminImmunity = g_cvAdminImmunity.BoolValue;
+	g_bBlockOtherRespawn = g_cvBlockOtherRespawn.BoolValue;
+	g_bIgniteFrustr = g_cvIgniteFrustr.BoolValue;
+	g_iSurMaxIncapCount = survivor_max_incapacitated_count.IntValue;
+
+	g_mIgniteFrustr.Disable();
+	if (g_bIgniteFrustr)
+	{
+		if (!g_mIgniteFrustr.Enable())
+			SetFailState("Failed to enable patch.");
+	}
+}
+
+public void OnConfigsExecuted()
+{
+	if (!SDKCall(g_hSDK_IsGenericCoopMode))
+		SetFailState("Unsupported game mode.");
+
+	mp_gamemode.GetString(g_sMode, sizeof(g_sMode));
+	
+	z_scrimmage_sphere.SetBounds(ConVarBound_Lower, true, 0.0);
+	z_scrimmage_sphere.SetBounds(ConVarBound_Upper, true, 0.0);
+	z_scrimmage_sphere.IntValue = 0;
+	
+	z_max_player_zombies.SetBounds(ConVarBound_Lower, true, 32.0);
+	z_max_player_zombies.SetBounds(ConVarBound_Upper, true, 32.0);
+	z_max_player_zombies.IntValue = 32;
+
+	sb_all_bot_game.IntValue = 1;
+	allow_all_bot_survivor_team.IntValue = 1;
 }
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	Reset();
 	CreateTimer(2.0, RemoveInfectedClips_Timer, _, TIMER_FLAG_NO_MAPCHANGE);
-	delete g_hSurGlowCheck;
-	g_hSurGlowCheck = CreateTimer(0.5, SurGlowCheck_Timer, _, TIMER_REPEAT);
+}
+
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	Reset();
+}
+
+public void OnMapEnd()
+{
+	Reset();
+}
+
+public void OnClientDisconnect(int client)
+{
+	if (!IsFakeClient(client))
+	{
+		delete g_hSpawnTimer[client];
+		RemoveJoinTank(GetClientUserId(client));
+	}
+	RemoveSurGlow(client);
+}
+
+void Reset()
+{
+	g_bLeftSafeArea = false;
+	g_aJoinTankList.Clear();
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		delete g_hSpawnTimer[i];
+	}
+}
+
+void Event_PlayerLeftSafeArea(Event event, const char[] name, bool dontBroadcast)
+{
+	g_bLeftSafeArea = true;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_INF && !IsPlayerAlive(i) && !IsFakeClient(i))
+		{
+			delete g_hSpawnTimer[i];
+			g_iSpawnCountDown[i] = 0;
+			g_hSpawnTimer[i] = CreateTimer(1.0, SpawnSI_Timer, GetClientUserId(i), TIMER_REPEAT);
+		}
+	}
+}
+
+Action SpawnSI_Timer(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (g_bLeftSafeArea && client > 0 && IsClientInGame(client) && GetClientTeam(client) == TEAM_INF && !IsPlayerAlive(client) && !IsFakeClient(client))
+	{
+		if (g_iSpawnCountDown[client] <= 0)
+		{
+			if (g_iSpawnCountDown[client] <= -7)
+			{
+				CPrintToChat(client, "{lightgreen}重生失败, 请尝试重新切换团队后再试试.");
+				g_hSpawnTimer[client] = null;
+				return Plugin_Stop;
+			}
+
+			int iClass = GetSpawnClass();
+			if (1 <= iClass <= 6)
+			{
+				SDKCall(g_hSDK_SetPreSpawnClass, client, iClass);
+				SDKCall(g_hSDK_StateTransition, client, STATE_GHOST);
+
+				g_hSpawnTimer[client] = null;
+				return Plugin_Stop;
+			}
+		}
+
+		PrintHintText(client, "%i 秒后重生", g_iSpawnCountDown[client]--);
+		return Plugin_Continue;
+	}
+
+	g_hSpawnTimer[client] = null;
+	return Plugin_Stop;
+}
+
+Action Cmd_JoinTeam3(int client, int args)
+{
+	if (GetClientTeam(client) == TEAM_INF)
+		return Plugin_Handled;
+
+	if (g_bAdminImmunity && CheckCommandAccess(client, "sm_admin", ADMFLAG_ROOT))
+	{
+		ChangeClientTeam(client, TEAM_INF);
+		return Plugin_Handled;
+	}
+
+	if (GetZombiePlayerTotal() < g_iMaxSpecialLimit)
+		ChangeClientTeam(client, TEAM_INF);
+	else
+		PrintHintText(client, "已达到感染玩家最大限制");
+
+	return Plugin_Handled;
+}
+
+Action Cmd_JoinTank(int client, int args)
+{
+	if (GetClientTeam(client) != TEAM_INF)
+		return Plugin_Handled;
+
+	int userid = GetClientUserId(client);
+	
+	if (RemoveJoinTank(userid))
+		CPrintToChat(client, "{lightgreen}你已退出接管Tank列表.");
+	else
+	{
+		g_aJoinTankList.Push(userid);
+		CPrintToChat(client, "{lightgreen}你已加入接管Tank列表, 再次输入退出.");
+	}
+
+	return Plugin_Handled;
+}
+
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (client > 0 && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) == TEAM_INF)
+		mp_gamemode.ReplicateToClient(client, "versus");
+}
+
+void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
+{
+	int userid = event.GetInt("userid");
+	int client = GetClientOfUserId(userid);
+	int oldTeam = event.GetInt("oldteam");
+	int newTeam = event.GetInt("team");
+
+	if (client <= 0)
+		return;
+
+	switch (oldTeam)
+	{
+		case TEAM_INF:
+		{
+			if (!IsFakeClient(client))
+			{
+				delete g_hSpawnTimer[client];
+				RemoveJoinTank(userid);
+				mp_gamemode.ReplicateToClient(client, g_sMode);
+
+				// Prevent Residual Survivor glow
+				for (int i = 0; i <= MaxClients; i++)
+					RemoveSurGlow(i);
+				SurGlowCheck_Timer(null);
+			}
+		}
+	}
+
+	switch (newTeam)
+	{
+		case TEAM_INF:
+		{
+			if (!IsFakeClient(client))
+			{
+				mp_gamemode.ReplicateToClient(client, "versus");
+				CPrintToChat(client, "{blue}[提示] {olive}特感玩家输入 !taketank 或 !tk 可加入接管Tank列表(需在克出现之前提前输入).");
+
+				if (!g_bLeftSafeArea)
+					return;
+
+				delete g_hSpawnTimer[client];
+				g_iSpawnCountDown[client] = g_iSpawnTime;
+				g_hSpawnTimer[client] = CreateTimer(1.0, SpawnSI_Timer, userid, TIMER_REPEAT);
+			}
+		}
+	}
+}
+
+void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+{
+	int userid = event.GetInt("userid");
+	int client = GetClientOfUserId(userid);
+
+	if (client > 0 && IsClientInGame(client))
+	{
+		switch (GetClientTeam(client))
+		{
+			case TEAM_SUR:
+				RemoveSurGlow(client);
+
+			case TEAM_INF:
+			{
+				if (IsFakeClient(client) || !g_bLeftSafeArea)
+					return;
+
+				delete g_hSpawnTimer[client];
+				g_iSpawnCountDown[client] = g_iSpawnTime;
+				g_hSpawnTimer[client] = CreateTimer(1.0, SpawnSI_Timer, userid, TIMER_REPEAT);
+			}
+		}
+	}
+}
+
+public void L4D_OnSpawnTank_Post(int client, const float vecPos[3], const float vecAng[3])
+{
+	if (client > 0)
+		CreateTimer(0.1, JoinTankCheck_Timer, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+Action JoinTankCheck_Timer(Handle timer, int userid)
+{
+	if (GetTankPlayerTotal() >= g_iSpecialLimit[TANK])
+		return Plugin_Continue;
+
+	int tank = GetClientOfUserId(userid);
+	if (tank > 0 && IsClientInGame(tank) && IsFakeClient(tank) && GetClientTeam(tank) == TEAM_INF && GetZombieClass(tank) == TANK && IsPlayerAlive(tank))
+	{
+		int client = GetJoinTankClient();
+		if (client <= 0)
+			return Plugin_Continue;
+		
+		if (IsPlayerAlive(client) && !GetEntProp(client, Prop_Send, "m_isGhost"))
+			SDKCall(g_hSDK_ReplaceWithBot, client, false);
+
+		SDKCall(g_hSDK_TakeOverZombieBot, client, tank);
+	}
+
+	return Plugin_Continue;
+}
+
+void Event_PlayerReplacedBot(Event event, const char[] name, bool dontBroadcast)
+{
+	int player = GetClientOfUserId(event.GetInt("player"));
+
+	if (player > 0 && IsClientInGame(player) && GetClientTeam(player) == TEAM_INF && GetZombieClass(player) == TANK && IsPlayerAlive(player))
+		CPrintToChatAll("{blue}[提示] {olive}Tank {default}已被 {olive}%N {default}接管.", player);
+}
+
+Action SurGlowCheck_Timer(Handle timer)
+{
+	int iGlowEntity;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_SUR && IsPlayerAlive(i))
+		{
+			iGlowEntity = EntRefToEntIndex(g_iGlowEntRef[i]);
+			if (iGlowEntity <= MaxClients || !IsValidEntity(iGlowEntity))
+				iGlowEntity = CreateSurGlow(i);
+
+			SetSurGlowColor(i, iGlowEntity);
+			continue;
+		}
+		RemoveSurGlow(i);
+	}
+
+	return Plugin_Continue;
+}
+
+int CreateSurGlow(int client)
+{
+	int entity = CreateEntityByName("prop_dynamic_ornament");
+	if (entity <= MaxClients)
+	{
+		LogError("Failed to create glow entity.");
+		return -1;
+	}
+	
+	g_iGlowEntRef[client] = EntIndexToEntRef(entity);
+
+	char sModel[PLATFORM_MAX_PATH];
+	GetEntPropString(client, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+	DispatchKeyValue(entity, "model", sModel);
+	DispatchSpawn(entity);
+
+	SetEntProp(entity, Prop_Send, "m_nSolidType", 0);
+	SetEntProp(entity, Prop_Send, "m_usSolidFlags", FSOLID_NOT_SOLID);
+	SetEntProp(entity, Prop_Data, "m_iEFlags", 0);
+	SetEntProp(entity, Prop_Data, "m_fEffects", EF_NODRAW);
+	SetEntProp(entity, Prop_Send, "m_CollisionGroup", 0);
+	AcceptEntityInput(entity, "DisableCollision");
+
+	// Prevents the face looking distorted.
+	SetEntityRenderMode(entity, RENDER_WORLDGLOW);
+	SetEntityRenderColor(entity, .a=0);
+
+	SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+	SetEntProp(entity, Prop_Send, "m_nGlowRange", 20000);
+	SetEntProp(entity, Prop_Send, "m_nGlowRangeMin", 1);
+
+	SetVariantString("!activator");
+	AcceptEntityInput(entity, "SetAttached", client);
+
+	SDKUnhook(entity, SDKHook_SetTransmit, OnSetTransmit);
+	SDKHook(entity, SDKHook_SetTransmit, OnSetTransmit);
+
+	return entity;
+}
+
+Action OnSetTransmit(int entity, int client)
+{
+	if (!IsFakeClient(client) && GetClientTeam(client) == TEAM_INF)
+		return Plugin_Continue;
+	return Plugin_Handled;
+}
+
+void RemoveSurGlow(int client)
+{
+	int entity = EntRefToEntIndex(g_iGlowEntRef[client]);
+	if (entity > MaxClients && IsValidEntity(entity))
+	{
+		SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
+		RemoveEntity(entity);
+	}
+	g_iGlowEntRef[client] = -1;
+}
+
+void SetSurGlowColor(int client, int entity)
+{
+	int color[3];
+	GetSurGlowColor(client, color);
+	int hexColor = color[0] | (color[1] << 8) | (color[2] << 16);
+	
+	if (GetEntProp(entity, Prop_Send, "m_glowColorOverride") != hexColor)
+		SetEntProp(entity, Prop_Send, "m_glowColorOverride", hexColor);
+}
+
+void GetSurGlowColor(int client, int color[3])
+{
+	if (GetEntProp(client, Prop_Send, "m_currentReviveCount") >= g_iSurMaxIncapCount)
+	{
+		color = COLOR_WHITE;
+		return;
+	}
+
+	if (GetEntProp(client, Prop_Send, "m_isIncapacitated"))
+	{
+		color = COLOR_RED;
+		return;
+	}
+
+	if (GetEntPropFloat(client, Prop_Send, "m_itTimer", 1) > GetGameTime())
+	{
+		color = COLOR_PURPLE;
+		return;
+	}
+
+	color = COLOR_GREEN;
 }
 
 Action RemoveInfectedClips_Timer(Handle timer)
@@ -219,466 +558,14 @@ Action RemoveInfectedClips_Timer(Handle timer)
 	return Plugin_Continue;
 }
 
-Action SurGlowCheck_Timer(Handle timer)
-{
-	if (HasZombiePlayer())
-	{
-		static int i;
-		for (i = 1; i <= MaxClients; i++)
-		{
-			if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
-			{
-				SurGlowCheck(i);
-			}
-		}
-	}
-	return Plugin_Continue;
-}
-
-void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
-{
-	Reset();
-}
-
-public void OnMapEnd()
-{
-	Reset();
-}
-
-void Reset()
-{
-	g_bLeftSafeArea = false;
-	g_aJoinTankList.Clear();
-
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		delete g_hSpawnSITimer[i];
-	}
-}
-
-public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
-{
-	g_bLeftSafeArea = true;
-
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && !IsPlayerAlive(i) && !IsFakeClient(i))
-		{
-			delete g_hSpawnSITimer[i];
-			g_iSpawnCountDown[i] = 0;
-			g_hSpawnSITimer[i] = CreateTimer(1.0, SpawnSI_Timer, GetClientUserId(i), TIMER_REPEAT);
-		}
-	}
-	return Plugin_Continue;
-}
-
-Action SpawnSI_Timer(Handle timer, int userid)
-{
-	int client = GetClientOfUserId(userid);
-	if (client > 0 && client <= MaxClients && IsClientInGame(client))
-	{
-		if (GetClientTeam(client) == 3 && !IsPlayerAlive(client) && !IsFakeClient(client))
-		{
-			if (g_iSpawnCountDown[client] <= 0)
-			{
-				if (g_iSpawnCountDown[client] <= -8)
-				{
-					CPrintToChat(client, "{default}[{yellow}BUG{default}] 重生失败, 请尝试重新切换团队后再试试");
-					g_hSpawnSITimer[client] = null;
-					return Plugin_Stop;
-				}
-
-				int iClass = FindSpawnClass();
-				if (1 <= iClass <= 6)
-				{
-					SDKCall(g_hSDKSetPreSpawnClass, client, iClass);
-					L4D_State_Transition(client, STATE_GHOST);
-
-					if (IsPlayerAlive(client))
-					{
-						g_hSpawnSITimer[client] = null;
-						return Plugin_Stop;
-					}
-					else
-					{
-						float fPos[3];
-						char sMap[128];
-						GetClientAbsOrigin(client, fPos);
-						GetCurrentMap(sMap, sizeof(sMap));
-						LogError("%N 重生失败, 地图: %s, 坐标: (%.0f %.0f %.0f), 特感玩家数和限制: %i/%i, m_lifeState = %i, m_isGhost = %i", client, sMap, fPos[0], fPos[1], fPos[2], GetZombiePlayerTotal(), g_iMaxSpecialLimit, GetEntProp(client, Prop_Send, "m_lifeState"), GetEntProp(client, Prop_Send, "m_isGhost"));
-					}
-				}
-				else LogError("FindSpawnClass 失败");
-			}
-
-			PrintHintText(client, "%i 秒后重生", g_iSpawnCountDown[client]--);
-			return Plugin_Continue;
-		}
-
-		g_hSpawnSITimer[client] = null;
-		return Plugin_Stop;
-	}
-	return Plugin_Stop;
-}
-
-Action Cmd_JoinTeam3(int client, int args)
-{
-	if (IsRealClient(client) && GetClientTeam(client) != 3)
-	{
-		if (g_bAdminImmunity && IsAdminClient(client))
-		{
-			ChangeClientTeam(client, 3);
-		}
-		else if (GetZombiePlayerTotal() < g_iMaxSpecialLimit)
-		{
-			ChangeClientTeam(client, 3);
-		}
-		else PrintHintText(client, "已达到感染玩家最大限制");
-	}
-	return Plugin_Handled;
-}
-
-Action Cmd_JoinTank(int client, int args)
-{
-	if (IsValidSI(client) && !IsFakeClient(client))
-	{
-		int userid = GetClientUserId(client);
-		if (RemoveJoinTank(userid))
-		{
-			CPrintToChat(client, "{default}[{yellow}提示{default}] 你已退出接管Tank列表");
-		}
-		else
-		{
-			g_aJoinTankList.Push(userid);
-			CPrintToChat(client, "{default}[{yellow}提示{default}] 你已加入接管Tank列表, 再次输入退出");
-		}
-	}
-	return Plugin_Handled;
-}
-
-void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
-{
-	int userid = event.GetInt("userid");
-	if (GetClientOfUserId(userid) > 0)
-	{
-		CreateTimer(0.1, CreateSurGlow_Timer, userid, TIMER_FLAG_NO_MAPCHANGE);
-	}
-}
-
-Action CreateSurGlow_Timer(Handle timer, int userid)
-{
-	int client = GetClientOfUserId(userid);
-	if (client > 0)
-	{
-		//LogMessage("%N PlayerSpawn", client);
-		RemoveSurGlow(client);
-		CreateSurGlow(client);
-	}
-	return Plugin_Continue;
-}
-
-void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
-{
-	int userid = event.GetInt("userid");
-	int client = GetClientOfUserId(userid);
-	int OldTeam = event.GetInt("oldteam");
-	int NewTeam = event.GetInt("team");
-
-	if (client > 0)
-	{
-		switch (OldTeam)
-		{
-			//case 2: {}
-			case 3:
-			{
-				if (IsRealClient(client))
-				{
-					RemoveJoinTank(userid);
-					CreateTimer(0.1, SetLadderGlow_Timer, userid, TIMER_FLAG_NO_MAPCHANGE);
-				}
-			}
-		}
-
-		switch (NewTeam)
-		{
-			case 2:
-			{
-				//LogMessage("%N 加入team2", client);
-				CreateTimer(0.1, ResetSurGlow, _, TIMER_FLAG_NO_MAPCHANGE);
-			}
-			case 3:
-			{
-				if (IsRealClient(client))
-				{
-					CreateTimer(0.1, SetLadderGlow_Timer, userid, TIMER_FLAG_NO_MAPCHANGE);
-					CPrintToChat(client, "{default}[{yellow}提示{default}] {olive}!taketank {default}或 {olive}!tk {default}可加入接管Tank列表(需在克出现之前提前输入)");
-
-					if (g_bLeftSafeArea)
-					{
-						delete g_hSpawnSITimer[client];
-						g_iSpawnCountDown[client] = g_iSpawnTime;
-						g_hSpawnSITimer[client] = CreateTimer(1.0, SpawnSI_Timer, userid, TIMER_REPEAT);
-					}
-				}
-			}
-		}
-	}
-}
-
-Action ResetSurGlow(Handle timer)
-{
-	static int i;
-	for (i = 1; i <= MaxClients; i++)
-		RemoveSurGlow(i);
-	for (i = 1; i <= MaxClients; i++)
-		CreateSurGlow(i);
-	return Plugin_Continue;
-}
-
-Action SetLadderGlow_Timer(Handle timer, int userid)
-{
-	int client = GetClientOfUserId(userid);
-	if (IsRealClient(client))
-	{
-		if (GetClientTeam(client) == 3)
-		{
-			if (!g_cvGameMode.ReplicateToClient(client, "versus"))
-				LogError("对 %N 设置假对抗模式失败", client);
-		}
-		else
-		{
-			if (!g_cvGameMode.ReplicateToClient(client, g_sDefMode))
-				LogError("恢复 %N 游戏模式失败", client);
-		}
-	}
-	return Plugin_Continue;
-}
-
-Action Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
-{
-	int userid = event.GetInt("userid");
-	int client = GetClientOfUserId(userid);
-
-	if (client > 0 && client <= MaxClients && IsClientInGame(client))
-	{
-		switch (GetClientTeam(client))
-		{
-			case 2: RemoveSurGlow(client);
-			case 3:
-			{
-				if (g_bLeftSafeArea && !IsFakeClient(client))
-				{
-					delete g_hSpawnSITimer[client];
-					g_iSpawnCountDown[client] = g_iSpawnTime;
-					g_hSpawnSITimer[client] = CreateTimer(1.0, SpawnSI_Timer, userid, TIMER_REPEAT);
-				}
-			}
-		}
-	}
-	return Plugin_Continue;
-}
-
-public void OnClientDisconnect(int client)
-{
-	if (!IsFakeClient(client))
-	{
-		delete g_hSpawnSITimer[client];
-		RemoveJoinTank(GetClientUserId(client));
-	}
-}
-
-public void L4D_OnSpawnTank_Post(int client, const float vecPos[3], const float vecAng[3])
-{
-	if (client > 0 && client <= MaxClients)
-		CreateTimer(0.1, JoinTankCheck_Timer, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
-}
-
-Action JoinTankCheck_Timer(Handle timer, int userid)
-{
-	int iTankbot = GetClientOfUserId(userid);
-	if (IsTankBot(iTankbot) && GetTankPlayerTotal() < g_iSpecialLimit[TANK])
-	{
-		int client = GetJoinTankClient();
-		if (client > 0)
-		{
-			if (IsPlayerAlive(client)) ForcePlayerSuicide(client);
-			L4D_TakeOverZombieBot(client, iTankbot);
-
-			if (IsPlayerAlive(client) && GetZombieClass(client) == 8)
-			{
-				CPrintToChatAll("{red}[{default}!{red}] {olive}AI Tank {default}已被 {red}%N {default}接管", client);
-			}
-		}
-	}
-
-	return Plugin_Continue;
-}
-
-// 避免坦克无限控制权
-Action FrustrationCheck_Timer(Handle timer)
-{
-	static int i;
-	for (i = 1; i <= MaxClients; i++)
-	{
-		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == 3 && GetEntProp(i, Prop_Send, "m_zombieClass") == 8)
-		{
-			if (IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated") && !GetEntProp(i, Prop_Send, "m_isGhost"))
-			{
-				int m_frustration = GetEntProp(i, Prop_Send, "m_frustration");
-				if (m_frustration >= 100)
-				{
-					Event event = CreateEvent("tank_frustrated", true);
-					event.SetInt("userid", GetClientUserId(i));
-					event.Fire(false);
-				}
-			}
-		}
-	}
-	return Plugin_Continue;
-}
-
-void Event_TankFrustrated(Event event, const char[] name, bool dontBroadcast)
-{
-	RequestFrame(OnNextFrame, event.GetInt("userid"));
-}
-
-void OnNextFrame(int userid)
-{
-	int client = GetClientOfUserId(userid);
-	if (IsRealClient(client) && GetClientTeam(client) == 3 && IsPlayerAlive(client) && GetZombieClass(client) == 8)
-	{
-		L4D_ReplaceWithBot(client);
-		SDKCall(g_hSDKSetPreSpawnClass, client, HUNTER);
-		L4D_State_Transition(client, STATE_GHOST);
-
-		if (!IsPlayerAlive(client))
-			LogError("手动重生为 Hunter 失败");
-		//else LogMessage("%N 失去控制权，手动重生为 Hunter", client);
-	}
-}
-
-MRESReturn mreOnSpawnPlayerZombieScanPre()
-{
-	if (g_bBlockOtherRespawn)
-		return MRES_Supercede;
-	return MRES_Ignored;
-}
-
-public Action L4D_OnEnterGhostStatePre(int client)
-{
-	if (!g_bLeftSafeArea)
-	{
-		return Plugin_Handled;
-	}
-	return Plugin_Continue;
-}
-
-// 避免卡住的幽灵坦克Bot (z_spawn方式产生的坦克Bot)
-public Action L4D_OnTryOfferingTankBot(int tank_index, bool &enterStasis)
-{
-	if (enterStasis)
-	{
-		enterStasis = false;
-		return Plugin_Changed;
-	}
-	return Plugin_Continue;
-}
-
-void RemoveSurGlow(int client)
-{
-	if (IsValidEntRef(g_iGlowEntRef[client]))
-	{
-		RemoveEntity(g_iGlowEntRef[client]);
-		g_iGlowEntRef[client] = 0;
-	}	
-}
-
-void CreateSurGlow(int client)
-{
-	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client) && !IsValidEntRef(g_iGlowEntRef[client]))
-	{
-		int iEntity = CreateEntityByName("prop_dynamic_ornament");
-		if (iEntity == -1) return;
-		
-		g_iGlowEntRef[client] = EntIndexToEntRef(iEntity);
-
-		static char sModelName[128];
-		GetEntPropString(client, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
-		DispatchKeyValue(iEntity, "model", sModelName);
-		DispatchSpawn(iEntity);
-
-		SetEntProp(iEntity, Prop_Send, "m_nSolidType", 0);
-		SetEntProp(iEntity, Prop_Send, "m_usSolidFlags", 4);
-		SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", 0);
-
-		AcceptEntityInput(iEntity, "DisableCollision");
-		SetEntProp(iEntity, Prop_Data, "m_iEFlags", 0);
-		SetEntProp(iEntity, Prop_Data, "m_fEffects", 0x020); //don't draw entity
-
-		SetEntProp(iEntity, Prop_Send, "m_iGlowType", 3);
-		SetEntProp(iEntity, Prop_Send, "m_nGlowRange", 20000);
-		SetEntProp(iEntity, Prop_Send, "m_nGlowRangeMin", 1);
-		SurGlowCheck(client);
-
-		SetVariantString("!activator");
-		AcceptEntityInput(iEntity, "SetAttached", client);
-
-		SDKUnhook(iEntity, SDKHook_SetTransmit, Hook_SetTransmit);
-		SDKHook(iEntity, SDKHook_SetTransmit, Hook_SetTransmit);
-	}
-}
-
-Action Hook_SetTransmit(int entity, int client)
-{
-	if (!IsFakeClient(client) && GetClientTeam(client) == 3)
-		return Plugin_Continue;
-
-	return Plugin_Handled;
-}
-
-void SurGlowCheck(int client)
-{
-	if (IsValidEntRef(g_iGlowEntRef[client]))
-	{
-		static int iColor;
-		iColor = GetSurGlowColor(client);
-		if (GetEntProp(g_iGlowEntRef[client], Prop_Send, "m_glowColorOverride") != iColor)
-			SetEntProp(g_iGlowEntRef[client], Prop_Send, "m_glowColorOverride", iColor);
-	}
-}
-
-int GetSurGlowColor(int client)
-{
-	if (GetEntProp(client, Prop_Send, "m_currentReviveCount") >= g_iSurMaxIncapCount)
-	{
-		return 16777215; //白色
-	}
-	else if (GetEntProp(client, Prop_Send, "m_isIncapacitated"))
-	{
-		return 180; //红色
-	}
-	else if (GetEntPropFloat(client, Prop_Send, "m_itTimer", 1) > GetGameTime())
-	{
-		return 11796635; //紫色
-	}
-	else return 46080; //绿色
-}
-
-bool IsValidEntRef(int ref)
-{
-	if (ref && EntRefToEntIndex(ref) != INVALID_ENT_REFERENCE)
-		return true;
-	return false;
-}
-
-int FindSpawnClass()
+int GetSpawnClass()
 {
 	int iClass, iSpecialCount[7];
-	ArrayList g_aClassArray = new ArrayList();
+	ArrayList array = new ArrayList();
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && !IsFakeClient(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_INF && IsPlayerAlive(i) && !IsFakeClient(i))
 		{
 			iClass = GetZombieClass(i);
 			if (1 <= iClass <= 6)
@@ -692,24 +579,24 @@ int FindSpawnClass()
 	{
 		if (iSpecialCount[i] < g_iSpecialLimit[i])
 		{
-			g_aClassArray.Push(i);
+			array.Push(i);
 		}
 	}
 
 	iClass = -1;
 
-	if (g_aClassArray.Length > 0)
+	if (array.Length > 0)
 	{
-		iClass = g_aClassArray.Get(GetRandomIntEx(0, g_aClassArray.Length - 1));
+		iClass = array.Get(GetRandomIntEx(0, array.Length - 1));
 	}
 	
-	delete g_aClassArray;
+	delete array;
 	return iClass;
 }
 
 int GetJoinTankClient()
 {
-	ArrayList aTemList = new ArrayList();
+	ArrayList array = new ArrayList();
 	int client;
 
 	for (int i = 0; i < g_aJoinTankList.Length; i++)
@@ -717,21 +604,21 @@ int GetJoinTankClient()
 		client = GetClientOfUserId(g_aJoinTankList.Get(i));
 		if (IsValidSI(client) && !IsFakeClient(client))
 		{
-			if (IsPlayerAlive(client) && GetZombieClass(client) == 8)
+			if (IsPlayerAlive(client) && GetZombieClass(client) == TANK)
 				continue;
 
-			aTemList.Push(client);
+			array.Push(client);
 		}
 	}
 
 	client = -1;
 
-	if (aTemList.Length > 0)
+	if (array.Length > 0)
 	{
-		client = aTemList.Get(GetRandomIntEx(0, aTemList.Length - 1));
+		client = array.Get(GetRandomIntEx(0, array.Length - 1));
 	}
 	
-	delete aTemList;
+	delete array;
 	return client;
 }
 
@@ -752,7 +639,7 @@ int GetTankPlayerTotal()
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && !IsFakeClient(i) && GetZombieClass(i) == 8)
+		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_INF && IsPlayerAlive(i) && !IsFakeClient(i) && GetZombieClass(i) == TANK)
 		{
 			iCount++;
 		}
@@ -764,37 +651,16 @@ int GetTankPlayerTotal()
 int GetZombiePlayerTotal()
 {
 	int iCount;
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && !IsFakeClient(i))
+		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_INF && !IsFakeClient(i))
 		{
 			iCount++;
 		}
 	}
+	
 	return iCount;
-}
-
-bool HasZombiePlayer()
-{
-	static int i;
-	for (i = 1; i <= MaxClients; i++)
-	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 3 && !IsFakeClient(i))
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-bool IsRealClient(int client)
-{
-	return (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client));
-}
-
-bool IsTankBot(int client)
-{
-	return (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3 && GetZombieClass(client) == 8 && IsPlayerAlive(client) && IsFakeClient(client));
 }
 
 int GetZombieClass(int client)
@@ -806,59 +672,12 @@ bool IsValidSI(int client)
 {
 	if (client > 0 && client <= MaxClients)
 	{
-		if (IsClientInGame(client) && GetClientTeam(client) == 3)
+		if (IsClientInGame(client) && GetClientTeam(client) == TEAM_INF)
 		{
 			return true;
 		}
 	}
 	return false;
-}
-
-bool IsAdminClient(int client)
-{
-	int iFlags = GetUserFlagBits(client);
-	if (iFlags != 0 && (iFlags & ADMFLAG_ROOT)) 
-	{
-		return true;
-	}
-	return false;
-}
-
-public void L4D_OnMaterializeFromGhost(int client) //post
-{
-	if (!IsFakeClient(client))
-	{
-		g_fBugExploitTime[client][0] = GetEngineTime() + 1.5;
-	}
-}
-
-MRESReturn mreOnPlayerZombieAbortControlPre(int client)
-{
-	if (!IsFakeClient(client) && g_fBugExploitTime[client][0] > GetEngineTime())
-	{
-		LogMessage("%N BugExploit PlayerZombieAbortControl", client);
-		return MRES_Supercede;
-	}
-	return MRES_Ignored;
-}
-
-MRESReturn mreOnPlayerZombieAbortControlPost(int client)
-{
-	if (!IsFakeClient(client))
-	{
-		g_fBugExploitTime[client][1] = GetEngineTime() + 1.5;
-	}
-	return MRES_Ignored;
-}
-
-public Action L4D_OnMaterializeFromGhostPre(int client)
-{
-	if (!IsFakeClient(client) && g_fBugExploitTime[client][1] > GetEngineTime())
-	{
-		LogMessage("%N BugExploit MaterializeFromGhost", client);
-		return Plugin_Handled;
-	}
-	return Plugin_Continue;
 }
 
 // https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
@@ -870,5 +689,149 @@ int GetRandomIntEx(int min, int max)
 		random++;
 
 	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+}
+
+// void CTerrorPlayer::MaterializeFromGhost(void)
+MRESReturn OnMaterializeFromGhostPost(int client)
+{
+	if (!IsFakeClient(client))
+		g_fBugExploitTime[client][0] = GetEngineTime() + 1.5;
+	return MRES_Ignored;
+}
+
+// void CTerrorPlayer::PlayerZombieAbortControl(void)
+MRESReturn OnPlayerZombieAbortControlPre(int client)
+{
+	if (!IsFakeClient(client) && g_fBugExploitTime[client][0] > GetEngineTime())
+		return MRES_Supercede;
+	return MRES_Ignored;
+}
+
+MRESReturn OnPlayerZombieAbortControlPost(int client)
+{
+	if (!IsFakeClient(client))
+		g_fBugExploitTime[client][1] = GetEngineTime() + 1.5;
+	return MRES_Ignored;
+}
+
+MRESReturn OnMaterializeFromGhostPre(int client)
+{
+	if (!IsFakeClient(client) && g_fBugExploitTime[client][1] > GetEngineTime())
+		return MRES_Supercede;
+	return MRES_Ignored;
+}
+
+// bool ForEachTerrorPlayer<SpawnablePZScan>(SpawnablePZScan &)
+MRESReturn OnSpawnPlayerZombieScanPre(DHookReturn hReturn, DHookParam hParams)
+{
+	if (g_bBlockOtherRespawn)
+	{
+		hReturn.Value = true; // true == not find
+		return MRES_Supercede;
+	}
+	return MRES_Ignored;
+}
+
+// void CTerrorPlayer::OnEnterGhostState(void)
+MRESReturn OnEnterGhostStatePre(int client)
+{
+	if (!g_bLeftSafeArea)
+		return MRES_Supercede;
+	return MRES_Ignored;
+}
+
+void SetupDetour(GameData hGameData, DHookCallback CallbackPre, DHookCallback CallbackPost, const char[] name, DynamicDetour &detour = null)
+{
+	detour = DynamicDetour.FromConf(hGameData, name);
+	if (detour == null)
+		SetFailState("Failed to create DynamicDetour: %s", name);
+
+	if (CallbackPre != INVALID_FUNCTION && !detour.Enable(Hook_Pre, CallbackPre)) 
+		SetFailState("Failed to detour pre: %s", name);
+
+	if (CallbackPost != INVALID_FUNCTION && !detour.Enable(Hook_Post, CallbackPost)) 
+		SetFailState("Failed to detour post: %s", name);
+}
+
+void SetupPatch(GameData hGameData, const char[] name, MemoryPatch &patch = null)
+{
+	patch = MemoryPatch.CreateFromConf(hGameData, name);
+	if (!patch.Validate())
+		SetFailState("Failed to validate patch: %s", name);
+	if (!patch.Enable())
+		SetFailState("Failed to enable patch: %s", name);
+}
+
+void Init()
+{
+	char sBuffer[128];
+
+	strcopy(sBuffer, sizeof(sBuffer), "l4d2_control_zombies");
+	GameData hGameData = new GameData(sBuffer);
+	if (hGameData == null)
+		SetFailState("Failed to load \"%s.txt\" gamedata.", sBuffer);
+
+	SetupDetour(hGameData, OnPlayerZombieAbortControlPre, OnPlayerZombieAbortControlPost, "CTerrorPlayer::PlayerZombieAbortControl");
+	SetupDetour(hGameData, OnMaterializeFromGhostPre, OnMaterializeFromGhostPost, "CTerrorPlayer::MaterializeFromGhost");
+	SetupDetour(hGameData, OnEnterGhostStatePre, INVALID_FUNCTION, "CTerrorPlayer::OnEnterGhostState");
+	SetupDetour(hGameData, OnSpawnPlayerZombieScanPre, INVALID_FUNCTION, "ForEachTerrorPlayer<SpawnablePZScan>");
+
+	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::AllowCheckPointFrustration");
+	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::NeverTryOfferingTankBot");
+	SetupPatch(hGameData, "CDirector::SetLotteryTank::NeverEnterStasis");
+
+	// if (*(this + 339) & 8)
+	// Found the meaning of this member variable from the CTerrorPlayer::Ignite function.
+	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::AllowIgniteFrustration", g_mIgniteFrustr);
+	
+	// void CTerrorPlayer::SetPreSpawnClass(ZombieClassType)
+	strcopy(sBuffer, sizeof(sBuffer), "CTerrorPlayer::SetPreSpawnClass");
+	StartPrepSDKCall(SDKCall_Player);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, sBuffer);
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
+	g_hSDK_SetPreSpawnClass = EndPrepSDKCall();
+	if (g_hSDK_SetPreSpawnClass == null)
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
+
+	// void CCSPlayer::State_Transition(CSPlayerState)
+	strcopy(sBuffer, sizeof(sBuffer), "CCSPlayer::State_Transition");
+	StartPrepSDKCall(SDKCall_Player);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, sBuffer);
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
+	g_hSDK_StateTransition = EndPrepSDKCall();
+	if (g_hSDK_StateTransition == null)
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
+
+	// CTerrorPlayer* CTerrorPlayer::ReplaceWithBot(bool)
+	strcopy(sBuffer, sizeof(sBuffer), "CTerrorPlayer::ReplaceWithBot");
+	StartPrepSDKCall(SDKCall_Player);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, sBuffer);
+	PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
+	PrepSDKCall_SetReturnInfo(SDKType_CBasePlayer, SDKPass_Pointer);
+	g_hSDK_ReplaceWithBot = EndPrepSDKCall();
+	if (g_hSDK_ReplaceWithBot == null)
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
+
+	// void CTerrorPlayer::TakeOverZombieBot(CTerrorPlayer*)
+	strcopy(sBuffer, sizeof(sBuffer), "CTerrorPlayer::TakeOverZombieBot");
+	StartPrepSDKCall(SDKCall_Player);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, sBuffer);
+	PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
+	g_hSDK_TakeOverZombieBot = EndPrepSDKCall();
+	if (g_hSDK_TakeOverZombieBot == null)
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
+
+	// bool CTerrorGameRules::IsGenericCooperativeMode()
+	strcopy(sBuffer, sizeof(sBuffer), "CTerrorGameRules::IsGenericCooperativeMode");
+	StartPrepSDKCall(SDKCall_GameRules);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, sBuffer);
+	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
+	g_hSDK_IsGenericCoopMode = EndPrepSDKCall();
+	if (g_hSDK_IsGenericCoopMode == null)
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
+
+	delete hGameData;
+
+	g_aJoinTankList = new ArrayList();
 }
 
