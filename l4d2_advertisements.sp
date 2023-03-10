@@ -2,108 +2,111 @@
 #pragma newdecls required
 
 #include <sourcemod>
+#include <multicolors>  
 
-#define MSG_MAX_SIZE 1024
+#define VERSION "0.3"
+#define CFG_PATH "data/server_info.cfg"
 
-char g_sPath[PLATFORM_MAX_PATH];
+#define AD_SEQUENTIAL	0
+#define AD_RANDOM		1
+
+ConVar g_cvPrintType, g_cvTime;
 ArrayList g_aAdList;
 Handle g_hTimer;
-ConVar CvarType, CvarTime;
-bool g_bType;
+int g_iPrintType;
 float g_fTime;
-int g_iNum;
 
 public Plugin myinfo = 
 {
 	name = "L4D2 Advertisements",
 	author = "Tsunami, fdxx",
-	description = "",
-	version = "0.1",
-	url = ""
+	version = VERSION,
 };
 
 public void OnPluginStart()
 {
-	BuildPath(Path_SM, g_sPath, sizeof(g_sPath), "data/l4d2_advertisements.txt");
-
-	g_aAdList = new ArrayList(MSG_MAX_SIZE);
 	LoadAdvertisements();
 
-	CvarType = CreateConVar("l4d2_advertisements_type", "0", "0=顺序，1=随机", FCVAR_NONE, true, 0.0, true, 1.0);
-	CvarTime = CreateConVar("l4d2_advertisements_time", "360.0", "间隔时间", FCVAR_NONE, true, 0.1);
+	CreateConVar("l4d2_advertisements_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	g_cvPrintType = CreateConVar("l4d2_advertisements_type", "0", "Print type. 0=Sequential，1=Random");
+	g_cvTime = CreateConVar("l4d2_advertisements_time", "360.0", "Print interval time");
 
-	GetCvars();
+	OnConVarChanged(null, "", "");
 
-	CvarType.AddChangeHook(ConVarChanged);
-	CvarTime.AddChangeHook(ConVarChanged);
+	g_cvPrintType.AddChangeHook(OnConVarChanged);
+	g_cvTime.AddChangeHook(OnConVarChanged);
 
 	RegConsoleCmd("sm_adlist", Cmd_CheckAdList);
 	RegAdminCmd("sm_adreload", Cmd_AdReload, ADMFLAG_ROOT);
-
-	if (g_fTime >= 0.1)
-		g_hTimer = CreateTimer(g_fTime, PrintAd_Timer, _, TIMER_REPEAT);
 }
 
-public void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	GetCvars();
+	g_iPrintType = g_cvPrintType.IntValue;
+	g_fTime = g_cvTime.FloatValue;
 
 	delete g_hTimer;
 	if (g_fTime >= 0.1)
 		g_hTimer = CreateTimer(g_fTime, PrintAd_Timer, _, TIMER_REPEAT);
 }
 
-void GetCvars()
+void LoadAdvertisements()
 {
-	g_bType = CvarType.BoolValue;
-	g_fTime = CvarTime.FloatValue;
+	char sBuffer[MAX_MESSAGE_LENGTH];
+	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), CFG_PATH);
+
+	KeyValues kv = new KeyValues("");
+	kv.SetEscapeSequences(true); // Allow newline characters to be read.
+
+	if (!kv.ImportFromFile(sBuffer))
+		SetFailState("Failed to load: %s", sBuffer);
+
+	FindConVar("hostport").GetString(sBuffer, sizeof(sBuffer)); // Get config by port
+	Format(sBuffer, sizeof(sBuffer), "%s/advertisements", sBuffer);
+
+	if (kv.JumpToKey(sBuffer) && kv.GotoFirstSubKey(false))
+	{
+		delete g_aAdList;
+		g_aAdList = new ArrayList(ByteCountToCells(MAX_MESSAGE_LENGTH));
+
+		do
+		{
+			kv.GetString(NULL_STRING, sBuffer, sizeof(sBuffer));
+			g_aAdList.PushString(sBuffer);
+		}
+		while (kv.GotoNextKey(false));
+	}
+
+	delete kv;
 }
 
-public Action PrintAd_Timer(Handle timer)
+Action PrintAd_Timer(Handle timer)
 {	
-	static char sSource[MSG_MAX_SIZE];
-	static char sMsg[20][MSG_MAX_SIZE];
-	static int iSplit;
+	if (!g_aAdList || !g_aAdList.Length)
+		return Plugin_Continue;
 
-	if (g_aAdList.Length > 0)
-	{
-		if (g_aAdList.GetString(GetAdNum(), sSource, sizeof(sSource)) > 0)
-		{
-			iSplit = ExplodeString(sSource, "\\n", sMsg, sizeof(sMsg), sizeof(sMsg[]));
-			for (int i = 0; i < iSplit; i++)
-			{
-				ReplaceStr(sMsg[i]);
-				PrintToChatAll(sMsg[i]);
-			}
-		}
-	}
-	
+	static char sBuffer[MAX_MESSAGE_LENGTH];
+	g_aAdList.GetString(GetIndex(), sBuffer, sizeof(sBuffer));
+	ReplaceString(sBuffer, sizeof(sBuffer), "{time}", GetCurTime());
+	CPrintToChatAll("%s", sBuffer);
+
 	return Plugin_Continue;
 }
 
-int GetAdNum()
+int GetIndex()
 {
-	static int iNum;
-	if (g_bType) //随机
-	{
-		iNum = GetRandomInt(0, g_aAdList.Length - 1);
-	}
-	else //顺序
-	{
-		iNum = g_iNum;
-		g_iNum++;
-		if (g_iNum >= g_aAdList.Length) g_iNum = 0;
-	}
-	return iNum;
-}
+	if (g_iPrintType == AD_RANDOM)
+		return GetRandomIntEx(0, g_aAdList.Length-1);
 
-void ReplaceStr(char sMsg[MSG_MAX_SIZE])
-{
-	ReplaceString(sMsg, sizeof(sMsg), "{default}", "\x01");
-	ReplaceString(sMsg, sizeof(sMsg), "{lightgreen}", "\x03");
-	ReplaceString(sMsg, sizeof(sMsg), "{yellow}", "\x04");
-	ReplaceString(sMsg, sizeof(sMsg), "{green}", "\x05");
-	ReplaceString(sMsg, sizeof(sMsg), "{time}", GetCurTime());
+	if (g_iPrintType == AD_SEQUENTIAL)
+	{
+		static int index = -1;
+		if (++index >= g_aAdList.Length)
+			index = 0;
+		return index;
+	}
+
+	return -1;
 }
 
 char[] GetCurTime()
@@ -113,62 +116,36 @@ char[] GetCurTime()
 	return sTime;
 }
 
-public Action Cmd_CheckAdList(int client, int args)
+// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
+int GetRandomIntEx(int min, int max)
 {
-	static char sSource[MSG_MAX_SIZE];
-	static char sMsg[20][MSG_MAX_SIZE];
-	static int iSplit;
+	int random = GetURandomInt();
 
+	if (random == 0)
+		random++;
+
+	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+}
+
+Action Cmd_CheckAdList(int client, int args)
+{
+	if (!g_aAdList || !g_aAdList.Length)
+		return Plugin_Handled;
+
+	static char sBuffer[MAX_MESSAGE_LENGTH];
 	for (int i = 0; i < g_aAdList.Length; i++)
 	{
-		if (g_aAdList.GetString(i, sSource, sizeof(sSource)) > 0)
-		{
-			iSplit = ExplodeString(sSource, "\\n", sMsg, sizeof(sMsg), sizeof(sMsg[]));
-			for (int p = 0; p < iSplit; p++)
-			{
-				ReplaceStr(sMsg[p]);
-				PrintToChatAll(sMsg[p]);
-			}
-		}
+		g_aAdList.GetString(i, sBuffer, sizeof(sBuffer));
+		ReplaceString(sBuffer, sizeof(sBuffer), "{time}", GetCurTime());
+		CPrintToChatAll("%s", sBuffer);
 	}
 
 	return Plugin_Handled;
 }
 
-public Action Cmd_AdReload(int client, int args)
+Action Cmd_AdReload(int client, int args)
 {
 	LoadAdvertisements();
 	Cmd_CheckAdList(0,0);
 	return Plugin_Handled;
-}
-
-void LoadAdvertisements()
-{
-	g_aAdList.Clear();
-
-	static char str[MSG_MAX_SIZE];
-	if (FileExists(g_sPath))
-	{
-		File hFile = OpenFile(g_sPath, "r");
-		if (hFile != null)
-		{
-			while (!hFile.EndOfFile())
-			{
-				if (hFile.ReadLine(str, sizeof(str)))
-				{
-					TrimString(str);
-					if (IsValidLine(str))
-					{
-						g_aAdList.PushString(str);
-					}
-				}
-			}
-		}
-		delete hFile;
-	}
-}
-
-bool IsValidLine(const char[] str)
-{
-	return str[0] != '\0' && str[0] != '/' && str[0] != '\\';
 }

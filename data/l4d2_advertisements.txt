@@ -1,7 +1,0 @@
-//注释行
-{default}默认色
-{lightgreen}亮绿色
-{yellow}黄色
-{green}绿色
-当前时间: {time}
-换行测试\n换行1\n换行2\n换行3
