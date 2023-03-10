@@ -5,7 +5,7 @@
 #include <adminmenu>
 #include <left4dhooks>
 
-#define VERSION "0.6"
+#define VERSION "0.7"
 
 #define	BOSS_TYPE_TANK	0
 #define	BOSS_TYPE_WITCH	1
@@ -108,7 +108,6 @@ int
 	g_iGiveItemType[MAXPLAYERS+1];
 
 bool
-	g_bGodMode[MAXPLAYERS+1],
 	g_bAutoSpawn[MAXPLAYERS+1],
 	g_bSpawnType[MAXPLAYERS+1],
 	g_bSpecialSpawnControl,
@@ -135,41 +134,6 @@ public void OnPluginStart()
 	RegAdminCmd("sm_tele", Cmd_Teleport, ADMFLAG_ROOT);
 	RegAdminCmd("sm_givehp", Cmd_GiveHealth, ADMFLAG_ROOT);
 	RegAdminCmd("sm_rehp", Cmd_GiveHealth, ADMFLAG_ROOT);
-
-	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
-}
-
-void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
-{
-	for (int i = 0; i <= MaxClients; i++)
-	{
-		g_bGodMode[i] = false;
-	}
-}
-
-public void OnClientDisconnect(int client)
-{
-	g_bGodMode[client] = false;
-}
-
-public void OnClientPutInServer(int client)
-{
-	g_bGodMode[client] = false;
-	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
-	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
-}
-
-Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
-{
-	if (!g_bGodMode[victim]) return Plugin_Continue;
-
-	char sName[6];
-	if (attacker > MaxClients && GetEdictClassname(attacker, sName, sizeof(sName)) && strcmp(sName, "witch") == 0)
-	{
-		damage = 0.0;
-		return Plugin_Changed;
-	}
-	return Plugin_Continue;
 }
 
 void CreateStringMap()
@@ -711,18 +675,16 @@ void DoGodMode(int client, int iType)
 
 void SetClientGodMode(int client, int iTarget)
 {
-	bool bGodMode = GetEntProp(iTarget, Prop_Data, "m_takedamage") == 0;
+	int flags = GetEntityFlags(iTarget);
 
-	if (bGodMode)
+	if (flags & FL_GODMODE)
 	{
-		g_bGodMode[iTarget] = false;
-		SetEntProp(iTarget, Prop_Data, "m_takedamage", 2);
+		SetEntityFlags(iTarget, flags & ~FL_GODMODE);
 		PrintToChat(client, "[DevMenu] 关闭无敌模式: %N", iTarget);
 	}
 	else
 	{
-		g_bGodMode[iTarget] = true;
-		SetEntProp(iTarget, Prop_Data, "m_takedamage", 0);
+		SetEntityFlags(iTarget, flags | FL_GODMODE);
 		PrintToChat(client, "[DevMenu] 开启无敌模式: %N", iTarget);
 	}
 }
@@ -1613,12 +1575,12 @@ void FreezeClient(int client, int iTarget)
 
 	if (Flags & FL_FROZEN)
 	{
-		SetEntityFlags(iTarget, Flags &= ~FL_FROZEN);
+		SetEntityFlags(iTarget, Flags & ~FL_FROZEN);
 		PrintToChat(client, "[DevMenu] 解除冻结模式: %N", iTarget);
 	}
 	else
 	{
-		SetEntityFlags(iTarget, Flags |= FL_FROZEN);
+		SetEntityFlags(iTarget, Flags | FL_FROZEN);
 		PrintToChat(client, "[DevMenu] 设置冻结模式: %N", iTarget);
 	}
 }
