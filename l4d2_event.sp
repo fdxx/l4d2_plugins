@@ -3,9 +3,23 @@
 
 #include <sourcemod>
 
-ArrayList g_aEventName;
-bool g_bEnable;
-char g_sLogPath[PLATFORM_MAX_PATH];
+#define VERSION "0.2"
+
+#define MAX_EVENTNAME_LEN	128
+
+#define LISTEN_DISABLED	0
+#define LISTEN_RES_FILE	1
+#define LISTEN_COMMAND	2
+
+ArrayList g_aEvents;
+int g_iListenMode;
+ConVar net_showevents;
+
+enum struct EventData
+{
+	char sName[MAX_EVENTNAME_LEN];
+	bool bHooked;
+}
 
 static const char g_sEventFile[][] = 
 {
@@ -19,101 +33,101 @@ public Plugin myinfo =
 {
 	name = "L4D2 Event listen",
 	author = "McFlurry, fdxx",
-	description = "从 res 文件挂钩所有事件",
-	version = "0.1",
+	version = VERSION,
 	url = "https://forums.alliedmods.net/showthread.php?p=1651619"
 };
 
 public void OnPluginStart()   
 {
-	BuildPath(Path_SM, g_sLogPath, sizeof(g_sLogPath), "logs/l4d2_event_listen.log");
+	CreateConVar("l4d2_event_listen_version", VERSION, "version", FCVAR_NONE | FCVAR_DONTRECORD);
+	net_showevents = FindConVar("net_showevents");
+	RegAdminCmd("sm_event_listen", Cmd_Listen, ADMFLAG_ROOT, "0=Disabled, 1=Listen from res file, 2=Listen from net_showevents command");
+	RegAdminCmd("sm_list_events", Cmd_ViewList, ADMFLAG_ROOT, "View all event list");
 
-	RegAdminCmd("sm_event_listen", Cmd_EventListenEnable, ADMFLAG_ROOT, "开启或关闭");
-	RegAdminCmd("sm_list_events", Cmd_EventList, ADMFLAG_ROOT, "查看所有事件列表");
-
-	SaveEvents();
-	HookAllEvents();
+	GetEventsFromFile();
 }
 
-public Action Cmd_EventList(int client, int args)
+void GetEventsFromFile()
 {
-	char sName[128];
-	if (g_aEventName.Length > 0)
-	{
-		for (int i = 0; i < g_aEventName.Length; i++)
-		{
-			g_aEventName.GetString(i, sName, sizeof(sName));
-			ReplyToCommand(client, "%i/%i: %s", i+1, g_aEventName.Length, sName);
-		}
-	}
-	else ReplyToCommand(client, "g_aEventName.Length <= 0");
-	return Plugin_Handled;
-}
-
-public Action Cmd_EventListenEnable(int client, int args)
-{
-	g_bEnable = !g_bEnable;
-
-	if (g_bEnable)
-	{
-		ReplyToCommand(client, "Event listen: Enable");
-	}
-	else ReplyToCommand(client, "Event listen: Disable");
-	return Plugin_Handled;
-}
-
-void SaveEvents()
-{
-	g_aEventName = new ArrayList(128);
-	char sName[128];
+	EventData data;
+	delete g_aEvents;
+	g_aEvents = new ArrayList(sizeof(data));
 
 	for (int i = 0; i < sizeof(g_sEventFile); i++)
 	{
-		KeyValues kv = new KeyValues("l4d2_event");
-		if (kv.ImportFromFile(g_sEventFile[i]))
+		KeyValues kv = new KeyValues("");
+		if (kv.ImportFromFile(g_sEventFile[i]) && kv.GotoFirstSubKey(false))	
 		{
-			if (kv.GotoFirstSubKey(false))
+			do
 			{
-				do
+				if (kv.GetSectionName(data.sName, sizeof(data.sName)))
 				{
-					if (kv.GetSectionName(sName, sizeof(sName)))
-					{
-						if (g_aEventName.FindString(sName) == -1)
-						{
-							g_aEventName.PushString(sName);
-						}
-						//else LogMessage("Duplicate events, skip. %s -> %s", g_sEventFile[i], sName);
-					}
+					if (g_aEvents.FindString(data.sName) == -1)
+						g_aEvents.PushArray(data);
 				}
-				while (kv.GotoNextKey(false));
 			}
+			while (kv.GotoNextKey(false));
 		}
 		delete kv;
 	}
-	//LogMessage("%i events found", g_aEventName.Length);
 }
 
-void HookAllEvents()
+Action Cmd_ViewList(int client, int args)
 {
-	char sName[128];
-	if (g_aEventName.Length > 0)
+	EventData data;
+	for (int i = 0; i < g_aEvents.Length; i++)
 	{
-		for (int i = 0; i < g_aEventName.Length; i++)
+		g_aEvents.GetArray(i, data);
+		ReplyToCommand(client, "%i/%i: %s", i+1, g_aEvents.Length, data.sName);
+	}
+
+	return Plugin_Handled;
+}
+
+Action Cmd_Listen(int client, int args)
+{
+	if (args != 1)
+	{
+		ReplyToCommand(client, "Syntax: sm_event_listen <0|1|2>");
+		ReplyToCommand(client, "0=Disabled, 1=Listen from res file, 2=Listen from net_showevents command");
+		return Plugin_Handled;
+	}
+
+	net_showevents.IntValue = 0;
+
+	EventData data;
+	for (int i = 0; i < g_aEvents.Length; i++)
+	{
+		g_aEvents.GetArray(i, data);
+		if (data.bHooked)
+			UnhookEvent(data.sName, EventHook_All);
+		data.bHooked = false;
+		g_aEvents.SetArray(i, data);
+	}
+
+	g_iListenMode = GetCmdArgInt(1);
+
+	if (g_iListenMode == LISTEN_COMMAND)
+		net_showevents.IntValue = 2;
+
+	else if (g_iListenMode == LISTEN_RES_FILE)
+	{
+		for (int i = 0; i < g_aEvents.Length; i++)
 		{
-			g_aEventName.GetString(i, sName, sizeof(sName));
-			if (!HookEventEx(sName, EventHook_All))
-			{
-				LogMessage("HookEvent %s failed", sName);
-			}
+			g_aEvents.GetArray(i, data);
+			data.bHooked = HookEventEx(data.sName, EventHook_All);
+			g_aEvents.SetArray(i, data);
+
+			if (!data.bHooked)
+				LogMessage("HookEvent %s failed", data.sName);
 		}
 	}
+
+	return Plugin_Handled;
 }
 
-public void EventHook_All(Event event, const char[] name, bool dontBroadcast)
+void EventHook_All(Event event, const char[] name, bool dontBroadcast)
 {
-	if (g_bEnable)
-	{
-		PrintToChatAll("Trigger event: %s", name);
-		LogToFileEx(g_sLogPath, "Trigger event: %s", name);
-	}
+	PrintToChatAll("Trigger event: %s", name);
+	PrintToServer("Trigger event: %s", name);
 }

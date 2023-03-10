@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #include <sourcemod>
-#include <multicolors>
+#include <multicolors>  
 #include <left4dhooks>
 
 #define VERSION "1.6"
@@ -74,7 +74,7 @@ void Init()
 Action Cmd_ViewNextMap(int client, int args)
 {
 	if (g_bFinalMap)
-		CPrintToChat(client, "{default}[{yellow}提示{default}] 下一张图: {blue}%s", g_sNextMapTranslate);
+		CPrintToChatAll("{blue}[提示] {olive}下一张图: {yellow}%s", g_sNextMapTranslate);
 	return Plugin_Handled;
 }
 
@@ -153,7 +153,7 @@ void SetupNextMap(const char[] sMap)
 Action Notify_Timer(Handle timer)
 {
 	if (g_bFinalMap)
-		CPrintToChatAll("{default}[{yellow}提示{default}] 下一张图: {blue}%s", g_sNextMapTranslate);	
+		CPrintToChatAll("{blue}[提示] {olive}下一张图: {yellow}%s", g_sNextMapTranslate);	
 	return Plugin_Continue;
 }
 

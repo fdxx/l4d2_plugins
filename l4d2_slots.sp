@@ -3,22 +3,21 @@
 
 #include <sourcemod>
 #include <left4dhooks>
-#include <l4d2_nativevote> // https://github.com/fdxx/l4d2_nativevote
-#include <multicolors>
+#include <l4d2_nativevote>	// https://github.com/fdxx/l4d2_nativevote
+#include <multicolors>  
 
-#define VERSION "0.6"
+#define VERSION "0.7"
 
 ConVar
-	sv_allow_lobby_connect_only,
 	sv_maxplayers,
-	g_cvSlotsDefault,
-	g_cvSlotsVoteMin,
-	g_cvSlotsVoteMax;
+	g_cvDefSlots,
+	g_cvVoteMin,
+	g_cvVoteMax;
 
 int
-	g_iSlotsDef,
-	g_iSlotsVoteMin,
-	g_iSlotsVoteMax;
+	g_iDefSlots,
+	g_iVoteMin,
+	g_iVoteMax;
 
 public Plugin myinfo =
 {
@@ -29,19 +28,17 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	CreateConVar("l4d2_slots_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+	CreateConVar("l4d2_slots_version", VERSION, "Version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 
-	sv_allow_lobby_connect_only = FindConVar("sv_allow_lobby_connect_only");
-
-	g_cvSlotsDefault = CreateConVar("l4d2_slots_default", "6", "默认slots设置(服务器启动时设置)", FCVAR_NONE, true, -1.0, true, 31.0);
-	g_cvSlotsVoteMin = CreateConVar("l4d2_slots_vote_min", "6", "slots投票最小限制", FCVAR_NONE, true, -1.0, true, 31.0);
-	g_cvSlotsVoteMax = CreateConVar("l4d2_slots_vote_max", "7", "slots投票最大限制", FCVAR_NONE, true, -1.0, true, 31.0);
+	g_cvDefSlots = CreateConVar("l4d2_slots_default", "8", "Default slots (set at server startup)", FCVAR_NONE, true, -1.0, true, 31.0);
+	g_cvVoteMin = CreateConVar("l4d2_slots_vote_min", "8", "Min limit for slots voting", FCVAR_NONE, true, -1.0, true, 31.0);
+	g_cvVoteMax = CreateConVar("l4d2_slots_vote_max", "10", "Max limit for slots voting", FCVAR_NONE, true, -1.0, true, 31.0);
 
 	GetCvars();
 
-	g_cvSlotsDefault.AddChangeHook(ConVarChanged);
-	g_cvSlotsVoteMin.AddChangeHook(ConVarChanged);
-	g_cvSlotsVoteMax.AddChangeHook(ConVarChanged);
+	g_cvDefSlots.AddChangeHook(ConVarChanged);
+	g_cvVoteMin.AddChangeHook(ConVarChanged);
+	g_cvVoteMax.AddChangeHook(ConVarChanged);
 
 	RegConsoleCmd("sm_slots", Cmd_SlotsVote);
 	RegConsoleCmd("sm_slot", Cmd_SlotsVote);
@@ -56,16 +53,13 @@ void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 
 void GetCvars()
 {
-	g_iSlotsDef = g_cvSlotsDefault.IntValue;
-	g_iSlotsVoteMin = g_cvSlotsVoteMin.IntValue;
-	g_iSlotsVoteMax = g_cvSlotsVoteMax.IntValue;
+	g_iDefSlots = g_cvDefSlots.IntValue;
+	g_iVoteMin = g_cvVoteMin.IntValue;
+	g_iVoteMax = g_cvVoteMax.IntValue;
 }
 
 public void OnConfigsExecuted()
 {
-	sv_allow_lobby_connect_only.IntValue = 0;
-	L4D_LobbyUnreserve();
-
 	static bool shit;
 	if (shit) return;
 	shit = true;
@@ -73,7 +67,7 @@ public void OnConfigsExecuted()
 	sv_maxplayers = FindConVar("sv_maxplayers");
 	if (sv_maxplayers == null)
 		SetFailState("l4dtoolz plugin not loaded?");
-	sv_maxplayers.IntValue = g_iSlotsDef;
+	sv_maxplayers.IntValue = g_iDefSlots;
 }
 
 Action Cmd_SlotsVote(int client, int args)
@@ -82,40 +76,40 @@ Action Cmd_SlotsVote(int client, int args)
 	{
 		if (args != 1)
 		{
-			PrintToChat(client, "Use: !slots <number>");
+			CPrintToChat(client, "{lightgreen}Use: !slots <number>");
 			return Plugin_Handled;
 		}
 
-		int iSlotNum = GetCmdArgInt(1);
-		if (iSlotNum == sv_maxplayers.IntValue)
+		int slots = GetCmdArgInt(1);
+		if (slots == sv_maxplayers.IntValue)
 		{
-			PrintToChat(client, "当前slots已经是%i", iSlotNum);
+			CPrintToChat(client, "{lightgreen}当前slots已经是%i", slots);
 			return Plugin_Handled;
 		}
 
-		if (iSlotNum < g_iSlotsVoteMin || iSlotNum > g_iSlotsVoteMax)
+		if (slots < g_iVoteMin || slots > g_iVoteMax)
 		{
-			PrintToChat(client, "%i <= number <= %i", g_iSlotsVoteMin, g_iSlotsVoteMax);
+			CPrintToChat(client, "{lightgreen}%i <= number <= %i", g_iVoteMin, g_iVoteMax);
 			return Plugin_Handled;
 		}
 
-		StartVote(client, iSlotNum);
+		StartVote(client, slots);
 	}
 	return Plugin_Handled;
 }
 
-void StartVote(int client, int iSlotNum)
+void StartVote(int client, int slots)
 {
 	if (!L4D2NativeVote_IsAllowNewVote())
 	{
-		CPrintToChat(client, "{default}[{yellow}提示{default}] 投票正在进行中，暂不能发起新的投票");
+		CPrintToChat(client, "{lightgreen}投票正在进行中, 暂不能发起新的投票.");
 		return;
 	}
 	
-	L4D2NativeVote vote = L4D2NativeVote(VoteHandler);
-	vote.SetDisplayText("将 Slots 更改为 %i ?", iSlotNum);
+	L4D2NativeVote vote = L4D2NativeVote(Vote_Handler);
+	vote.SetDisplayText("将 Slots 更改为 %i ?", slots);
 	vote.Initiator = client;
-	vote.Value = iSlotNum;
+	vote.Value = slots;
 
 	int iPlayerCount = 0;
 	int[] iClients = new int[MaxClients];
@@ -132,13 +126,13 @@ void StartVote(int client, int iSlotNum)
 		LogError("发起投票失败");
 }
 
-void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
+void Vote_Handler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case VoteAction_Start:
 		{
-			CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}发起了一个投票", param1);
+			CPrintToChatAll("{blue}[Vote] {olive}%N {default}发起了一个投票.", param1);
 		}
 		case VoteAction_PlayerVoted:
 		{
@@ -151,7 +145,8 @@ void VoteHandler(L4D2NativeVote vote, VoteAction action, int param1, int param2)
 				vote.SetPass("加载中...");
 				sv_maxplayers.IntValue = vote.Value;
 			}
-			else vote.SetFail();
+			else
+				vote.SetFail();
 		}
 	}
 }

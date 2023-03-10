@@ -5,7 +5,7 @@
 
 #include <sourcemod>
 #include <dhooks>
-#include <multicolors>	// https://github.com/Bara/Multi-Colors
+#include <multicolors>  	
 
 ConVar g_cvRestartTime;
 char g_sLogPath[PLATFORM_MAX_PATH];
@@ -63,7 +63,7 @@ MRESReturn OnRestartRequested(DHookReturn hReturn)
 		RequestFrame(RemoveHook_NextFrame);
 
 		float fRestartTime = g_cvRestartTime.FloatValue;
-		CPrintToChatAll("{default}[{red}Warn{default}] Server update detected, Will auto restart in %.1f seconds.", fRestartTime);
+		CPrintToChatAll("{lightgreen}Server update detected, Will auto restart in %.1f seconds.", fRestartTime);
 		LogToFileEx(g_sLogPath, "Server update detected, Will auto restart in %.1f seconds.", fRestartTime);
 
 		CreateTimer(fRestartTime, Restart_Timer);

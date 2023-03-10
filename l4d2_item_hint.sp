@@ -3,7 +3,7 @@
 
 #include <sourcemod>
 #include <sdktools>
-#include <multicolors> // https://github.com/Bara/Multi-Colors
+#include <multicolors>   
 
 #define VERSION		"0.3"
 
@@ -81,7 +81,7 @@ Action CmdListener_vocalize(int client, const char[] command, int argc)
 					if (g_smModelToName.GetString(sModel, sName, sizeof(sName)))
 					{
 						//PrintToChatAll("(Vocalize) %N: %s", client, sName);
-						CPrintToChatAll("({yellow}Vocalize{default}) {blue}%N{default}: %s", client, sName);
+						CPrintToChatAll("{blue}%N{default}: %s", client, sName);
 					}
 				}
 			}

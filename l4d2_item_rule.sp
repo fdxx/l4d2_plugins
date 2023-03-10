@@ -55,6 +55,7 @@ public void OnPluginStart()
 	g_cvStartItems.AddChangeHook(OnConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
+	HookEvent("player_left_safe_area", Event_PlayerLeftSafeArea, EventHookMode_PostNoCopy);
 
 	RegAdminCmd("sm_item_rule_reload", Cmd_Reload, ADMFLAG_ROOT);
 	RegAdminCmd("sm_item_limit_test", Cmd_LimitTest, ADMFLAG_ROOT);
@@ -147,14 +148,12 @@ Action RoundStart_Timer(Handle timer)
 	return Plugin_Continue;
 }
 
-public Action L4D_OnFirstSurvivorLeftSafeArea(int client)
+void Event_PlayerLeftSafeArea(Event event, const char[] name, bool dontBroadcast)
 {
 	RemoveItemBox();
 	EntityHandling();
 	EntityLimit();
 	GiveStartItem();
-
-	return Plugin_Continue;
 }
 
 // C6地图上大量物品的箱子

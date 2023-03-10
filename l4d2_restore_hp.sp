@@ -4,22 +4,22 @@
 #include <sourcemod>
 #include <sdkhooks>
 
-#define VERSION "1.4"
-
-ConVar
-	g_cvHealthLimit,
-	g_cvAddHealthFlame,
-	g_cvDamageInfo;
-
-int
-	g_iMaxHealthLimit,
-	g_iAddHealthFlame;
-
-bool g_bDamageInfo;
+#define VERSION "1.5"
 
 #define RED_HEALTH		1
 #define YELLOW_HEALTH	2
 #define GREEN_HEALTH	3
+
+ConVar
+	g_cvHealthLimit,
+	g_cvAddHealthFlame;
+
+int
+	g_iMaxHealthLimit,
+	g_iAddHealthFlame,
+	m_zombieClass_offset,
+	m_isIncapacitated_offset,
+	m_iHealth_offset;
 
 public Plugin myinfo = 
 {
@@ -31,32 +31,31 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	CreateConVar("l4d2_restore_hp_version", VERSION, "Version", FCVAR_NONE | FCVAR_DONTRECORD);
+	CreateConVar("l4d2_restore_hp_version", VERSION, "Version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 
-	g_cvHealthLimit = CreateConVar("l4d2_restore_hp_limit", "200", "Max health limit", FCVAR_NONE);
-	g_cvAddHealthFlame = CreateConVar("l4d2_restore_hp_flame", "1", "How much does flame damage add health", FCVAR_NONE);
-	g_cvDamageInfo = CreateConVar("l4d2_restore_hp_show_info", "0", "Chat box print info", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvHealthLimit = CreateConVar("l4d2_restore_hp_limit", "200", "Max health limit");
+	g_cvAddHealthFlame = CreateConVar("l4d2_restore_hp_flame", "1", "How much does flame damage add health");
 
-	GetCvars();
+	OnConVarChanged(null, "", "");
 
-	g_cvHealthLimit.AddChangeHook(ConVarChanged);
-	g_cvAddHealthFlame.AddChangeHook(ConVarChanged);
-	g_cvDamageInfo.AddChangeHook(ConVarChanged);
+	g_cvHealthLimit.AddChangeHook(OnConVarChanged);
+	g_cvAddHealthFlame.AddChangeHook(OnConVarChanged);
 
-	//HookEvent("player_hurt", Event_PlayerHurt);
-	//AutoExecConfig(true, "l4d2_restore_hp");
+	m_zombieClass_offset = FindSendPropInfo("CTerrorPlayer", "m_zombieClass");
+	m_isIncapacitated_offset = FindSendPropInfo("CTerrorPlayer", "m_isIncapacitated");
+	m_iHealth_offset = FindSendPropInfo("CTerrorPlayer", "m_iHealth");
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i))
+			OnClientPutInServer(i);
+	}
 }
 
-void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
-{
-	GetCvars();
-}
-
-void GetCvars()
+void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	g_iMaxHealthLimit = g_cvHealthLimit.IntValue;
 	g_iAddHealthFlame = g_cvAddHealthFlame.IntValue;
-	g_bDamageInfo = g_cvDamageInfo.BoolValue;
 }
 
 public void OnClientPutInServer(int client)
@@ -69,17 +68,19 @@ void OnTakeDamageAlivePost(int victim, int attacker, int inflictor, float damage
 {
 	static int iAttackerHealthPre, iHealthLevel, iAddHealth, iAttackerHealthPost;
 
-	if (damage <= 1.0 || damage > 2000.0) return;
+	if (damage <= 1.0 || damage > 2000.0)
+		return;
 
-	if (IsValidSI(victim) && IsPlayerAlive(victim))
+	if (victim > 0 && IsClientInGame(victim) && GetClientTeam(victim) == 3 && IsPlayerAlive(victim))
 	{
-		if (GetEntProp(victim, Prop_Send, "m_zombieClass") == 8 && GetEntProp(victim, Prop_Send, "m_isIncapacitated"))
+		if (GetEntData(victim, m_zombieClass_offset, 1) == 8 && GetEntData(victim, m_isIncapacitated_offset, 1))
 			return;
 
-		if (IsValidSur(attacker) && IsPlayerAlive(attacker) && !GetEntProp(attacker, Prop_Send, "m_isIncapacitated"))
+		if (attacker > 0 && attacker <= MaxClients && IsClientInGame(attacker) && GetClientTeam(attacker) == 2 && IsPlayerAlive(attacker) && !GetEntData(attacker, m_isIncapacitated_offset, 1))
 		{
-			iAttackerHealthPre = GetEntProp(attacker, Prop_Data, "m_iHealth");
-			if (iAttackerHealthPre >= g_iMaxHealthLimit) return;
+			iAttackerHealthPre = GetEntData(attacker, m_iHealth_offset, 4);
+			if (iAttackerHealthPre >= g_iMaxHealthLimit)
+				return;
 
 			iHealthLevel = GetHealthStatus(iAttackerHealthPre);
 			iAddHealth = 0;
@@ -108,12 +109,11 @@ void OnTakeDamageAlivePost(int victim, int attacker, int inflictor, float damage
 			}
 
 			iAttackerHealthPost = iAttackerHealthPre + iAddHealth;
-			if (iAttackerHealthPost > g_iMaxHealthLimit) iAttackerHealthPost = g_iMaxHealthLimit;
+			if (iAttackerHealthPost > g_iMaxHealthLimit)
+				iAttackerHealthPost = g_iMaxHealthLimit;
 
-			SetEntProp(attacker, Prop_Data, "m_iHealth", iAttackerHealthPost);
-
-			if (g_bDamageInfo)
-				PrintToChat(attacker, "%N attack %N, damage = %.1f, AddHealth = %i", attacker, victim, damage, iAddHealth);
+			SetEntData(attacker, m_iHealth_offset, iAttackerHealthPost, 4);
+			//PrintToChat(attacker, "%N attack %N, damage = %.1f, AddHealth = %i", attacker, victim, damage, iAddHealth);
 		}
 	}
 }
@@ -123,37 +123,11 @@ int GetHealthStatus(int iHealth)
 	if (iHealth >= 100)
 		return GREEN_HEALTH;
 
-	else if (40 <= iHealth < 100)
+	if (40 <= iHealth < 100)
 		return YELLOW_HEALTH;
 
-	else if (0 < iHealth < 40)
+	if (0 < iHealth < 40)
 		return RED_HEALTH;
 		
-	else return 0;
+	return 0;
 }
-
-bool IsValidSI(int client)
-{
-	if (client > 0 && client <= MaxClients)
-	{
-		if (IsClientInGame(client) && GetClientTeam(client) == 3)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-bool IsValidSur(int client)
-{
-	if (client > 0 && client <= MaxClients)
-	{
-		if (IsClientInGame(client) && GetClientTeam(client) == 2)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-

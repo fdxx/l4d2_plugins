@@ -1,11 +1,11 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 
 #include <sourcemod>
 #include <sdktools>
-#include <multicolors>
+#include <multicolors>  
 
 Handle g_hSDKCreateGift;
 ConVar g_cvChance, g_cvNotify;
@@ -68,6 +68,8 @@ void GetCvars()
 	int iChance = g_cvChance.IntValue;
 	for (int i = 0; i < iChance; i++)
 		g_aGiftChance.Set(i, 1);
+	
+	g_aGiftChance.Sort(Sort_Random, Sort_Integer);
 }
 
 public void OnMapStart()
@@ -84,8 +86,7 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 
 	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 3)
 	{
-		g_aGiftChance.Sort(Sort_Random, Sort_Integer);
-		if (g_aGiftChance.Get(GetRandomInt(0, g_aGiftChance.Length-1)) == 1)
+		if (g_aGiftChance.Get(GetRandomIntEx(0, g_aGiftChance.Length-1)) == 1)
 		{
 			static float fPos[3], fVec[3];
 			GetClientAbsOrigin(client, fPos);
@@ -101,13 +102,13 @@ void Event_GiftGrab(Event event, const char[] name, bool dontBroadcast)
 	if (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client) && !GetEntProp(client, Prop_Send, "m_isIncapacitated"))
 	{
 		static AwardInfo Award;
-		g_aAwardsList.Sort(Sort_Random, Sort_String);
-		g_aAwardsList.GetArray(GetRandomInt(0, g_aAwardsList.Length-1), Award);
+		
+		g_aAwardsList.GetArray(GetRandomIntEx(0, g_aAwardsList.Length-1), Award);
 		ExecCommand(client, Award.sCmdType, Award.sCmd, Award.sCmdArgs);
 
 		if (g_iNotify == 1 || g_iNotify == 3)
 		{
-			CPrintToChatAll("{olive}%N {default}%s", client, Award.sMsg);
+			CPrintToChatAll("{blue}[Gift] {olive}%N {default}%s", client, Award.sMsg);
 		}
 			
 		if (g_iNotify == 2 || g_iNotify == 3)
@@ -117,6 +118,17 @@ void Event_GiftGrab(Event event, const char[] name, bool dontBroadcast)
 			EmitAmbientSound(SOUND, fPos);
 		}
 	} 
+}
+
+// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
+int GetRandomIntEx(int min, int max)
+{
+	int random = GetURandomInt();
+
+	if (random == 0)
+		random++;
+
+	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
 }
 
 void ExecCommand(int client, const char[] sType, const char[] sCommand, const char[] sArgs = "")
@@ -182,6 +194,7 @@ void LoadAwardConfig()
 	}
 	else SetFailState("Failed to load l4d2_gift.cfg file");
 
+	g_aAwardsList.Sort(Sort_Random, Sort_String);
 	delete kv;
 }
 

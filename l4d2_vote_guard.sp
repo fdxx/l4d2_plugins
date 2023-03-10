@@ -2,7 +2,7 @@
 #pragma newdecls required
 
 #include <sourcemod>
-#include <multicolors>
+#include <multicolors>  
 
 #define VERSION "0.2"
 
@@ -36,7 +36,7 @@ public Action VoteCallBack(int client, const char[] command, int argc)
 			{
 				if (KickPlayer(client))
 				{
-					CPrintToChatAll("{default}[{yellow}提示{default}] {olive}%N {default}试图踢管理员被系统自动踢出", client);
+					CPrintToChatAll("{blue}[提示] {olive}%N {default}试图踢管理员被系统自动踢出", client);
 				}
 				return Plugin_Handled;
 			}
