@@ -1,42 +1,36 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION "1.3"
-
 #include <sourcemod>
 #include <sdkhooks>
-#include <multicolors> // https://github.com/Bara/Multi-Colors
+#include <multicolors>   
 #include <dhooks>
 
-enum
-{
-	SMOKER	= 1,
-	BOOMER	= 2,
-	HUNTER	= 3,
-	SPITTER	= 4,
-	JOCKEY	= 5,
-	CHARGER	= 6,
-}
+#define VERSION "1.4"
 
-enum DamageType
-{
-	Dmg_None,
-	Dmg_Melee,
-	Dmg_Weapon,
-}
+#define	SMOKER	1
+#define	BOOMER	2
+#define	HUNTER	3
+#define	SPITTER	4
+#define	JOCKEY	5
+#define	CHARGER 6
 
-enum
-{
-	CUT_SHOVED		= 1,
-	CUT_SHOVEDSURV	= 2,
-	CUT_KILL		= 3,
-	CUT_SLASH		= 4,
-}
+#define	CUT_SHOVED		1
+#define CUT_SHOVEDSURV	2
+#define CUT_KILL		3
+#define CUT_SLASH		4
+
+#define DMGTYPE_MELEE	1
+#define DMGTYPE_WEAPON	2
+
+#define ASSIST_PLAYER	0
+#define ASSIST_DMG		1
+#define ASSIST_SHOTS	2
 
 bool
-	g_bRock[MAXPLAYERS] = {true, ...},
+	g_bBlockRockNotify[MAXPLAYERS],
 	g_bSkeetDead[MAXPLAYERS],
-	g_bShotCounted[MAXPLAYERS][MAXPLAYERS]; //Victim/Attacker
+	g_bShotCounted[MAXPLAYERS][MAXPLAYERS]; //[Victim][Attacker]
 
 int
 	g_iShotsDealt[MAXPLAYERS][MAXPLAYERS],
@@ -51,9 +45,9 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	InitGameData();
+	Init();
 
-	CreateConVar("l4d2_skill_announce_version", VERSION, "插件版本", FCVAR_NONE | FCVAR_DONTRECORD);
+	CreateConVar("l4d2_skill_announce_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("round_end", Event_RoundEnd, EventHookMode_PostNoCopy);
@@ -85,10 +79,9 @@ public void OnMapEnd()
 
 void Reset()
 {
-	static int i;
-	for (i = 0; i <= MaxClients; i++)
+	for (int i = 0; i <= MaxClients; i++)
 	{
-		g_bRock[i] = true;
+		g_bBlockRockNotify[i] = false;
 		g_bSkeetDead[i] = false;
 		ClearHunterDamage(i);
 	}
@@ -96,8 +89,7 @@ void Reset()
 
 void ClearHunterDamage(int iHunter)
 {
-	static int i;
-	for (i = 0; i <= MaxClients; i++)
+	for (int i = 0; i <= MaxClients; i++)
 	{
 		g_iShotsDealt[iHunter][i] = 0;
 		g_iHunterDamage[iHunter][i] = 0;
@@ -106,64 +98,70 @@ void ClearHunterDamage(int iHunter)
 
 void Event_RockKilled(Event event, const char[] name, bool dontBroadcast)
 {
-	int userid = event.GetInt("userid");
-	int client = GetClientOfUserId(userid);
+	int client = GetClientOfUserId(event.GetInt("userid"));
 
-	if (g_bRock[client])
+	// The moment of breaking the rock will trigger this event multiple times, so we suppress the notify for a short time.
+	if (!g_bBlockRockNotify[client])
 	{
-		g_bRock[client] = false;
+		g_bBlockRockNotify[client] = true;
 
 		if (IsValidSur(client) && !IsFakeClient(client) && IsPlayerAlive(client))
 		{
 			CPrintToChatAll("{orange}★ {olive}%N {blue}skeeted {default}a {olive}tank {default}rock", client);
 		}
 
-		CreateTimer(0.1, ResetRock_Timer, client);
+		CreateTimer(0.1, ResetRockNotify_Timer, client);
 	}
 }
 
-Action ResetRock_Timer(Handle timer, int client)
+Action ResetRockNotify_Timer(Handle timer, int client)
 {
-	g_bRock[client] = true;
+	g_bBlockRockNotify[client] = false;
 	return Plugin_Continue;
 }
 
 void Event_ChargerKilled(Event event, const char[] name, bool dontBroadcast)
 {
-	int iVictim = GetClientOfUserId(event.GetInt("userid"));
-	int iAttacker = GetClientOfUserId(event.GetInt("attacker"));
-	bool bMelee = event.GetBool("melee");
-	bool bCharging = event.GetBool("charging");
+	if (!event.GetBool("charging"))
+		return;
 
-	if (bCharging && IsValidSI(iVictim))
+	int victim = GetClientOfUserId(event.GetInt("userid"));
+	int attacker = GetClientOfUserId(event.GetInt("attacker"));
+	bool bMelee = event.GetBool("melee");
+
+	if (IsValidSI(victim) && IsValidSur(attacker) && IsPlayerAlive(attacker) && !IsFakeClient(attacker))
 	{
-		if (IsValidSur(iAttacker) && IsPlayerAlive(iAttacker) && !IsFakeClient(iAttacker))
-		{
-			if (bMelee) CPrintToChatAll("{orange}★★ {olive}%N {blue}leveled {olive}%N {default}by {blue}melee", iAttacker, iVictim);
-			else CPrintToChatAll("{orange}★★ {olive}%N {blue}leveled {olive}%N", iAttacker, iVictim);
-		}
+		if (bMelee)
+			CPrintToChatAll("{orange}★★ {olive}%N {blue}leveled {olive}%N {default}by {blue}melee", attacker, victim);
+		else
+			CPrintToChatAll("{orange}★★ {olive}%N {blue}leveled {olive}%N", attacker, victim);
 	}
 }
 
 void Event_TonguePullStopped(Event event, const char[] name, bool dontBroadcast)
 {
-	int iStopTonguePlayer = GetClientOfUserId(event.GetInt("userid"));
-	int iBeingPulledPlayer = GetClientOfUserId(event.GetInt("victim"));
-	int iSmoker = GetClientOfUserId(event.GetInt("smoker"));
-	int iReason = event.GetInt("release_type");
+	int rescuer = GetClientOfUserId(event.GetInt("userid"));
+	int victim = GetClientOfUserId(event.GetInt("victim"));
+	int smoker = GetClientOfUserId(event.GetInt("smoker"));
+	int reason = event.GetInt("release_type");
 
-	if (IsValidSur(iStopTonguePlayer) && IsPlayerAlive(iStopTonguePlayer) && !IsFakeClient(iStopTonguePlayer))
+	if (rescuer != victim)
+		return;
+
+	if (IsValidSur(victim) && IsPlayerAlive(victim) && !IsFakeClient(victim))
 	{
-		if (IsValidSI(iSmoker) && IsPlayerAlive(iSmoker))
+		if (IsValidSI(smoker) && IsPlayerAlive(smoker))
 		{
-			if (iStopTonguePlayer == iBeingPulledPlayer)
+			switch (reason)
 			{
-				switch (iReason)
-				{
-					case CUT_SHOVED: CPrintToChatAll("{orange}★★ {olive}%N {blue}self-cleared {default}from a {olive}%N{default}'s tongue by {blue}shoving", iStopTonguePlayer, iSmoker);
-					case CUT_KILL: CPrintToChatAll("{orange}★★ {olive}%N {blue}self-cleared {default}from a {olive}%N{default}'s tongue", iStopTonguePlayer, iSmoker);
-					case CUT_SLASH: CPrintToChatAll("{orange}★★★ {olive}%N {blue}cut {olive}%N{default}'s tongue", iStopTonguePlayer, iSmoker);
-				}
+				case CUT_SHOVED:
+					CPrintToChatAll("{orange}★★ {olive}%N {blue}self-cleared {default}from a {olive}%N{default}'s tongue by {blue}shoving", victim, smoker);
+
+				case CUT_KILL:
+					CPrintToChatAll("{orange}★★ {olive}%N {blue}self-cleared {default}from a {olive}%N{default}'s tongue", victim, smoker);
+
+				case CUT_SLASH:
+					CPrintToChatAll("{orange}★★★ {olive}%N {blue}cut {olive}%N{default}'s tongue", victim, smoker);
 			}
 		}
 	}
@@ -187,12 +185,10 @@ void Event_LungePounce(Event event, const char[] name, bool dontBroadcast)
 
 void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-	static int client;
-	client = GetClientOfUserId(event.GetInt("userid"));
-
+	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (client > 0)
 	{
-		g_bRock[client] = true;
+		g_bBlockRockNotify[client] = false;
 		g_bSkeetDead[client] = false;
 		ClearHunterDamage(client);
 	}
@@ -204,9 +200,19 @@ public void OnClientPutInServer(int client)
 	SDKHook(client, SDKHook_OnTakeDamageAlive, OnTakeDamageAlive);
 }
 
+void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
+{
+	static int client, i;
+	client = GetClientOfUserId(event.GetInt("userid"));
+
+	for (i = 1; i <= MaxClients; i++)
+		g_bShotCounted[i][client] = false; // [Victim][Attacker]
+}
+
 Action OnTakeDamageAlive(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if (damage <= 0.0) return Plugin_Continue;
+	if (damage <= 0.0)
+		return Plugin_Continue;
 
 	if (IsValidSI(victim) && GetZombieClass(victim) == HUNTER && IsPlayerAlive(victim))
 	{
@@ -222,161 +228,134 @@ Action OnTakeDamageAlive(int victim, int &attacker, int &inflictor, float &damag
 			iHealth = GetEntProp(victim, Prop_Data, "m_iHealth");
 
 			if (damage >= float(iHealth))
-			{
 				g_iHunterDamage[victim][attacker] += iHealth;
-			}
-			else g_iHunterDamage[victim][attacker] += RoundToFloor(damage);
+			else
+				g_iHunterDamage[victim][attacker] += RoundToFloor(damage);
 		}
 	}
 	return Plugin_Continue;
 }
 
-MRESReturn mreOnEventKilledPre(int client, DHookParam hParams)
+MRESReturn OnEventKilledPre(int client, DHookParam hParams)
 {
 	if (IsValidSI(client))
 	{
-		static int iClass;
-		iClass = GetZombieClass(client);
-
+		int iClass = GetZombieClass(client);
 		if (iClass == HUNTER || iClass == JOCKEY)
-		{
-			if (IsInTheAir(client, iClass))
-				g_bSkeetDead[client] = true;
-		}
+			g_bSkeetDead[client] = IsInTheAir(client, iClass);
 	}
 	return MRES_Ignored;
 }
 
-MRESReturn mreOnEventKilledPost(int client, DHookParam hParams)
+MRESReturn OnEventKilledPost(int client, DHookParam hParams)
 {
 	g_bSkeetDead[client] = false;
+	ClearHunterDamage(client);
 	return MRES_Ignored;
 }
 
 void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
-	static int iVictim, iClass, iAttacker, iDmgType, i;
-	static DamageType eDmgType;
+	static int victim, class, attacker, type, i;
 
-	iVictim = GetClientOfUserId(event.GetInt("userid"));
-	if (IsValidSI(iVictim))
+	victim = GetClientOfUserId(event.GetInt("userid"));
+	if (!g_bSkeetDead[victim] || !IsValidSI(victim))
+		return;
+
+	class = GetZombieClass(victim);
+	if (class != HUNTER && class != JOCKEY)
+		return;
+
+	attacker = GetClientOfUserId(event.GetInt("attacker"));
+	if (!IsValidSur(attacker) || IsFakeClient(attacker) || !IsPlayerAlive(attacker))
+		return;
+
+	type = event.GetInt("type");
+
+	switch (class)
 	{
-		if (g_bSkeetDead[iVictim])
+		case JOCKEY:
 		{
-			g_bSkeetDead[iVictim] = false;
+			if (type & DMG_SLASH || type & DMG_CLUB)
+				CPrintToChatAll("{orange}★★ {olive}%N {default}was {blue}melee-skeeted {default}by {olive}%N", victim, attacker);
+			else if (type & DMG_BURN == 0)
+				CPrintToChatAll("{orange}★★ {olive}%N {blue}skeeted {olive}%N", attacker, victim);
+		}
+		case HUNTER:
+		{
+			if (type & DMG_SLASH || type & DMG_CLUB)
+				CPrintToChatAll("{orange}★★ {olive}%N {default}was {blue}melee-skeeted {default}by {olive}%N", victim, attacker);
 
-			iClass = GetZombieClass(iVictim);
-			if (iClass == HUNTER || iClass == JOCKEY)
+			else if (type & DMG_BURN == 0)
 			{
-				iAttacker = GetClientOfUserId(event.GetInt("attacker"));
-				if (IsValidSur(iAttacker) && !IsFakeClient(iAttacker) && IsPlayerAlive(iAttacker))
+				int[][] assist = new int[MaxClients][3];
+				int iCount;
+
+				for (i = 1; i <= MaxClients; i++)
 				{
-					iDmgType = event.GetInt("type");
-					eDmgType = Dmg_None;
-					
-					if (iDmgType & DMG_SLASH || iDmgType & DMG_CLUB)
-						eDmgType = Dmg_Melee;
-					else if (!(iDmgType & DMG_BURN))
-						eDmgType = Dmg_Weapon;
+					if (i == attacker)
+						continue;
 
-					switch (iClass)
+					if (g_iHunterDamage[victim][i] > 0 && IsClientInGame(i) && GetClientTeam(i) == 2)
 					{
-						case JOCKEY:
-						{
-							switch (eDmgType)
-							{
-								case Dmg_Melee: CPrintToChatAll("{orange}★★ {olive}%N {default}was {blue}melee-skeeted {default}by {olive}%N", iVictim, iAttacker);
-								case Dmg_Weapon: CPrintToChatAll("{orange}★★ {olive}%N {blue}skeeted {olive}%N", iAttacker, iVictim);
-							}
-						}
-						case HUNTER:
-						{
-							switch (eDmgType)
-							{
-								case Dmg_Melee: CPrintToChatAll("{orange}★ {olive}%N {default}was {blue}melee-skeeted {default}by {olive}%N", iVictim, iAttacker);
-								case Dmg_Weapon:
-								{
-									//1D=AssisterCount, 2D[0]=AssisterIndex, 2D[1]=AssisterDamage, 2D[2]=AssisterShots
-									int[][] iAssisterData = new int[MaxClients][3];
-									int iAssisterCount;
-
-									for (i = 1; i <= MaxClients; i++)
-									{
-										if (i == iAttacker) continue;
-
-										if (g_iHunterDamage[iVictim][i] > 0 && IsValidSur(i))
-										{
-											iAssisterData[iAssisterCount][0] = i;
-											iAssisterData[iAssisterCount][1] = g_iHunterDamage[iVictim][i];
-											iAssisterData[iAssisterCount][2] = g_iShotsDealt[iVictim][i];
-											iAssisterCount++;
-										}
-									}
-
-									if (iAssisterCount)
-									{
-										SortCustom2D(iAssisterData, iAssisterCount, SortByDamageDesc);
-
-										static char sAssisterString[256], sBuffer[128];
-										FormatEx(sAssisterString, sizeof(sAssisterString), "%N (%i dmg/%i shot%s)", iAssisterData[0][0], iAssisterData[0][1], iAssisterData[0][2], (iAssisterData[0][2] == 1 ? "" : "s"));
-
-										for (i = 1; i < iAssisterCount; i++)
-										{
-											FormatEx(sBuffer, sizeof(sBuffer), ", %N (%i dmg/%i shot%s)", iAssisterData[i][0], iAssisterData[i][1], iAssisterData[i][2], (iAssisterData[i][2] == 1 ? "" : "s"));
-											StrCat(sAssisterString, sizeof(sAssisterString), sBuffer);
-										}
-
-										CPrintToChatAll("{orange}★ {olive}%N {blue}teamskeeted {olive}%N {default}for {orange}%i {default}dmg in {orange}%i {default}shot%s. {blue}Assisted by: {default}%s", iAttacker, iVictim, g_iHunterDamage[iVictim][iAttacker], g_iShotsDealt[iVictim][iAttacker], (g_iShotsDealt[iVictim][iAttacker] == 1 ? "" : "s"), sAssisterString);
-									}
-									else
-									{
-										CPrintToChatAll("{orange}★ {olive}%N {blue}skeeted {olive}%N {default}in {orange}%i {default}shot%s.", iAttacker, iVictim, g_iShotsDealt[iVictim][iAttacker], (g_iShotsDealt[iVictim][iAttacker] == 1 ? "" : "s"));
-									}
-								}
-							}
-						}
+						assist[iCount][ASSIST_PLAYER] = i;
+						assist[iCount][ASSIST_DMG] = g_iHunterDamage[victim][i];
+						assist[iCount][ASSIST_SHOTS] = g_iShotsDealt[victim][i];
+						iCount++;
 					}
+				}
+
+				if (iCount)
+				{
+					SortCustom2D(assist, iCount, SortDamageByDescending);
+
+					static char sAssistData[MAX_MESSAGE_LENGTH], sBuffer[128];
+					FormatEx(sAssistData, sizeof(sAssistData), "%N (%i dmg/%i shot%s)", assist[0][ASSIST_PLAYER], assist[0][ASSIST_DMG], assist[0][ASSIST_SHOTS], (assist[0][ASSIST_SHOTS] == 1 ? "":"s"));
+
+					for (i = 1; i < iCount; i++)
+					{
+						FormatEx(sBuffer, sizeof(sBuffer), ", %N (%i dmg/%i shot%s)", assist[i][ASSIST_PLAYER], assist[i][ASSIST_DMG], assist[i][ASSIST_SHOTS], (assist[i][ASSIST_SHOTS] == 1 ? "":"s"));
+						StrCat(sAssistData, sizeof(sAssistData), sBuffer);
+					}
+
+					CPrintToChatAll("{orange}★ {olive}%N {blue}teamskeeted {olive}%N {default}for {orange}%i {default}dmg in {orange}%i {default}shot%s. {blue}Assisted by: {default}%s", attacker, victim, g_iHunterDamage[victim][attacker], g_iShotsDealt[victim][attacker], (g_iShotsDealt[victim][attacker] == 1 ? "":"s"), sAssistData);
+				}
+				else
+				{
+					CPrintToChatAll("{orange}★ {olive}%N {blue}skeeted {olive}%N {default}in {orange}%i {default}shot%s.", attacker, victim, g_iShotsDealt[victim][attacker], (g_iShotsDealt[victim][attacker] == 1 ? "":"s"));
 				}
 			}
 		}
-
-		ClearHunterDamage(iVictim);
 	}
 }
 
-int SortByDamageDesc(int[] x, int[] y, const int[][] array, Handle hndl)
+int SortDamageByDescending(int[] x, int[] y, const int[][] array, Handle hndl)
 {
-	if (x[1] > y[1]) return -1;
-	else if (x[1] < y[1]) return 1;
-	else return 0;
-}
-
-void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
-{
-	static int client, i;
-
-	client = GetClientOfUserId(event.GetInt("userid"));
-	for (i = 0; i <= MaxClients; i++)
-	{
-		// [Victim][Attacker]
-		g_bShotCounted[i][client] = false;
-	}
+	if (x[ASSIST_DMG] > y[ASSIST_DMG])
+		return -1;
+	if (x[ASSIST_DMG] < y[ASSIST_DMG])
+		return 1;
+	return 0;
 }
 
 bool IsInTheAir(int client, int iClass)
 {
 	if ((GetEntProp(client, Prop_Data, "m_fFlags") & FL_ONGROUND) > 0)
 		return false;
-	
-	static int iVictim;
+
 	switch (iClass)
 	{
-		case HUNTER: iVictim = GetEntPropEnt(client, Prop_Send, "m_pounceVictim");
-		case JOCKEY: iVictim = GetEntPropEnt(client, Prop_Send, "m_jockeyVictim");
+		case HUNTER:
+		{
+			if (GetEntPropEnt(client, Prop_Send, "m_pounceVictim") > 0)
+				return false;
+		}
+		case JOCKEY:
+		{
+			if (GetEntPropEnt(client, Prop_Send, "m_jockeyVictim") > 0)
+				return false;
+		}
 	}
-
-	if (IsValidSur(iVictim) && IsPlayerAlive(iVictim))
-		return false;
 
 	return GetEntityMoveType(client) != MOVETYPE_LADDER;
 }
@@ -410,7 +389,7 @@ int GetZombieClass(int client)
 	return GetEntProp(client, Prop_Send, "m_zombieClass");
 }
 
-void InitGameData()
+void Init()
 {
 	GameData hGameData = new GameData("l4d2_skill_announce");
 	if (hGameData == null)
@@ -419,10 +398,10 @@ void InitGameData()
 	DynamicDetour dDetour = DynamicDetour.FromConf(hGameData, "CTerrorPlayer::Event_Killed");
 	if (dDetour == null)
 		SetFailState("Failed to create DynamicDetour: CTerrorPlayer::Event_Killed");
-	if (!dDetour.Enable(Hook_Pre, mreOnEventKilledPre))
-		SetFailState("Failed to detour pre: mreOnEventKilledPre");
-	if (!dDetour.Enable(Hook_Post, mreOnEventKilledPost))
-		SetFailState("Failed to detour pre: mreOnEventKilledPost");
+	if (!dDetour.Enable(Hook_Pre, OnEventKilledPre))
+		SetFailState("Failed to detour pre: OnEventKilledPre");
+	if (!dDetour.Enable(Hook_Post, OnEventKilledPost))
+		SetFailState("Failed to detour pre: OnEventKilledPost");
 
 	delete hGameData;
 }
