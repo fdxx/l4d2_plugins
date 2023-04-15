@@ -49,7 +49,7 @@ enum
 	SpawnMode_Normal			= 0, // L4D_GetRandomPZSpawnPosition + l4d2_si_spawn_control_spawn_range_normal
 	SpawnMode_NavAreaNearest	= 1, // GetSpawnPosByNavArea + nearest invisible place
 	SpawnMode_NavArea			= 2, // GetSpawnPosByNavArea + l4d2_si_spawn_control_spawn_range_navarea
-	spawnmode_NormalEnhanced	= 3, // SpawnMode_Normal + SpawnMode_NavArea auto switch.
+	SpawnMode_NormalEnhanced	= 3, // SpawnMode_Normal + SpawnMode_NavArea auto switch.
 }
 
 ConVar
@@ -486,7 +486,7 @@ void SpawnSpecial()
 				case SpawnMode_Normal:
 					bFound = L4D_GetRandomPZSpawnPosition(GetRandomSur(), iClass, 30, fSpawnPos);
 				
-				case spawnmode_NormalEnhanced:
+				case SpawnMode_NormalEnhanced:
 				{
 					iPanicEventStage = LoadFromAddress(g_pPanicEventStage, NumberType_Int8);
 

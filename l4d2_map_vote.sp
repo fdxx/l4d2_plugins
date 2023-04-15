@@ -196,7 +196,6 @@ int MapType_MenuHandler(Menu menu, MenuAction action, int client, int itemNum)
 
 void ShowMapMenu(int client)
 {
-	static int shit;
 	static char sSubName[256], sTitle[256], sKey[256];
 
 	Menu menu = new Menu(Title_MenuHandler);
@@ -206,7 +205,7 @@ void ShowMapMenu(int client)
 	for (SourceKeyValues kvSub = kvMissions.GetFirstTrueSubKey(); !kvSub.IsNull(); kvSub = kvSub.GetNextTrueSubKey())
 	{
 		kvSub.GetName(sSubName, sizeof(sSubName));
-		if (g_smExcludeMissions.GetValue(sSubName, shit))
+		if (g_smExcludeMissions.ContainsKey(sSubName))
 			continue;
 
 		FormatEx(sKey, sizeof(sKey), "modes/%s", g_sMode);

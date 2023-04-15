@@ -330,7 +330,10 @@ void GetBanFlow(const char[] sMap)
 	BuildPath(Path_SM, sFile, sizeof(sFile), "data/mapinfo.txt");
 	KeyValues kv = new KeyValues("");
 	if (!kv.ImportFromFile(sFile))
-		SetFailState("Failed to load %s", sFile);
+	{
+		delete kv;
+		return;
+	}
 
 	FormatEx(key, sizeof(key), "%s/tank_ban_flow", sMap);
 	if (kv.JumpToKey(key) && kv.GotoFirstSubKey())
@@ -386,7 +389,7 @@ void GetSpawnData()
 
 void SetTankSpawnFlow(const char[] sMap)
 {
-	int shit, index;
+	int index;
 	SpawnData data;
 
 	if (!g_bEnable[TANK])
@@ -395,13 +398,13 @@ void SetTankSpawnFlow(const char[] sMap)
 		return;
 	}
 
-	if (g_smStaticMap[TANK].GetValue(sMap, shit))
+	if (g_smStaticMap[TANK].ContainsKey(sMap))
 	{
 		g_fSpawnFlow[TANK] = FLOW_STATIC;
 		return;
 	}
 
-	if (!g_smSpawnMap[TANK].GetValue(sMap, shit))
+	if (!g_smSpawnMap[TANK].ContainsKey(sMap))
 	{
 		g_fSpawnFlow[TANK] = FLOW_DEFAULT;
 		return;
@@ -422,7 +425,6 @@ void SetTankSpawnFlow(const char[] sMap)
 
 void SetWitchSpawnFlow(const char[] sMap)
 {
-	int shit;
 	SpawnData data;
 
 	if (!g_bEnable[WITCH])
@@ -431,13 +433,13 @@ void SetWitchSpawnFlow(const char[] sMap)
 		return;
 	}
 
-	if (g_smStaticMap[WITCH].GetValue(sMap, shit))
+	if (g_smStaticMap[WITCH].ContainsKey(sMap))
 	{
 		g_fSpawnFlow[WITCH] = FLOW_STATIC;
 		return;
 	}
 
-	if (!g_smSpawnMap[WITCH].GetValue(sMap, shit))
+	if (!g_smSpawnMap[WITCH].ContainsKey(sMap))
 	{
 		g_fSpawnFlow[WITCH] = FLOW_DEFAULT;
 		return;
