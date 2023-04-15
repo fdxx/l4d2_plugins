@@ -54,6 +54,11 @@ void Event_PlayerDisconnect(Event event, const char[] name, bool dontBroadcast)
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (client == 0 || !IsFakeClient(client))
 	{
+		char sNetworkid[4];
+		event.GetString("networkid", sNetworkid, sizeof(sNetworkid));
+		if (!strcmp(sNetworkid, "BOT", false)) 
+			return;
+			
 		if (!HaveRealPlayer(client))
 		{
 			sv_hibernate_when_empty.IntValue = 0;
