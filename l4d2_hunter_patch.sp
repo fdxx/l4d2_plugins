@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION	"0.1"
+#define VERSION	"0.2"
 
 #include <sourcemod>
 #include <sourcescramble> // https://github.com/nosoop/SMExt-SourceScramble
@@ -40,10 +40,11 @@ public void OnPluginStart()
 	g_cvPatchs[1] = CreateConVar("l4d2_hunter_patch_crouch_pounce", "0", "While on the ground, Whether need press crouch button to pounce.\n0=game default, 1=always, 2=never.", FCVAR_NONE);
 	g_cvPatchs[2] = CreateConVar("l4d2_hunter_patch_bonus_damage", "0", "Whether enable bonus pounce damage.\n0=game default, 1=always, 2=never.", FCVAR_NONE);
 	g_cvPatchs[3] = CreateConVar("l4d2_hunter_patch_pounce_interrupt", "0", "Whether enable pounce interrupt.\n0=game default, 1=always, 2=never.", FCVAR_NONE);
-	
+
 	AutoExecConfig(true, "l4d2_hunter_patch");
 
 	RegAdminCmd("sm_hunter_patch_print_cvars", Cmd_PrintCvars, ADMFLAG_ROOT);
+	HookEvent("lunge_pounce", Event_LungePounce);
 }
 
 public void OnConfigsExecuted()
@@ -115,6 +116,26 @@ void InitGameData()
 		if (!g_mPatchs[i][NEVER].Validate())
 			SetFailState("Verify patch: %s failed.", sName);
 	}
-	
+
 	delete hGameData;
 }
+
+// Fixed crash in CTerrorPlayer::OnPouncedOnSurvivor function when the server is empty.
+// HookEvent so that the function always returns a valid event pointer when CreateEvent.
+// If there are other plugins already hooked 'lunge_pounce' event, it can also prevent crashes.
+/*
+IGameEvent *event = gameeventmanager->CreateEvent( "lunge_pounce" );
+if ( event )
+{
+	...
+}
+if ( CTerrorGameRules::HasPlayerControlledZombies() )
+{
+	...
+	event->SetInt("damage", dmg ); // NULL pointer crash
+}
+*/
+void Event_LungePounce(Event event, const char[] name, bool dontBroadcast)
+{
+}
+
