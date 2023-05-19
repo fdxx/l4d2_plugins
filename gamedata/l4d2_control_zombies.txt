@@ -76,8 +76,8 @@
 				"linux"
 				{
 					"offset"	"3EEh"
-					"verify"	"\x74\x0F"
-					"patch"		"\xEB\x0F"
+					"verify"	"\x74"
+					"patch"		"\xEB"
 				}
 
 				"windows"

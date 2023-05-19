@@ -122,7 +122,8 @@
 			}
 
 			// CTerrorPlayer::OnTakeDamageInternal::BotCheck
-
+			// MyNextBotPointer()
+			
 			"pounce_interrupt_always"
 			{
 				"signature" "CTerrorPlayer::OnTakeDamageInternal"
@@ -190,7 +191,7 @@
 			"CTerrorPlayer::OnTakeDamageInternal"
 			{
 				"library"	"server"
-				"linux"		"@_ZN13CTerrorPlayer20OnTakeDamageInternalER15CTakeDamageInfo.part.779"
+				"linux"		"@_ZN13CTerrorPlayer20OnTakeDamageInternalER15CTakeDamageInfo.part.781"
 				"windows"	"\x53\x8B\xDC\x83\xEC\x08\x83\xE4\xF0\x83\xC4\x04\x55\x8B\x6B\x04\x89\x6C\x24\x04\x8B\xEC\x81\xEC\xB8\x00\x00\x00\x56"
 				/* 53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC 81 EC B8 00 00 00 56 */
 			}

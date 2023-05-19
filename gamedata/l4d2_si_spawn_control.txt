@@ -50,7 +50,7 @@
 					"signature"	"CDirectorMusicBanks::OnRoundStart"
 					"read"		"10"
 					"read"		"0"		// TheDirector
-					"read"		"1400"	// pDirectorScriptedEventManager. found from CFinaleTrigger::Spawn function.
+					"read"		"1592"	// pDirectorScriptedEventManager. found from CFinaleTrigger::Spawn function.
 					"offset"	"273"	// m_PanicEventStage. found from ZombieManager::GetRandomPZSpawnPosition function.
 				}
 
@@ -59,7 +59,7 @@
 					"signature"	"CDirectorMusicBanks::OnRoundStart"
 					"read"		"12"
 					"read"		"0"
-					"read"		"1400"
+					"read"		"1592"
 					"offset"	"273"
 				}
 			}
@@ -129,8 +129,8 @@
 			{
 				"library"   "server"
 				"linux"     "@_ZNK9CDirector19GetMaxPlayerZombiesEv"
-				"windows"   "\x55\x8B\xEC\x51\x56\x8B\xF1\x8B\x8E\x88\x05\x00\x00\x8D\x45\xFC\x50\xE8"
-				/* 55 8B EC 51 56 8B F1 8B 8E 88 05 00 00 8D 45 FC 50 E8 */
+				"windows"   "\x55\x8B\xEC\x51\x56\x8B\xF1\x8B\x8E\x48\x06\x00\x00\x8D\x45\xFC\x50\xE8"
+				// 55 8B EC 51 56 8B F1 8B 8E 48 06 00 00 8D 45 FC 50 E8
 			}
 
 			"CDirectorMusicBanks::OnRoundStart"
