@@ -2,6 +2,15 @@
 {
 	"left4dead2" 
 	{
+		"Offsets"
+		{
+			"os"
+			{
+				"linux"		"0"
+				"windows"	"1"
+			}
+		}
+
 		"Functions"
 		{
 			// void CTerrorPlayer::PlayerZombieAbortControl(void)
@@ -48,6 +57,18 @@
 			}
 		}
 
+		"Addresses"
+		{
+			"ForEachTerrorPlayer<SpawnablePZScan>"
+			{
+				"windows"
+				{
+					"signature"	"z_spawn_old"
+					"offset"	"0x6BE" // Call ForEachTerrorPlayer<SpawnablePZScan>
+				}
+			}
+		}
+
 		"MemPatches"
 		{
 			"CTerrorPlayer::UpdateZombieFrustration::AllowCheckPointFrustration"
@@ -83,8 +104,8 @@
 				"windows"
 				{
 					"offset"	"2E4h"
-					"verify"	"\x7E\x1B"
-					"patch"		"\xEB\x1B"
+					"verify"	"\x7E"
+					"patch"		"\xEB"
 				}
 			}
 
@@ -95,15 +116,15 @@
 				"linux"
 				{
 					"offset"	"1Eh"
-					"verify"	"\x74\x50"
-					"patch"		"\xEB\x50"
+					"verify"	"\x74"
+					"patch"		"\xEB"
 				}
 
 				"windows"
 				{
 					"offset"	"13h"
-					"verify"	"\x74\x22"
-					"patch"		"\xEB\x22"
+					"verify"	"\x74"
+					"patch"		"\xEB"
 				}
 			}
 
@@ -129,6 +150,13 @@
 
 		"Signatures" 
 		{
+			"z_spawn_old"
+			{
+				"library"	"server"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x10\x01\x00\x00\xA1\x2A\x2A\x2A\x2A\x33\xC5\x89\x45\xFC\x56\x57\x8B\x7D\x08\xE8"
+				// ? ? ? ? ? 10 01 00 00 A1 ? ? ? ? 33 C5 89 45 FC 56 57 8B 7D 08 E8
+			}
+
 			"CTerrorPlayer::PlayerZombieAbortControl"
 			{
 				"library"	"server"

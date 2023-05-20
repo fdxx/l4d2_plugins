@@ -8,7 +8,7 @@
 #include <sourcescramble>	// https://github.com/nosoop/SMExt-SourceScramble
 #include <left4dhooks>
 
-#define VERSION "1.3"
+#define VERSION "1.4"
 
 #define STATE_GHOST 8
 #define EF_NODRAW	32
@@ -774,7 +774,23 @@ void Init()
 	SetupDetour(hGameData, OnPlayerZombieAbortControlPre, OnPlayerZombieAbortControlPost, "CTerrorPlayer::PlayerZombieAbortControl");
 	SetupDetour(hGameData, OnMaterializeFromGhostPre, OnMaterializeFromGhostPost, "CTerrorPlayer::MaterializeFromGhost");
 	SetupDetour(hGameData, OnEnterGhostStatePre, INVALID_FUNCTION, "CTerrorPlayer::OnEnterGhostState");
-	SetupDetour(hGameData, OnSpawnPlayerZombieScanPre, INVALID_FUNCTION, "ForEachTerrorPlayer<SpawnablePZScan>");
+
+	if (hGameData.GetOffset("os") == 1) // windows
+	{
+		strcopy(sBuffer, sizeof(sBuffer), "ForEachTerrorPlayer<SpawnablePZScan>");
+		Address addr = hGameData.GetAddress(sBuffer);
+		if (addr == Address_Null)
+			SetFailState("Failed to GetAddress: %s", sBuffer);
+		Address pRelativeOffset = LoadFromAddress(addr + view_as<Address>(1), NumberType_Int32);
+		Address pFunc = addr + view_as<Address>(5) + pRelativeOffset;
+
+		DynamicDetour detour = new DynamicDetour(pFunc, CallConv_CDECL, ReturnType_Bool, ThisPointer_Ignore);
+		detour.AddParam(HookParamType_ObjectPtr);
+		if (!detour.Enable(Hook_Pre, OnSpawnPlayerZombieScanPre))
+			SetFailState("Failed to detour: %s", sBuffer);
+	}
+	else
+		SetupDetour(hGameData, OnSpawnPlayerZombieScanPre, INVALID_FUNCTION, "ForEachTerrorPlayer<SpawnablePZScan>");
 
 	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::AllowCheckPointFrustration");
 	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::NeverTryOfferingTankBot");
