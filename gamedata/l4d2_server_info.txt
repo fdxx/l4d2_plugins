@@ -1,0 +1,84 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"MemPatches"
+		{
+			"GetGameDescription"
+			{
+				"signature" "GetGameDescription"
+				
+				// This patch doesn't actually modify the bytes.
+				// Just for provide the address, And auto restore the bytes when the plugin is unload.
+
+				"linux"
+				{
+					"offset"	"6h"
+					"verify"	"\xC7\x44\x24\x08"
+					"patch"		"\x00\x00\x00\x00\x00\x00\x00\x00"
+					"preserve"  "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+				}
+
+				"windows"
+				{
+					"offset"	"0h"
+					"verify"	"\x68"
+					"patch"		"\x00\x00\x00\x00\x00"
+					"preserve"  "\xFF\xFF\xFF\xFF\xFF"
+				}
+			}
+		}
+
+		"Addresses"
+		{
+			"g_pMatchExtL4D"
+			{
+				"linux"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"44"
+				}
+				"windows"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"42"
+				}
+				"read"	"0"
+			}
+		}
+
+		"Offsets"
+		{
+			"GetGameDescription::OpcodeBytes"
+			{
+				"linux"		"4"
+				"windows"	"1"
+			}
+
+			"CMatchExtL4D::GetGameModeInfo"
+			{
+				"linux"		"4"
+				"windows"	"4"
+			}
+		}
+
+		"Signatures" 
+		{
+			"GetGameDescription"
+			{
+				"library"	"server"
+				"linux"		"@_Z18GetGameDescriptionv"
+				"windows"	"\x68\x2A\x2A\x2A\x2A\x68\x80\x00\x00\x00\x68\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x83\xC4\x0C"
+				// 68 ? ? ? ? 68 80 00 00 00 68 ? ? ? ? E8 ? ? ? ? 83 C4 0C
+			}
+
+			"CTerrorGameRules::GetMissionInfo"
+			{
+				"library"	"server"
+				"linux"		"@_ZN16CTerrorGameRules14GetMissionInfoEv"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x8B\x2A\x8B\x2A\x2A\x56\xFF\x2A\x8B\x2A\x8B\x2A\x8B\x2A\x2A\x6A\x2A\xFF\x2A\x8B\x2A\x85\x2A\x75\x2A\x5E"
+				// ? ? ? ? ? ? ? ? ? ? 8B ? 8B ? ? 56 FF ? 8B ? 8B ? 8B ? ? 6A ? FF ? 8B ? 85 ? 75 ? 5E
+			}
+		}
+	}
+}
