@@ -6,7 +6,7 @@
 #include <multicolors>   
 #include <dhooks>
 
-#define VERSION "1.4"
+#define VERSION "1.5"
 
 #define	SMOKER	1
 #define	BOOMER	2
@@ -178,7 +178,12 @@ void Event_LungePounce(Event event, const char[] name, bool dontBroadcast)
 
 		if (IsValidSI(client) && IsValidSur(victim))
 		{
-			CPrintToChatAll("{orange}★★★ {olive}%N {red}high-pounced {olive}%N {orange}%i {default}damage", client, victim, damage);
+			float fStart[3], fEnd[3], fHeight;
+			GetEntPropVector(client, Prop_Send, "m_pounceStartPosition", fStart);
+			GetEntPropVector(client, Prop_Data, "m_vecAbsOrigin", fEnd);
+			fHeight = GetVectorDistance(fStart, fEnd);
+
+			CPrintToChatAll("{orange}★★★ {olive}%N {red}high-pounced {olive}%N {orange}%i {default}damage, height: {orange}%.1f", client, victim, damage, fHeight);
 		}
 	}
 }
