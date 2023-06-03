@@ -89,6 +89,12 @@
 				"linux"		"4"
 				"windows"	"4"
 			}
+
+			"CMatchExtL4D::GetMapInfo"
+			{
+				"linux"		"2"
+				"windows"	"2"
+			}
 		}
 
 		"Signatures"

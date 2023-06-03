@@ -20,7 +20,7 @@ Credits:
 #include <sourcescramble>			// https://github.com/nosoop/SMExt-SourceScramble
 #include <l4d2_source_keyvalues>	// https://github.com/fdxx/l4d2_source_keyvalues
 
-#define VERSION "0.6"
+#define VERSION "0.7"
 
 #define RMFLAG_NO_MODE_CHANGE			1
 #define RMFLAG_NO_DIFFICULTY_CHANGE		2
@@ -61,7 +61,8 @@ Address
 
 Handle
 	g_hSDKUpdateGameType,
-	g_hSDKGetGameModeInfo;
+	g_hSDKGetGameModeInfo,
+	g_hSDKGetMapInfo;
 
 public Plugin myinfo = 
 {
@@ -129,9 +130,9 @@ MRESReturn OnApplyGameSettingsPre(Address pThis, DHookParam hParams)
 	if (g_iUnreserveType == UNRESERVE_ALWAYS || !g_iReserveModifyFlags || hParams.IsNull(1))
 		return MRES_Ignored;
 
-	char sBuffer[128];
+	char sBuffer[256];
 	SourceKeyValues kv = view_as<SourceKeyValues>(hParams.GetAddress(1));
-	
+
 	kv.GetName(sBuffer, sizeof(sBuffer));
 	if (strcmp(sBuffer, "left4dead2", false)) // Exclude ExecGameTypeCfg
 		return MRES_Ignored;
@@ -147,8 +148,7 @@ MRESReturn OnApplyGameSettingsPre(Address pThis, DHookParam hParams)
 
 	if (g_iReserveModifyFlags & RMFLAG_FORCE_OFFICIAL_MAP)
 	{
-		kv.GetString("Game/campaign", sBuffer, sizeof(sBuffer));
-		if (strncmp(sBuffer, "L4D2C", 5, false))
+		if (IsNeedForceOfficialMap(kv))
 		{
 			kv.SetString("Game/campaign", "L4D2C2");
 			kv.SetInt("Game/chapter", 1);
@@ -156,6 +156,24 @@ MRESReturn OnApplyGameSettingsPre(Address pThis, DHookParam hParams)
 	}
 
 	return MRES_Ignored;
+}
+
+bool IsNeedForceOfficialMap(SourceKeyValues kvSettings)
+{
+	char sApplyCampaign[256], sApplyMap[256], sCurMap[256];
+	kvSettings.GetString("Game/campaign", sApplyCampaign, sizeof(sApplyCampaign));
+	if (!strncmp(sApplyCampaign, "L4D2C", 5, false))
+		return false;
+
+	SourceKeyValues kvMapInfo = SDKCall(g_hSDKGetMapInfo, g_pMatchExtL4D, kvSettings, 0);
+	if (!kvMapInfo)
+		return false;
+
+	kvMapInfo.GetString("Map", sApplyMap, sizeof(sApplyMap));
+	GetCurrentMap(sCurMap, sizeof(sCurMap));
+
+	// if the client changed the map.
+	return strcmp(sApplyMap, sCurMap) != 0;
 }
 
 public void OnClientConnected(int client)
@@ -291,6 +309,19 @@ void Init()
 	g_hSDKGetGameModeInfo = EndPrepSDKCall();
 	if (g_hSDKGetGameModeInfo == null)
 		SetFailState("Failed to create SDKCall: %s", sBuffer);
+
+	// KeyValues * CMatchExtL4D::GetMapInfo( KeyValues *pSettings, KeyValues **ppMissionInfo )
+	strcopy(sBuffer, sizeof(sBuffer), "CMatchExtL4D::GetMapInfo");
+	StartPrepSDKCall(SDKCall_Raw);
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, sBuffer);
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
+	PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
+	g_hSDKGetMapInfo = EndPrepSDKCall();
+	if (g_hSDKGetMapInfo == null)
+		SetFailState("Failed to create SDKCall: %s", sBuffer);
+
+		
 
 	delete hGameData;
 }
