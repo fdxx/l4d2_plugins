@@ -3,9 +3,8 @@
 
 #include <sourcemod>
 #include <sdktools>
-#include <sourcescramble>
 
-#define VERSION "0.1"
+#define VERSION "0.3"
 
 ConVar
 	fps_max,
@@ -24,26 +23,24 @@ ConVar
 	net_splitrate,
 	sv_gravity;
 
-MemoryBlock gGlobals, gpGlobals;
-MemoryPatch g_mPatch[6];
 int g_iTickRate;
 float g_fTickInterval;
 
 public Plugin myinfo =
 {
-    name = "[L4D2] Tickrate Enabler",
-    author = "BHaType & Satanic Spirit, fdxx",
+	name = "l4d2_tick_network_tweaks",
+	author = "fdxx",
 	version = VERSION,
 };
 
 public void OnPluginStart()
 {
 	g_iTickRate = GetCommandLineParamInt("-tickrate", 30);
+	g_iTickRate = ClampInt(g_iTickRate, 30, 128);
 	g_fTickInterval = 1.0 / g_iTickRate;
-	SetTickRate();
 
 	CreateConVar("l4d2_tickrate", "", "", FCVAR_NOTIFY|FCVAR_DONTRECORD).IntValue = g_iTickRate; // Expose tickrate to A2S_RULES.
-	CreateConVar("l4d2_tickrate_version", VERSION, "version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	CreateConVar("l4d2_tick_network_tweaks_version", VERSION, "version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	
 	FindConVarEx("fps_max", fps_max);
 	FindConVarEx("sv_minrate", sv_minrate);
@@ -64,72 +61,13 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_tickcvar", Cmd_PrintCvar);
 }
 
-void SetTickRate()
+int ClampInt(int value, int min, int max)
 {
-	GameData hGameData = new GameData("l4d2_tickrate");
-	Address addr;
-
-	int windows = hGameData.GetOffset("os");
-
-	GetAddress(hGameData, "CCommonHostState::interval_per_tick", addr);
-	StoreToAddress(addr, view_as<int>(g_fTickInterval), NumberType_Int32);
-
-	GetAddress(hGameData, "CBaseServer::m_flTickInterval", addr);
-	StoreToAddress(addr, view_as<int>(g_fTickInterval), NumberType_Int32);
-
-	GetAddress(hGameData, "DEFAULT_TICK_INTERVAL", addr);
-	StoreToAddress(addr, view_as<int>(g_fTickInterval), NumberType_Int32);
-
-	for (int i = 0; i < sizeof(g_mPatch); i++)
-		delete g_mPatch[i];
-
-	// Linux: CGameClient::SetRate -> ClampClientRate -> CBaseClient::SetRate -> CNetChan::SetDataRate
-	// windows: CGameClient::SetRate (inline ClampClientRate) -> CBaseClient::SetRate -> CNetChan::SetDataRate
-	// windows: CBoundedCvar_Rate.GetFloat() -> ClampClientRate
-	if (windows)
-		SetupPatch(hGameData, "CGameClient::SetRate", g_mPatch[0]);
-	SetupPatch(hGameData, "ClampClientRate", g_mPatch[1]);
-	SetupPatch(hGameData, "CNetChan::SetDataRate", g_mPatch[2]);
-
-	// FixBoomer
-	delete gGlobals;
-	delete gpGlobals;
-
-	gGlobals = new MemoryBlock(0x14);
-	gGlobals.StoreToOffset(16, view_as<int>(0.033333333), NumberType_Int32); //frametime
-	
-	gpGlobals = new MemoryBlock(4);
-	gpGlobals.StoreToOffset(0, view_as<int>(gGlobals.Address), NumberType_Int32);
-
-	SetupPatch(hGameData, "CVomit::UpdateAbility::patch1", g_mPatch[3]);
-	StoreToAddress(g_mPatch[3].Address + view_as<Address>(1), gpGlobals.Address, NumberType_Int32);
-
-	SetupPatch(hGameData, "CVomit::UpdateAbility::patch2", g_mPatch[4]);
-	StoreToAddress(g_mPatch[4].Address + view_as<Address>(1), gpGlobals.Address, NumberType_Int32);
-
-	if (windows)
-	{
-		SetupPatch(hGameData, "CVomit::UpdateAbility::patch3", g_mPatch[5]);
-		StoreToAddress(g_mPatch[5].Address + view_as<Address>(1), gpGlobals.Address, NumberType_Int32);
-	}
-
-	delete hGameData;
-}
-
-void GetAddress(GameData hGameData, const char[] name, Address &address)
-{
-	address = hGameData.GetAddress(name);
-	if (address == Address_Null)
-		SetFailState("Failed to get address: %s", name);
-}
-
-void SetupPatch(GameData hGameData, const char[] name, MemoryPatch &patch = null)
-{
-	patch = MemoryPatch.CreateFromConf(hGameData, name);
-	if (!patch.Validate())
-		SetFailState("Failed to validate patch: %s", name);
-	if (!patch.Enable())
-		SetFailState("Failed to enable patch: %s", name);
+	if (value < min)
+		return min;
+	if (value > max)
+		return max;
+	return value;
 }
 
 void FindConVarEx(const char[] name, ConVar &cvar)
@@ -139,6 +77,7 @@ void FindConVarEx(const char[] name, ConVar &cvar)
 	cvar.SetBounds(ConVarBound_Lower, false);
 }
 
+// Does not trigger when maxplayers = 1.
 public void OnConfigsExecuted()
 {
 	NetworkTweaks();
