@@ -7,7 +7,7 @@
 #include <multicolors>  
 #include <dhooks>
 
-#define VERSION "2.7"
+#define VERSION "2.8"
 
 #define SPAWN_SOUND "ui/pickup_secret01.wav"
 
@@ -43,9 +43,7 @@ bool
 
 float
 	g_fSpawnFlow[2],
-	g_fSpawnPos[2][3],
-
-	g_fMapMaxFlowDist;
+	g_fSpawnPos[2][3];
 
 Handle
 	g_hSDKFindRandomSpot,
@@ -300,7 +298,6 @@ Action RoundStart_Timer(Handle timer)
 
 	char sMap[256];
 	GetCurrentMap(sMap, sizeof(sMap));
-	g_fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
 
 	GetBanFlow(sMap);
 	GetSpawnData();
@@ -359,7 +356,8 @@ void GetSpawnData()
 	float fFlow, fTriggerSpawnFlow, fSpawnPos[3];
 
 	int iAreaCount = g_pTheNavAreas.Count();
-	float fSpawnBufferFlow = (BOSS_SURVIVOR_SAFE_DISTANCE / g_fMapMaxFlowDist);
+	float fMapMaxFlowDist = L4D2Direct_GetMapMaxFlowDistance();
+	float fSpawnBufferFlow = (BOSS_SURVIVOR_SAFE_DISTANCE / fMapMaxFlowDist);
 	bool bFinaleArea = L4D_IsMissionFinalMap() && L4D2_GetCurrentFinaleStage() < 18;
 
 	for (int i = 0; i < iAreaCount; i++)
@@ -367,7 +365,7 @@ void GetSpawnData()
 		pArea = g_pTheNavAreas.GetArea(i);
 		if (pArea && IsValidFlags(pArea.SpawnAttributes, bFinaleArea))
 		{
-			fFlow = pArea.GetFlow()/g_fMapMaxFlowDist;
+			fFlow = pArea.GetFlow()/fMapMaxFlowDist;
 			if (!IsValidFlow(fFlow))
 				continue;
 
@@ -686,7 +684,7 @@ float GetSurMaxFlow()
 	if (IsValidSur(iFurthestSur)) fSurMaxDistance = L4D2Direct_GetFlowDistance(iFurthestSur);
 	else fSurMaxDistance = L4D2_GetFurthestSurvivorFlow();
 
-	return (fSurMaxDistance / g_fMapMaxFlowDist);
+	return (fSurMaxDistance / L4D2Direct_GetMapMaxFlowDistance());
 }
 
 bool IsValidSur(int client)
