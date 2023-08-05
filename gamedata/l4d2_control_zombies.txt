@@ -90,6 +90,25 @@
 				}
 			}
 
+			"CTerrorPlayer::UpdateZombieFrustration::SkipUselessCode"
+			{
+				"signature" "CTerrorPlayer::UpdateZombieFrustration"
+
+				"linux"
+				{
+					"offset"	"222h"
+					"verify"	"\xF6\x83"
+					"patch"		"\xE9\x4E\x01\x00\x00\x90\x90"
+				}
+
+				"windows"
+				{
+					"offset"	"1BAh"
+					"verify"	"\x8B\x96"
+					"patch"		"\xE9\xDF\x00\x00\x00\x90"
+				}
+			}
+
 			"CTerrorPlayer::UpdateZombieFrustration::NeverTryOfferingTankBot"
 			{
 				"signature" "CTerrorPlayer::UpdateZombieFrustration"
@@ -125,25 +144,6 @@
 					"offset"	"13h"
 					"verify"	"\x74"
 					"patch"		"\xEB"
-				}
-			}
-
-			"CTerrorPlayer::UpdateZombieFrustration::AllowIgniteFrustration"
-			{
-				"signature" "CTerrorPlayer::UpdateZombieFrustration"
-
-				"linux"
-				{
-					"offset"	"229h"
-					"verify"	"\x0F\x85"
-					"patch"		"\x90\x90\x90\x90\x90\x90"
-				}
-
-				"windows"
-				{
-					"offset"	"1C6h"
-					"verify"	"\x0F\x85"
-					"patch"		"\x90\x90\x90\x90\x90\x90"
 				}
 			}
 		}
@@ -185,16 +185,13 @@
 			{
 				"library"	"server"
 				"linux"		"@_Z19ForEachTerrorPlayerI15SpawnablePZScanEbRT_"
-				"windows"	"\x55\x8B\xEC\x83\xEC\x2C\x8B\x0D\x2A\x2A\x2A\x2A\x53\x8B\x5D\x08\x56"
-				// 55 8B EC 83 EC 2C 8B 0D ? ? ? ? 53 8B 5D 08 56
 			}
 
 			"CTerrorPlayer::UpdateZombieFrustration"
 			{
 				"library"	"server"
 				"linux"		"@_ZN13CTerrorPlayer23UpdateZombieFrustrationEv"
-				"windows"	"\x55\x8B\xEC\xA1\x2A\x2A\x2A\x2A\x83\xEC\x08\x83\x78\x30\x00\x56\x8B\xF1\x0F\x84\x2A\x2A\x2A\x2A\xE8"
-				// 55 8B EC A1 ? ? ? ? 83 EC 08 83 78 30 00 56 8B F1 0F 84 ? ? ? ? E8
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x83\x2A\x2A\x83\x2A\x2A\x2A\x56\x8B\x2A\x0F\x84\x2A\x2A\x2A\x2A\xE8"
 			}
 
 			"CDirector::SetLotteryTank"

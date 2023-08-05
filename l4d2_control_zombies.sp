@@ -8,7 +8,7 @@
 #include <sourcescramble>	// https://github.com/nosoop/SMExt-SourceScramble
 #include <left4dhooks>
 
-#define VERSION "1.4"
+#define VERSION "1.5"
 
 #define STATE_GHOST 8
 #define EF_NODRAW	32
@@ -39,7 +39,6 @@ ConVar
 	g_cvSpawnTime,
 	g_cvAdminImmunity,
 	g_cvBlockOtherRespawn,
-	g_cvIgniteFrustr,
 	mp_gamemode,
 	z_scrimmage_sphere,
 	z_max_player_zombies,
@@ -58,8 +57,7 @@ int
 bool
 	g_bLeftSafeArea,
 	g_bAdminImmunity,
-	g_bBlockOtherRespawn,
-	g_bIgniteFrustr;
+	g_bBlockOtherRespawn;
 
 Handle
 	g_hSpawnTimer[MAXPLAYERS+1],
@@ -77,9 +75,6 @@ ArrayList
 
 char
 	g_sMode[128];
-
-MemoryPatch
-	g_mIgniteFrustr;
 
 public Plugin myinfo = 
 {
@@ -106,7 +101,6 @@ public void OnPluginStart()
 	g_cvSpawnTime = CreateConVar("l4d2_cz_spawn_time", "15", "Spawn time");
 	g_cvAdminImmunity = CreateConVar("l4d2_cz_admin_immunity", "1", "Admin join infected team without limit.");
 	g_cvBlockOtherRespawn = CreateConVar("l4d2_cz_block_other_pz_respawn", "1", "Block infected player spawned by z_spawn_old command.");
-	g_cvIgniteFrustr = CreateConVar("l4d2_cz_ignite_frustration", "1", "Allow frustration when TANK is ignited?");
 
 	mp_gamemode = FindConVar("mp_gamemode");
 	z_scrimmage_sphere = FindConVar("z_scrimmage_sphere");
@@ -127,7 +121,6 @@ public void OnPluginStart()
 	g_cvSpawnTime.AddChangeHook(OnConVarChanged);
 	g_cvAdminImmunity.AddChangeHook(OnConVarChanged);
 	g_cvBlockOtherRespawn.AddChangeHook(OnConVarChanged);
-	g_cvIgniteFrustr.AddChangeHook(OnConVarChanged);
 	survivor_max_incapacitated_count.AddChangeHook(OnConVarChanged);
 
 	HookEvent("player_death", Event_PlayerDeath, EventHookMode_Pre);
@@ -166,15 +159,7 @@ void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue
 	g_iSpawnTime = g_cvSpawnTime.IntValue;
 	g_bAdminImmunity = g_cvAdminImmunity.BoolValue;
 	g_bBlockOtherRespawn = g_cvBlockOtherRespawn.BoolValue;
-	g_bIgniteFrustr = g_cvIgniteFrustr.BoolValue;
 	g_iSurMaxIncapCount = survivor_max_incapacitated_count.IntValue;
-
-	g_mIgniteFrustr.Disable();
-	if (g_bIgniteFrustr)
-	{
-		if (!g_mIgniteFrustr.Enable())
-			SetFailState("Failed to enable patch.");
-	}
 }
 
 public void OnConfigsExecuted()
@@ -283,7 +268,7 @@ Action SpawnSI_Timer(Handle timer, int userid)
 
 Action Cmd_JoinTeam3(int client, int args)
 {
-	if (GetClientTeam(client) == TEAM_INF)
+	if (client < 1 || client > MaxClients || !IsClientInGame(client) || GetClientTeam(client) == TEAM_INF)
 		return Plugin_Handled;
 
 	if (g_bAdminImmunity && CheckCommandAccess(client, "sm_admin", ADMFLAG_ROOT))
@@ -302,7 +287,7 @@ Action Cmd_JoinTeam3(int client, int args)
 
 Action Cmd_JoinTank(int client, int args)
 {
-	if (GetClientTeam(client) != TEAM_INF)
+	if (client < 1 || client > MaxClients || !IsClientInGame(client) || GetClientTeam(client) != TEAM_INF)
 		return Plugin_Handled;
 
 	int userid = GetClientUserId(client);
@@ -793,13 +778,10 @@ void Init()
 		SetupDetour(hGameData, OnSpawnPlayerZombieScanPre, INVALID_FUNCTION, "ForEachTerrorPlayer<SpawnablePZScan>");
 
 	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::AllowCheckPointFrustration");
+	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::SkipUselessCode"); // jump to CreateEvent("tank_frustrated")
 	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::NeverTryOfferingTankBot");
 	SetupPatch(hGameData, "CDirector::SetLotteryTank::NeverEnterStasis");
 
-	// if (*(this + 339) & 8)
-	// Found the meaning of this member variable from the CTerrorPlayer::Ignite function.
-	SetupPatch(hGameData, "CTerrorPlayer::UpdateZombieFrustration::AllowIgniteFrustration", g_mIgniteFrustr);
-	
 	// void CTerrorPlayer::SetPreSpawnClass(ZombieClassType)
 	strcopy(sBuffer, sizeof(sBuffer), "CTerrorPlayer::SetPreSpawnClass");
 	StartPrepSDKCall(SDKCall_Player);
