@@ -132,7 +132,7 @@ methodmap NavArea
 	
 	public void GetSpawnPos(float fPos[3])
 	{
-		SDKCall(g_hSDKFindRandomSpot, this, fPos, sizeof(fPos));
+		SDKCall(g_hSDKFindRandomSpot, this, fPos);
 	}
 
 	property int SpawnAttributes
