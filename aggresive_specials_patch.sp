@@ -1,6 +1,3 @@
-
-// TANK is not included. need use https://github.com/fdxx/l4d2_plugins/blob/main/l4d2_activate_tank.sp
-
 #pragma semicolon 1
 #pragma newdecls required
 
