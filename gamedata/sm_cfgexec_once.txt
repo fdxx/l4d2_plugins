@@ -1,0 +1,39 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Offsets"
+		{
+			"CCommandSize"
+			{
+				"linux"		"1288"
+				"windows"	"1288"
+			}
+		}
+
+		"Signatures"
+		{
+			"CCommand::CCommand"
+			{
+				"library"	"engine"
+				"linux"		"@_ZN8CCommandC2Ev"
+				"windows"	"\x80\x3D\x2A\x2A\x2A\x2A\x00\x56\x8B\xF1\x75\x2A\x68"
+			}
+
+			"CCommand::Tokenize"
+			{
+				"library"	"engine"
+				"linux"		"@_ZN8CCommand8TokenizeEPKcP14characterset_t"
+				"windows"	"\x55\x8B\xEC\x83\xEC\x38\x8B\x45\x08"
+			}
+
+			"Cmd_Exec_f"
+			{
+				"library"	"engine"
+				"linux"		"@_Z10Cmd_Exec_fRK8CCommand"
+				"windows"	"\x55\x8B\xEC\xB8\x20\x21\x00\x00"
+			}
+		}
+	}
+}
+
