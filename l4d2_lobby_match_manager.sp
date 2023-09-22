@@ -5,10 +5,27 @@ Credits:
 	- https://forums.alliedmods.net/showthread.php?t=94415
 	- https://forums.alliedmods.net/showthread.php?t=321696
 
-关于动态大厅
+## 关于动态大厅
 大厅的部分信息是保存在客户端，最先进入服务器的玩家是大厅厅长(CSysSessionHost)，其他玩家加入服务器会和大厅厅长通信，判断是否能进入服务器(CSysSessionHost::Process_RequestJoinData)
-当大厅满了移除了预定，CSysSessionHost保存的信息会更新，这些都发生在客户端运行的 matchmaking.so 中，服务端无法干涉
-在客户端启动项参数加上-debug -dev，会看到更多信息
+大厅厅长那边的数据如何更新和继承尚不清楚，这些都发生在客户端运行的 matchmaking.so 中，服务端无法干涉。
+在客户端启动项参数加上-debug -dev，客户端控制台输入 mm_debugprint 命令会看到更多信息
+
+## 这个插件做了什么？
+### cvar l4d2_lmm_unreserve_type
+当值为1时，彻底禁止大厅匹配，并且用内存补丁禁止了通过创建大厅方式连接到服务器。
+当值为2时，当大厅满时移除大厅匹配（对抗8人，合作4人），并且不再恢复。如果此时大厅厅长有8人大厅MOD时可能依然可以匹配。
+
+### cvar l4d2_lmm_reservation_modify_flags
+当客户端创建大厅进入服务器时，服务器会应用客户端的创建大厅时选择的模式、难度、地图等，此cvar对此进行控制修改。见RMFLAG_*，要修改哪些将这个值进行相加。
+
+### cmd sm_lobby_status
+查看当前大厅的一些参数
+
+### cmd sm_lobby_set
+对大厅的一些参数进行设置，如手动关闭大厅等
+
+## 使用本插件的注意事项
+除了本插件外，移除所有有关大厅匹配的参数、设置、插件、各种预定cookie设置等。包括但不限于sv_allow_lobby_connect_only，L4D_SetLobbyReservation、L4D_LobbyUnreserve、sv_cookie等。
 
 =======================================================================================*/
 
