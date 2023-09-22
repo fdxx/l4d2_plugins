@@ -4,10 +4,10 @@
 #include <sourcemod>
 #include <multicolors>  
 
-#define VERSION		"0.2"
+#define VERSION		"0.3"
 
 ConVar g_cvInterval;
-float g_fInterval, g_fLastTime[MAXPLAYERS];
+float g_fLastTime[MAXPLAYERS];
 
 public Plugin myinfo = 
 {
@@ -19,18 +19,10 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	CreateConVar("l4d2_give_ammo_version", VERSION, "version", FCVAR_NOTIFY|FCVAR_DONTRECORD);
-	g_cvInterval = CreateConVar("l4d2_give_ammo_time", "90.0", "使用命令的最小间隔时间");
-	g_fInterval = g_cvInterval.FloatValue;
-	g_cvInterval.AddChangeHook(OnConVarChange);
+	g_cvInterval = CreateConVar("l4d2_give_ammo_time", "90.0", "Interval time between using commands, -1.0=Disable");
 
 	RegConsoleCmd("sm_ammo", Cmd_GiveAmmo);
-
-	AutoExecConfig(true, "l4d2_give_ammo");
-}
-
-void OnConVarChange(ConVar convar, const char[] oldValue, const char[] newValue)
-{
-	g_fInterval = g_cvInterval.FloatValue;
+	//AutoExecConfig(true, "l4d2_give_ammo");
 }
 
 public void OnClientPutInServer(int client)
@@ -40,9 +32,12 @@ public void OnClientPutInServer(int client)
 
 Action Cmd_GiveAmmo(int client, int args)
 {
+	if (g_cvInterval.FloatValue < 0.0)
+		return Plugin_Handled;
+
 	if (client > 0 && IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client) && !IsFakeClient(client))
 	{
-		float fTime = GetEngineTime() - g_fLastTime[client] - g_fInterval;
+		float fTime = GetEngineTime() - g_fLastTime[client] - g_cvInterval.FloatValue;
 		if (fTime < 0.0)
 		{
 			CPrintToChat(client, "{lightgreen}请等待%.1f秒后在使用本命令", FloatAbs(fTime));
