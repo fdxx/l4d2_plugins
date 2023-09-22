@@ -7,7 +7,7 @@
 #include <multicolors>  
 #include <dhooks>
 
-#define VERSION "2.8"
+#define VERSION "2.9"
 
 #define SPAWN_SOUND "ui/pickup_secret01.wav"
 
@@ -200,7 +200,7 @@ public void OnPluginStart()
 	//DEBUG
 	RegAdminCmd("sm_reflow", Cmd_ReFlow, ADMFLAG_ROOT);
 
-	AutoExecConfig(true, "l4d2_boss_spawn_control");
+	//AutoExecConfig(true, "l4d2_boss_spawn_control");
 }
 
 Action Cmd_BossSpawnMap(int client, int args)
@@ -217,6 +217,7 @@ Action Cmd_BossSpawnMap(int client, int args)
 	char sType[8], sMap[256];
 	GetCmdArg(1, sType, sizeof(sType));
 	GetCmdArg(2, sMap, sizeof(sMap));
+	CharToLowerCase(sMap, strlen(sMap));
 
 	int iBoss = !strcmp(sCmd, "sm_tank_spawn_map", false) ? TANK : WITCH;
 
@@ -250,6 +251,7 @@ Action Cmd_BossStaticMap(int client, int args)
 	char sType[8], sMap[256];
 	GetCmdArg(1, sType, sizeof(sType));
 	GetCmdArg(2, sMap, sizeof(sMap));
+	CharToLowerCase(sMap, strlen(sMap));
 
 	int iBoss = !strcmp(sCmd, "sm_tank_static_map", false) ? TANK : WITCH;
 
@@ -298,6 +300,7 @@ Action RoundStart_Timer(Handle timer)
 
 	char sMap[256];
 	GetCurrentMap(sMap, sizeof(sMap));
+	CharToLowerCase(sMap, strlen(sMap));
 
 	GetBanFlow(sMap);
 	GetSpawnData();
@@ -332,6 +335,7 @@ void GetBanFlow(const char[] sMap)
 		return;
 	}
 
+	// JumpToKey case insensitive.
 	FormatEx(key, sizeof(key), "%s/tank_ban_flow", sMap);
 	if (kv.JumpToKey(key) && kv.GotoFirstSubKey())
 	{
@@ -690,6 +694,12 @@ float GetSurMaxFlow()
 bool IsValidSur(int client)
 {
 	return (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 2);
+}
+
+void CharToLowerCase(char[] chr, int len)
+{
+	for (int i = 0; i < len; i++)
+		chr[i] = CharToLower(chr[i]);
 }
 
 MRESReturn OnBossesProhibitedCheckPre(Address pThis, DHookReturn hReturn)
