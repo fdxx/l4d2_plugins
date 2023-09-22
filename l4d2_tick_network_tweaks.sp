@@ -4,7 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 ConVar
 	fps_max,
@@ -21,7 +21,10 @@ ConVar
 	net_maxcleartime,
 	net_splitpacket_maxrate,
 	net_splitrate,
-	sv_gravity;
+	sv_gravity,
+	sv_clockcorrection_msecs,
+	sv_forcepreload,
+	sv_client_predict;
 
 int g_iTickRate;
 float g_fTickInterval;
@@ -57,6 +60,9 @@ public void OnPluginStart()
 	FindConVarEx("net_splitpacket_maxrate", net_splitpacket_maxrate);
 	FindConVarEx("net_splitrate", net_splitrate);
 	FindConVarEx("sv_gravity", sv_gravity);
+	FindConVarEx("sv_clockcorrection_msecs", sv_clockcorrection_msecs);
+	FindConVarEx("sv_forcepreload", sv_forcepreload);
+	FindConVarEx("sv_client_predict", sv_client_predict);
 
 	RegConsoleCmd("sm_tickcvar", Cmd_PrintCvar);
 }
@@ -115,6 +121,10 @@ void NetworkTweaks()
 
 	// https://github.com/Derpduck/L4D2-Comp-Stripper-Rework/issues/35
 	sv_gravity.IntValue = 750;
+
+	sv_clockcorrection_msecs.IntValue = 30;
+	sv_forcepreload.IntValue = 1;
+	sv_client_predict.IntValue = 1;
 }
 
 Action Cmd_PrintCvar(int client, int args)
@@ -138,6 +148,9 @@ Action Cmd_PrintCvar(int client, int args)
 	ReplyToCommand(client, "%-28s = %i",	"net_splitpacket_maxrate",		net_splitpacket_maxrate.IntValue);
 	ReplyToCommand(client, "%-28s = %i",	"net_splitrate",				net_splitrate.IntValue);
 	ReplyToCommand(client, "%-28s = %i",	"sv_gravity",					sv_gravity.IntValue);
+	ReplyToCommand(client, "%-28s = %i",	"sv_clockcorrection_msecs",		sv_clockcorrection_msecs.IntValue);
+	ReplyToCommand(client, "%-28s = %i",	"sv_forcepreload",				sv_forcepreload.IntValue);
+	ReplyToCommand(client, "%-28s = %i",	"sv_client_predict",			sv_client_predict.IntValue);
 
 	return Plugin_Handled;
 }
