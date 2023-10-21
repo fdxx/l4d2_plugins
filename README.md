@@ -13,3 +13,4 @@
 - [l4d2_source_keyvalues](https://github.com/fdxx/l4d2_source_keyvalues)
 - [l4d2_netprop](https://github.com/fdxx/l4d2_netprop)
 - [l4dtoolz](https://github.com/fdxx/l4dtoolz)
+- [l4d2_config_vote](https://github.com/fdxx/l4d2_config_vote)
