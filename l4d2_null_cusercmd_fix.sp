@@ -31,4 +31,6 @@ void Init()
 		SetFailState("Verify patch failed.");
 	if (!mPatch.Enable())
 		SetFailState("Enable patch failed.");
+	
+	delete hGameData;
 }
