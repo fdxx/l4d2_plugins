@@ -5,7 +5,8 @@
 #include <left4dhooks>
 #include <l4d2_weapons_spawn> // https://github.com/fdxx/l4d2_plugins/blob/main/include/l4d2_weapons_spawn.inc
 
-#define VERSION "1.3"
+#define VERSION "1.4"
+#define MAX_ITEMNAME_LEN 128
 
 StringMap
 	g_smModelToName,
@@ -14,22 +15,32 @@ StringMap
 
 ConVar
 	g_cvFinalPills,
-	g_cvStartItems,
 	g_cvRemoveBox;
 
 bool
-	g_bFinalMap,
 	g_bFinalPills,
 	g_bRemoveBox;
 	
-char g_sStartItems[512];
-ArrayList g_aEnt;
-KeyValues g_kv;
+ArrayList
+	g_aLimitEnt,
+	g_aStartItem,
+	g_aItemSpawn;
 
 enum struct EntityData
 {
 	int entity;
-	char sName[64];
+	char sName[MAX_ITEMNAME_LEN];
+}
+
+enum struct SpawnData
+{
+	int entRef;
+	char map[256];
+	char item[MAX_ITEMNAME_LEN];
+	float origin[3];
+	float angles[3];
+	int count;
+	MoveType movetype;
 }
 
 public Plugin myinfo = 
@@ -44,86 +55,140 @@ public void OnPluginStart()
 	Init();
 
 	CreateConVar("l4d2_item_rule_version", VERSION, "version", FCVAR_NONE | FCVAR_DONTRECORD);
-	g_cvFinalPills = CreateConVar("l4d2_item_rule_finalmap_pills", "1", "Replace final map medkit with pills.");
-	g_cvRemoveBox = CreateConVar("l4d2_item_rule_remove_box", "1", "remove item box");
-	g_cvStartItems = CreateConVar("l4d2_item_rule_start_items", "weapon_pain_pills;health;ammo", "give start items");
+	g_cvFinalPills = CreateConVar("l4d2_item_rule_finalmap_pills", "0", "Replace final map medkit with pills.");
+	g_cvRemoveBox = CreateConVar("l4d2_item_rule_remove_box", "0", "remove item box");
 
 	OnConVarChanged(null, "", "");
 
 	g_cvFinalPills.AddChangeHook(OnConVarChanged);
 	g_cvRemoveBox.AddChangeHook(OnConVarChanged);
-	g_cvStartItems.AddChangeHook(OnConVarChanged);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("player_left_safe_area", Event_PlayerLeftSafeArea, EventHookMode_PostNoCopy);
 
-	RegAdminCmd("sm_item_rule_reload", Cmd_Reload, ADMFLAG_ROOT);
-	RegAdminCmd("sm_item_limit_test", Cmd_LimitTest, ADMFLAG_ROOT);
+	RegAdminCmd("sm_start_item", Cmd_AddStartItem, ADMFLAG_ROOT);
+	RegAdminCmd("sm_item_replace", Cmd_AddItemReplace, ADMFLAG_ROOT);
+	RegAdminCmd("sm_item_limit", Cmd_AddItemLimit, ADMFLAG_ROOT);
+	RegAdminCmd("sm_item_spawn", Cmd_AddItemSpawn, ADMFLAG_ROOT);
+	RegAdminCmd("sm_item_rule_reset", Cmd_Reset, ADMFLAG_ROOT);
+
+	RegAdminCmd("sm_item_rule_test", Cmd_Test, ADMFLAG_ROOT);
+}
+
+Action Cmd_AddStartItem(int client, int args)
+{
+	if (!args)
+	{
+		char cmd[128];
+		GetCmdArg(0, cmd, sizeof(cmd));
+		ReplyToCommand(client, "Syntax: %s <item1> [item2] ...", cmd);
+		return Plugin_Handled;
+	}
+	
+	char item[MAX_ITEMNAME_LEN];
+	for (int i = 1; i <= args; i++)
+	{
+		GetCmdArg(i, item, sizeof(item));
+		g_aStartItem.PushString(item);
+	}
+
+	return Plugin_Handled;
+}
+
+Action Cmd_AddItemReplace(int client, int args)
+{
+	if (args != 2)
+	{
+		char cmd[128];
+		GetCmdArg(0, cmd, sizeof(cmd));
+		ReplyToCommand(client, "Syntax: %s <oldItem> <newItem>", cmd);
+		return Plugin_Handled;
+	}
+	
+	char oldItem[MAX_ITEMNAME_LEN], newItem[MAX_ITEMNAME_LEN];
+	GetCmdArg(1, oldItem, sizeof(oldItem));
+	GetCmdArg(2, newItem, sizeof(newItem));
+	g_smItemReplace.SetString(oldItem, newItem);
+
+	return Plugin_Handled;
+}
+
+Action Cmd_AddItemLimit(int client, int args)
+{
+	if (args != 2)
+	{
+		char cmd[128];
+		GetCmdArg(0, cmd, sizeof(cmd));
+		ReplyToCommand(client, "Syntax: %s <item> <limitValue>", cmd);
+		return Plugin_Handled;
+	}
+	
+	char item[MAX_ITEMNAME_LEN];
+	GetCmdArg(1, item, sizeof(item));
+	g_smItemLimit.SetValue(item, GetCmdArgInt(2));
+	
+	return Plugin_Handled;
+}
+
+Action Cmd_AddItemSpawn(int client, int args)
+{
+	if (args < 4)
+	{
+		char cmd[128];
+		GetCmdArg(0, cmd, sizeof(cmd));
+		ReplyToCommand(client, "Syntax: %s <map> <item> <origin> <angles> [count] [movetype]", cmd);
+		ReplyToCommand(client, "Syntax: %s c2m1_highway weapon_shotgun_chrome 1,1,1 2,2,2 1 0", cmd);
+		return Plugin_Handled;
+	}
+
+	SpawnData data;
+	char buffer[128];
+
+	GetCmdArg(1, data.map, sizeof(data.map));
+	GetCmdArg(2, data.item, sizeof(data.item));
+	GetCmdArg(3, buffer, sizeof(buffer));
+	GetVecFromString(data.origin, buffer, ",");
+	GetCmdArg(4, buffer, sizeof(buffer));
+	GetVecFromString(data.angles, buffer, ",");
+
+	data.count = args > 4 ? GetCmdArgInt(5) : 1;
+	data.movetype = args > 5 ? view_as<MoveType>(GetCmdArgInt(6)) : MOVETYPE_NONE;
+
+	g_aItemSpawn.PushArray(data);
+	return Plugin_Handled;
+}
+
+Action Cmd_Reset(int client, int args)
+{
+	if (args != 1)
+	{
+		char cmd[128];
+		GetCmdArg(0, cmd, sizeof(cmd));
+		ReplyToCommand(client, "Syntax: %s <start_item|item_replace|item_limit|item_spawn>", cmd);
+		return Plugin_Handled;
+	}
+	
+	char type[16];
+	GetCmdArg(1, type, sizeof(type));
+	if (!strcmp(type, "start_item", false))
+		g_aStartItem.Clear();
+
+	else if (!strcmp(type, "item_replace", false))
+		g_smItemReplace.Clear();
+
+	else if (!strcmp(type, "item_limit", false))
+		g_smItemLimit.Clear();
+
+	else if (!strcmp(type, "item_spawn", false))
+		g_aItemSpawn.Clear();
+	
+	return Plugin_Handled;
 }
 
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	g_bFinalPills = g_cvFinalPills.BoolValue;
 	g_bRemoveBox = g_cvRemoveBox.BoolValue;
-	g_cvStartItems.GetString(g_sStartItems, sizeof(g_sStartItems));
-}
-
-void Init()
-{
-	char sBuffer[PLATFORM_MAX_PATH];
-	char sItem[64], sNewItem[64];
-	int iLimit;
-
-	delete g_smModelToName;
-	delete g_smItemReplace;
-	delete g_smItemLimit;
-	delete g_kv;
-	delete g_aEnt;
-
-	g_smModelToName = new StringMap();
-	g_smItemReplace = new StringMap();
-	g_smItemLimit = new StringMap();
-	g_kv = new KeyValues("");
-	g_aEnt = new ArrayList(sizeof(EntityData));
-	
-	for (int i; i < sizeof(g_sWeapons); i++)
-	{
-		strcopy(sBuffer, sizeof(sBuffer), g_sWeapons[i][WEAPON_MODEL]);
-		CharToLowerCase(sBuffer, strlen(sBuffer));
-		g_smModelToName.SetString(sBuffer, g_sWeapons[i][WEAPON_NAME]);
-	}
-
-	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), "data/l4d2_item_rule.cfg");
-	if (!g_kv.ImportFromFile(sBuffer))
-		SetFailState("Failed to load l4d2_item_rule.cfg");
-
-	// 保存物品替换数据
-	if (g_kv.JumpToKey("item_replace") && g_kv.GotoFirstSubKey(false))
-	{
-		do
-		{
-			g_kv.GetSectionName(sItem, sizeof(sItem));
-			g_kv.GetString(NULL_STRING, sNewItem, sizeof(sNewItem));
-			if (sNewItem[0] != '\0')
-				g_smItemReplace.SetString(sItem, sNewItem);
-		}
-		while (g_kv.GotoNextKey(false));
-	}
-
-	g_kv.Rewind();
-
-	// 保存物品限制数据
-	if (g_kv.JumpToKey("item_limit") && g_kv.GotoFirstSubKey(false))
-	{
-		do
-		{
-			g_kv.GetSectionName(sItem, sizeof(sItem));
-			iLimit = g_kv.GetNum(NULL_STRING, -1);
-			if (iLimit >= 0)
-				g_smItemLimit.SetValue(sItem, iLimit);
-		}
-		while (g_kv.GotoNextKey(false));
-	}
 }
 
 public void OnMapStart()
@@ -138,13 +203,10 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 
 Action RoundStart_Timer(Handle timer)
 {
-	g_bFinalMap = L4D_IsMissionFinalMap();
-
+	SpawnItem();
 	RemoveItemBox();
 	EntityHandling();
 	EntityLimit();
-	C4WeaponSpawn();
-
 	return Plugin_Continue;
 }
 
@@ -156,98 +218,134 @@ void Event_PlayerLeftSafeArea(Event event, const char[] name, bool dontBroadcast
 	GiveStartItem();
 }
 
+void SpawnItem()
+{
+	SpawnData data;
+	char curMap[PLATFORM_MAX_PATH];
+	GetCurrentMap(curMap, sizeof(curMap));
+	int entity;
+
+	for (int i = 0, len = g_aItemSpawn.Length; i < len; i++)
+	{
+		g_aItemSpawn.GetArray(i, data);
+		data.entRef = -1;
+		g_aItemSpawn.SetArray(i, data);
+
+		if (strcmp(curMap, data.map, false))
+			continue;
+		
+		entity = L4D2Wep_Spawn(data.item, data.origin, data.angles, data.count, data.movetype);
+		if (!IsValidEntity(entity))
+		{
+			LogError("Failed to spawn item: %s, map: %s", data.item, data.map);
+			continue;
+		}
+
+		data.entRef = EntIndexToEntRef(entity);
+		g_aItemSpawn.SetArray(i, data);
+	}
+}
+
 // C6地图上大量物品的箱子
 void RemoveItemBox()
 {
 	if (!g_bRemoveBox)
 		return;
 
-	static int iButton, iBox;
-	static char sBoxModel[PLATFORM_MAX_PATH];
+	int button, box;
+	char sBoxModel[PLATFORM_MAX_PATH];
 
-	iButton = -1;
-	while ((iButton = FindEntityByClassname(iButton, "func_button")) != -1)
+	button = -1;
+	while ((button = FindEntityByClassname(button, "func_button")) != -1)
 	{
-		iBox = GetEntPropEnt(iButton, Prop_Send, "m_glowEntity");
-		if (iBox > MaxClients && IsValidEntity(iBox))
+		box = GetEntPropEnt(button, Prop_Send, "m_glowEntity");
+		if (!IsValidEntity(box))
+			continue;
+		
+		if (GetEntPropString(box, Prop_Data, "m_ModelName", sBoxModel, sizeof(sBoxModel)) < 2)
+			continue;
+
+		if (!strcmp(sBoxModel, "models/props_waterfront/footlocker01.mdl", false))
 		{
-			if (GetEntPropString(iBox, Prop_Data, "m_ModelName", sBoxModel, sizeof(sBoxModel)) > 1)
-			{
-				if (!strcmp(sBoxModel, "models/props_waterfront/footlocker01.mdl", false))
-				{
-					RemoveEntity(iButton);
-					RemoveEntity(iBox);
-				}
-			}
+			RemoveEntity(button);
+			RemoveEntity(box);
 		}
 	}
 }
 
 void EntityHandling()
 {
-	static int iLimit;
-	static EntityData data;
-	static char sClass[64], sItem[64], sNewItem[64], sModel[PLATFORM_MAX_PATH];
+	int limit;
+	EntityData data;
+	char clsname[MAX_ITEMNAME_LEN], item[MAX_ITEMNAME_LEN], newItem[MAX_ITEMNAME_LEN], model[PLATFORM_MAX_PATH];
 
-	g_aEnt.Clear();
+	bool bFinalMap = L4D_IsMissionFinalMap();
+	g_aLimitEnt.Clear();
 
 	for (int i = MaxClients+1; i < 2049; i++)
 	{
-		if (IsValidEntity(i) && GetEdictClassname(i, sClass, sizeof(sClass)))
+		if (!IsValidEntity(i) || !GetEdictClassname(i, clsname, sizeof(clsname)))
+			continue;
+
+		if (clsname[0] != 'w' && clsname[0] != 'p' && clsname[0] != 'u')
+			continue;
+
+		if (IsCarriedByClient(i))
+			continue;
+			
+		if (GetEntPropString(i, Prop_Data, "m_ModelName", model, sizeof(model)) < 2)
+			continue;
+			
+		CharToLowerCase(model, strlen(model));
+		if (g_smModelToName.GetString(model, item, sizeof(item)))
 		{
-			if (sClass[0] != 'w' && sClass[0] != 'p' && sClass[0] != 'u')
+			if (!strcmp(clsname, "predicted_viewmodel")) // 部分物品的模型和视图模型一样
 				continue;
 
-			if (IsCarriedByClient(i))
+			if (!strcmp(item, "weapon_gascan") && IsEventGascan(i))
 				continue;
-				
-			if (GetEntPropString(i, Prop_Data, "m_ModelName", sModel, sizeof(sModel)) > 1)
+			
+			if (g_aItemSpawn.FindValue(EntIndexToEntRef(i)) != -1)
 			{
-				CharToLowerCase(sModel, strlen(sModel));
-				if (g_smModelToName.GetString(sModel, sItem, sizeof(sItem)))
+				//PrintToServer("绕过 %s (%i)", item, EntIndexToEntRef(i));
+				continue;
+			}
+				
+			if (bFinalMap && g_bFinalPills)
+			{
+				if (!strcmp(item, "weapon_pain_pills")) // 结局地图不处理药
+					continue;
+					
+				if (!strcmp(item, "weapon_first_aid_kit")) // 替换包为药
 				{
-					if (!strcmp(sClass, "predicted_viewmodel")) // 部分物品的模型和视图模型一样
-						continue;
+					ReplaceEntity(i, clsname, "weapon_pain_pills", 1, MOVETYPE_NONE);
+					continue;
+				}
+			}
 
-					if (!strcmp(sItem, "weapon_gascan") && IsEventGascan(i))
-						continue;
-						
-					if (g_bFinalMap && g_bFinalPills)
-					{
-						if (!strcmp(sItem, "weapon_pain_pills"))
-							continue;
-							
-						if (!strcmp(sItem, "weapon_first_aid_kit"))
-						{
-							ReplaceEntity(i, sClass, "weapon_pain_pills", 1, MOVETYPE_NONE);
-							continue;
-						}
-					}
+			if (g_smItemReplace.GetString(item, newItem, sizeof(newItem)))
+			{
+				ReplaceEntity(i, clsname, newItem, 3, MOVETYPE_NONE);
+				continue;
+			}
 
-					if (g_smItemReplace.GetString(sItem, sNewItem, sizeof(sNewItem)))
-					{
-						ReplaceEntity(i, sClass, sNewItem, 3, MOVETYPE_NONE);
-						continue;
-					}
-
-					if (g_smItemLimit.GetValue(sItem, iLimit) && iLimit >= 0)
-					{
-						if (iLimit == 0)
-							RemoveEntity(i);
-						else
-						{
-							data.entity = i;
-							data.sName = sItem;
-							g_aEnt.PushArray(data);
-						}
-					}
+			if (g_smItemLimit.GetValue(item, limit))
+			{
+				if (limit == 0)
+					RemoveEntity(i);
+					
+				else if (limit > 0)
+				{
+					data.entity = i;
+					data.sName = item;
+					g_aLimitEnt.PushArray(data);
 				}
 			}
 		}
 	}
 }
 
-void ReplaceEntity(int entity, const char[] sClass, const char[] sNewItem, int count = 1, MoveType movetype = MOVETYPE_CUSTOM)
+void ReplaceEntity(int entity, const char[] clsname, const char[] newItem, int count = 1, MoveType movetype = MOVETYPE_CUSTOM)
 {
 	static float fPos[3], fAng[3];
 
@@ -256,74 +354,65 @@ void ReplaceEntity(int entity, const char[] sClass, const char[] sNewItem, int c
 
 	RemoveEntity(entity);
 
-	if (!IsValidEntity(L4D2Wep_Spawn(sNewItem, fPos, fAng, count, movetype)))
-		LogError("Failed to replace %s to %s", sClass, sNewItem);
+	if (!IsValidEntity(L4D2Wep_Spawn(newItem, fPos, fAng, count, movetype)))
+		LogError("Failed to replace %s to %s", clsname, newItem);
 }
 
 void EntityLimit()
 {
-	static char sItem[64];
-	static EntityData data;
-	static int iLimit, iRemove, i, len, index;
-	
+	char item[MAX_ITEMNAME_LEN];
+	int i, limit, remove, index;
+	int len = g_aLimitEnt.Length;
+
+	EntityData data;
 	ArrayList aTemp = new ArrayList(sizeof(EntityData));
-	len = g_aEnt.Length;
-	g_kv.Rewind();
+	StringMapSnapshot snap = g_smItemLimit.Snapshot();
 
-	if (g_kv.JumpToKey("item_limit") && g_kv.GotoFirstSubKey(false))
+	for (int j = 0, snapLen = snap.Length; j < snapLen; j++)
 	{
-		do
+		snap.GetKey(j, item, sizeof(item));
+		g_smItemLimit.GetValue(item, limit);
+		if (limit < 1)
+			continue;
+
+		aTemp.Clear();
+		for (i = 0; i < len; i++)
 		{
-			iLimit = g_kv.GetNum(NULL_STRING, -1);
-			if (iLimit > 0)
-			{
-				aTemp.Clear();
-				g_kv.GetSectionName(sItem, sizeof(sItem));
-
-				for (i = 0; i < len; i++)
-				{
-					g_aEnt.GetArray(i, data);
-					if (!strcmp(data.sName, sItem))
-						aTemp.PushArray(data);
-				}
-
-				iRemove = aTemp.Length - iLimit;
-				for (i = 0; i < iRemove; i++)
-				{
-					index = GetRandomIntEx(0, aTemp.Length-1);
-					aTemp.GetArray(index, data);
-					RemoveEntity(data.entity);
-					aTemp.Erase(index);
-				}
-			}
+			g_aLimitEnt.GetArray(i, data);
+			if (!strcmp(data.sName, item))
+				aTemp.PushArray(data);
 		}
-		while (g_kv.GotoNextKey(false));
+
+		remove = aTemp.Length - limit;
+		for (i = 0; i < remove; i++)
+		{
+			index = GetRandomIntEx(0, aTemp.Length-1);
+			aTemp.GetArray(index, data);
+			RemoveEntity(data.entity);
+			aTemp.Erase(index);
+		}
 	}
 
 	delete aTemp;
+	delete snap;
 }
 
 void GiveStartItem()
 {
-	if (g_sStartItems[0] == '\0')
-		return;
+	char name[128];
 
-	static char sItems[16][64];
-	static int pieces, client, i;
-
-	pieces = ExplodeString(g_sStartItems, ";", sItems, sizeof(sItems), sizeof(sItems[]));
-
-	for (client = 1; client <= MaxClients; client++)
+	for (int i = 0, len = g_aStartItem.Length; i < len; i++)
 	{
-		if (IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client))
+		g_aStartItem.GetString(i, name, sizeof(name));
+		for (int client = 1; client <= MaxClients; client++)
 		{
-			for (i = 0; i < pieces; i++)
-			{
-				if (!strcmp(sItems[i], "health"))
-					RestoreHealth(client, GetEntProp(client, Prop_Send, "m_iMaxHealth"));
-				else
-					CheatCommand(client, "give", sItems[i]);
-			}
+			if (!IsClientInGame(client) || GetClientTeam(client) != 2 || !IsPlayerAlive(client))
+				continue;
+
+			if (!strcmp(name, "health"))
+				RestoreHealth(client, GetEntProp(client, Prop_Send, "m_iMaxHealth"));
+			else
+				CheatCommand(client, "give", name);
 		}
 	}
 }
@@ -358,7 +447,6 @@ int GetRandomIntEx(int min, int max)
 	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
 }
 
-// 黑白发光插件依赖 heal_success 事件
 void RestoreHealth(int client, int iHealth)
 {
 	Event event = CreateEvent("heal_success", true);
@@ -383,35 +471,79 @@ void CheatCommand(int client, const char[] command, const char[] args = "")
 	SetCommandFlags(command, iFlags);
 }
 
-// RestoreTransitionedEntities(void) -> Removing %s\n
-// C4地图上安全屋的武器被自动删除
-void C4WeaponSpawn()
+void GetVecFromString(float vec[3], const char[] str, const char[] split)
 {
-	char sMap[18];
-	GetCurrentMap(sMap, sizeof(sMap));
+	char buffer[3][32];
+	ExplodeString(str, split, buffer, sizeof(buffer), sizeof(buffer[]));
+	vec[0] = StringToFloat(buffer[0]);
+	vec[1] = StringToFloat(buffer[1]);
+	vec[2] = StringToFloat(buffer[2]);
+}
 
-	if (!strcmp(sMap, "c4m3_sugarmill_b"))
+void Init()
+{
+	delete g_smModelToName;
+	delete g_smItemReplace;
+	delete g_smItemLimit;
+	delete g_aLimitEnt;
+	delete g_aStartItem;
+	delete g_aItemSpawn;
+
+	g_smModelToName = new StringMap();
+	g_smItemReplace = new StringMap();
+	g_smItemLimit = new StringMap();
+	g_aLimitEnt = new ArrayList(sizeof(EntityData));
+	g_aStartItem = new ArrayList(ByteCountToCells(MAX_ITEMNAME_LEN));
+	g_aItemSpawn = new ArrayList(sizeof(SpawnData));
+	
+	char sBuffer[PLATFORM_MAX_PATH];
+	for (int i; i < sizeof(g_sWeapons); i++)
 	{
-		L4D2Wep_Spawn("weapon_shotgun_chrome", view_as<float>({3552.0, -1767.0, 263.0}), view_as<float>({0.0, 180.0, 90.0}), 3, MOVETYPE_NONE);
-		L4D2Wep_Spawn("weapon_smg_silenced", view_as<float>({3549.0, -1738.0, 263.0}), view_as<float>({0.0, 180.0, 90.0}), 3, MOVETYPE_NONE);
-	}
-	else if (!strcmp(sMap, "c4m4_milltown_b"))
-	{
-		L4D2Wep_Spawn("weapon_shotgun_chrome", view_as<float>({-3320.0, 7788.0, 156.0}), view_as<float>({0.0, 268.0, 270.0}), 3, MOVETYPE_NONE);
-		L4D2Wep_Spawn("weapon_smg_silenced", view_as<float>({-3336.0, 7788.0, 156.0}), view_as<float>({0.0, 285.0, 270.0}), 3, MOVETYPE_NONE);
+		strcopy(sBuffer, sizeof(sBuffer), g_sWeapons[i][WEAPON_MODEL]);
+		CharToLowerCase(sBuffer, strlen(sBuffer));
+		g_smModelToName.SetString(sBuffer, g_sWeapons[i][WEAPON_NAME]);
 	}
 }
 
-Action Cmd_Reload(int client, int args)
+Action Cmd_Test(int client, int args)
 {
-	Init();
+	char clsname[MAX_ITEMNAME_LEN], item[MAX_ITEMNAME_LEN], model[PLATFORM_MAX_PATH];
+	ArrayList list = new ArrayList(128);
+	
+	for (int i = MaxClients+1; i < 2049; i++)
+	{
+		if (!IsValidEntity(i) || !GetEdictClassname(i, clsname, sizeof(clsname)))
+			continue;
+
+		if (clsname[0] != 'w' && clsname[0] != 'p' && clsname[0] != 'u')
+			continue;
+
+		if (IsCarriedByClient(i))
+			continue;
+			
+		if (GetEntPropString(i, Prop_Data, "m_ModelName", model, sizeof(model)) < 2)
+			continue;
+			
+		CharToLowerCase(model, strlen(model));
+		if (g_smModelToName.GetString(model, item, sizeof(item)))
+		{
+			if (!strcmp(clsname, "predicted_viewmodel")) // 部分物品的模型和视图模型一样
+				continue;
+
+			if (!strcmp(item, "weapon_gascan") && IsEventGascan(i))
+				continue;
+			
+			list.PushString(item);
+		}
+	}
+
+	list.Sort(Sort_Ascending, Sort_String);
+
+	for (int i = 0, len = list.Length; i < len; i++)
+	{
+		list.GetString(i, item, sizeof(item));
+		PrintToServer("%s", item);
+	}
+
 	return Plugin_Handled;
 }
-
-Action Cmd_LimitTest(int client, int args)
-{
-	RoundStart_Timer(null);
-	return Plugin_Handled;
-}
-
-
