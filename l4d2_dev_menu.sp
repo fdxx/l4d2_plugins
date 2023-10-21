@@ -5,7 +5,7 @@
 #include <adminmenu>
 #include <left4dhooks>
 
-#define VERSION "0.7"
+#define VERSION "0.8"
 
 #define	BOSS_TYPE_TANK	0
 #define	BOSS_TYPE_WITCH	1
@@ -286,7 +286,7 @@ int Kill_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, int 
 							case 2, 3:
 							{
 								ForcePlayerSuicide(iTarget);
-								PrintToChat(client, "[DevMenu] 处死: %N", iTarget);
+								Print(client, "[DevMenu] 处死: %N", iTarget);
 							}
 						}
 					}
@@ -347,7 +347,7 @@ void DoKill(int client, int iType)
 				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3)
 				{
 					ForcePlayerSuicide(i);
-					PrintToChat(client, "[DevMenu] 处死: %N", i);
+					Print(client, "[DevMenu] 处死: %N", i);
 				}
 			}
 
@@ -355,7 +355,7 @@ void DoKill(int client, int iType)
 			while ((witch = FindEntityByClassname(witch, "witch")) != INVALID_ENT_REFERENCE)
 			{
 				AcceptEntityInput(witch, "Kill");
-				PrintToChat(client, "[DevMenu] 处死: Witch");
+				Print(client, "[DevMenu] 处死: Witch");
 			}
 		}
 		case 1:
@@ -367,14 +367,14 @@ void DoKill(int client, int iType)
 				count++;
 				AcceptEntityInput(inf, "Kill");
 			}
-			PrintToChat(client, "[DevMenu] 处死普通感染者: %i 个", count);
+			Print(client, "[DevMenu] 处死普通感染者: %i 个", count);
 		}
 		case 2:
 		{
 			if (IsPlayerAlive(client))
 			{
 				ForcePlayerSuicide(client);
-				PrintToChat(client, "[DevMenu] 处死: %N", client);
+				Print(client, "[DevMenu] 处死: %N", client);
 			}
 		}
 		case 3:
@@ -384,7 +384,7 @@ void DoKill(int client, int iType)
 				if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
 				{
 					ForcePlayerSuicide(i);
-					PrintToChat(client, "[DevMenu] 处死: %N", i);
+					Print(client, "[DevMenu] 处死: %N", i);
 				}
 			}
 		}
@@ -395,7 +395,7 @@ void DoKill(int client, int iType)
 				if (IsClientInGame(i) && IsPlayerAlive(i) && (GetClientTeam(i) == 2 || GetClientTeam(i) == 3))
 				{
 					ForcePlayerSuicide(i);
-					PrintToChat(client, "[DevMenu] 处死: %N", i);
+					Print(client, "[DevMenu] 处死: %N", i);
 				}
 			}
 		}
@@ -446,7 +446,7 @@ int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, int clien
 						char sCmdArgs[128];
 						FormatEx(sCmdArgs, sizeof(sCmdArgs), "%s%s", sName, (g_bAutoSpawn[client] ? " auto" : ""));
 						CheatCommand(client, "z_spawn_old", sCmdArgs);
-						PrintToChat(client, "[DevMenu] 产生特感 (z_spawn_old): %s", sDisplay);
+						Print(client, "[DevMenu] 产生特感 (z_spawn_old): %s", sDisplay);
 					}
 					else
 					{
@@ -470,7 +470,7 @@ int SpawnSpecial_ClassSelect_MenuHandler(Menu menu, MenuAction action, int clien
 								}
 								if (bSpawnSuccess)
 								{
-									PrintToChat(client, "[DevMenu] 产生特感 (left4dhooks): %s", sDisplay);
+									Print(client, "[DevMenu] 产生特感 (left4dhooks): %s", sDisplay);
 								}
 							}
 						}
@@ -680,12 +680,12 @@ void SetClientGodMode(int client, int iTarget)
 	if (flags & FL_GODMODE)
 	{
 		SetEntityFlags(iTarget, flags & ~FL_GODMODE);
-		PrintToChat(client, "[DevMenu] 关闭无敌模式: %N", iTarget);
+		Print(client, "[DevMenu] 关闭无敌模式: %N", iTarget);
 	}
 	else
 	{
 		SetEntityFlags(iTarget, flags | FL_GODMODE);
-		PrintToChat(client, "[DevMenu] 开启无敌模式: %N", iTarget);
+		Print(client, "[DevMenu] 开启无敌模式: %N", iTarget);
 	}
 }
 
@@ -818,12 +818,12 @@ void SetClientNoClip(int client, int iTarget)
 	if (movetype != MOVETYPE_NOCLIP)
 	{
 		SetEntityMoveType(iTarget, MOVETYPE_NOCLIP);
-		PrintToChat(client, "[DevMenu] 开启穿墙模式: %N", iTarget);
+		Print(client, "[DevMenu] 开启穿墙模式: %N", iTarget);
 	}
 	else
 	{
 		SetEntityMoveType(iTarget, MOVETYPE_WALK);
-		PrintToChat(client, "[DevMenu] 关闭穿墙模式: %N", iTarget);
+		Print(client, "[DevMenu] 关闭穿墙模式: %N", iTarget);
 	}
 }
 
@@ -898,7 +898,7 @@ Action Cmd_Teleport(int client, int args)
 		fPos[2] = GetCmdArgFloat(3);
 
 		TeleportEntity(client, fPos, NULL_VECTOR, NULL_VECTOR);
-		PrintToChat(client, "[DevMenu] 传送自己到: %f %f %f", fPos[0], fPos[1], fPos[2]);
+		Print(client, "[DevMenu] 传送自己到: %f %f %f", fPos[0], fPos[1], fPos[2]);
 	}
 
 	return Plugin_Handled;
@@ -918,7 +918,7 @@ void DoTeleport(int client, int iType)
 				if (i != client && IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
 				{
 					TeleportEntity(i, fPos, NULL_VECTOR, NULL_VECTOR);
-					PrintToChat(client, "[DevMenu] 传送幸存者到自己");
+					Print(client, "[DevMenu] 传送幸存者到自己");
 				}
 			}
 		}
@@ -929,14 +929,14 @@ void DoTeleport(int client, int iType)
 				if (i != client && IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
 				{
 					TeleportEntity(i, fPos, NULL_VECTOR, NULL_VECTOR);
-					PrintToChat(client, "[DevMenu] 传送特感到自己");
+					Print(client, "[DevMenu] 传送特感到自己");
 				}
 			}
 		}
 		case 2:
 		{
 			CheatCommand(client, "warp_all_survivors_to_checkpoint");
-			PrintToChat(client, "[DevMenu] 传送所有幸存者到安全屋");
+			Print(client, "[DevMenu] 传送所有幸存者到安全屋");
 		}
 	}
 }
@@ -1030,7 +1030,7 @@ int GiveItem_Select_MenuHandler(Menu menu, MenuAction action, int client, int it
 			menu.GetItem(itemNum, sName, sizeof(sName), _, sDisplay, sizeof(sDisplay));
 
 			CheatCommand(client, "give", sName);
-			PrintToChat(client, "[DevMenu] 产生物品: %s", sDisplay);
+			Print(client, "[DevMenu] 产生物品: %s", sDisplay);
 
 			g_iGiveItemMenuPos[client][g_iGiveItemType[client]] = menu.Selection;
 			GiveItem_Select(client);
@@ -1089,7 +1089,7 @@ int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, in
 				case 0:
 				{
 					RestoreHealth(client, GetEntProp(client, Prop_Send, "m_iMaxHealth"));
-					PrintToChat(client, "[DevMenu] 回血: %N", client);
+					Print(client, "[DevMenu] 回血: %N", client);
 				}
 				case 1:
 				{
@@ -1098,7 +1098,7 @@ int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, in
 						if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
 						{
 							RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
-							PrintToChat(client, "[DevMenu] 回血: %N", i);
+							Print(client, "[DevMenu] 回血: %N", i);
 						}
 					}
 				}
@@ -1109,7 +1109,7 @@ int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, in
 						if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
 						{
 							RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
-							PrintToChat(client, "[DevMenu] 回血: %N", i);
+							Print(client, "[DevMenu] 回血: %N", i);
 						}
 					}
 				}
@@ -1121,7 +1121,7 @@ int GiveHp_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, in
 					if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && IsPlayerAlive(iTarget))
 					{
 						RestoreHealth(iTarget, GetEntProp(iTarget, Prop_Send, "m_iMaxHealth"));
-						PrintToChat(client, "[DevMenu] 回血: %N", iTarget);
+						Print(client, "[DevMenu] 回血: %N", iTarget);
 					}
 				}
 			}
@@ -1165,7 +1165,7 @@ Action Cmd_GiveHealth(int client, int args)
 		case 0:
 		{
 			RestoreHealth(client, GetEntProp(client, Prop_Send, "m_iMaxHealth"));
-			PrintToChat(client, "[DevMenu] 回血: %N", client);
+			Print(client, "[DevMenu] 回血: %N", client);
 		}
 		case 1:
 		{
@@ -1174,7 +1174,7 @@ Action Cmd_GiveHealth(int client, int args)
 				if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
 				{
 					RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
-					PrintToChat(client, "[DevMenu] 回血: %N", i);
+					Print(client, "[DevMenu] 回血: %N", i);
 				}
 			}
 		}
@@ -1185,7 +1185,7 @@ Action Cmd_GiveHealth(int client, int args)
 				if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i))
 				{
 					RestoreHealth(i, GetEntProp(i, Prop_Send, "m_iMaxHealth"));
-					PrintToChat(client, "[DevMenu] 回血: %N", i);
+					Print(client, "[DevMenu] 回血: %N", i);
 				}
 			}
 		}
@@ -1248,7 +1248,7 @@ int FallDown_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, 
 					if (IsPlayerAlive(client) && GetClientTeam(client) == 2 && !GetEntProp(client, Prop_Send, "m_isIncapacitated"))
 					{
 						SDKHooks_TakeDamage(client, client, client, 99999.0, DMG_GENERIC);
-						PrintToChat(client, "[DevMenu] 强制倒地: %N", client);
+						Print(client, "[DevMenu] 强制倒地: %N", client);
 					}
 				}
 				case 1:
@@ -1258,7 +1258,7 @@ int FallDown_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, 
 						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2 && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
 						{
 							SDKHooks_TakeDamage(i, i, i, 99999.0, DMG_GENERIC);
-							PrintToChat(client, "[DevMenu] 强制倒地: %N", i);
+							Print(client, "[DevMenu] 强制倒地: %N", i);
 						}
 					}
 				}
@@ -1270,7 +1270,7 @@ int FallDown_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, 
 					if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && IsPlayerAlive(iTarget) && GetClientTeam(iTarget) == 2 && !GetEntProp(iTarget, Prop_Send, "m_isIncapacitated"))
 					{
 						SDKHooks_TakeDamage(iTarget, iTarget, iTarget, 99999.0, DMG_GENERIC);
-						PrintToChat(client, "[DevMenu] 强制倒地: %N", iTarget);
+						Print(client, "[DevMenu] 强制倒地: %N", iTarget);
 					}
 				}
 			}
@@ -1325,7 +1325,7 @@ int Respawn_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, i
 					if (!IsPlayerAlive(client) && GetClientTeam(client) == 2)
 					{
 						if (L4D2_VScriptWrapper_ReviveByDefib(client))
-							PrintToChat(client, "[DevMenu] 复活: %N", client);
+							Print(client, "[DevMenu] 复活: %N", client);
 					}
 				}
 				case 1:
@@ -1335,7 +1335,7 @@ int Respawn_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, i
 						if (IsClientInGame(i) && !IsPlayerAlive(i) && GetClientTeam(i) == 2)
 						{
 							if (L4D2_VScriptWrapper_ReviveByDefib(i))
-								PrintToChat(client, "[DevMenu]: 复活 %N", i);
+								Print(client, "[DevMenu]: 复活 %N", i);
 						}
 					}
 				}
@@ -1347,7 +1347,7 @@ int Respawn_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, i
 					if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && !IsPlayerAlive(iTarget) && GetClientTeam(iTarget) == 2)
 					{
 						if (L4D2_VScriptWrapper_ReviveByDefib(iTarget))
-							PrintToChat(client, "[DevMenu]: 复活 %N", iTarget);
+							Print(client, "[DevMenu]: 复活 %N", iTarget);
 					}
 				}
 			}
@@ -1402,7 +1402,7 @@ int Deprive_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, i
 					if (IsPlayerAlive(client) && GetClientTeam(client) == 2)
 					{
 						DepriveClientItem(client);
-						PrintToChat(client, "[DevMenu] 剥夺 %N 的装备", client);
+						Print(client, "[DevMenu] 剥夺 %N 的装备", client);
 					}
 				}
 				case 1:
@@ -1412,7 +1412,7 @@ int Deprive_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, i
 						if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 2)
 						{
 							DepriveClientItem(i);
-							PrintToChat(client, "[DevMenu] 剥夺 %N 的装备", i);
+							Print(client, "[DevMenu] 剥夺 %N 的装备", i);
 						}
 					}
 				}
@@ -1424,7 +1424,7 @@ int Deprive_TargetSelect_MenuHandler(Menu menu, MenuAction action, int client, i
 					if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && IsPlayerAlive(iTarget) && GetClientTeam(iTarget) == 2)
 					{
 						DepriveClientItem(iTarget);
-						PrintToChat(client, "[DevMenu] 剥夺 %N 的装备", iTarget);
+						Print(client, "[DevMenu] 剥夺 %N 的装备", iTarget);
 					}
 				}
 			}
@@ -1560,12 +1560,12 @@ void FreezeClient(int client, int iTarget)
 	if (movetype != MOVETYPE_NONE)
 	{
 		SetEntityMoveType(iTarget, MOVETYPE_NONE);
-		PrintToChat(client, "[DevMenu] 设置冻结模式: %N", iTarget);
+		Print(client, "[DevMenu] 设置冻结模式: %N", iTarget);
 	}
 	else
 	{
 		SetEntityMoveType(iTarget, MOVETYPE_WALK);
-		PrintToChat(client, "[DevMenu] 解除冻结模式: %N", iTarget);
+		Print(client, "[DevMenu] 解除冻结模式: %N", iTarget);
 	}
 }
 /*
@@ -1576,12 +1576,12 @@ void FreezeClient(int client, int iTarget)
 	if (Flags & FL_FROZEN)
 	{
 		SetEntityFlags(iTarget, Flags & ~FL_FROZEN);
-		PrintToChat(client, "[DevMenu] 解除冻结模式: %N", iTarget);
+		Print(client, "[DevMenu] 解除冻结模式: %N", iTarget);
 	}
 	else
 	{
 		SetEntityFlags(iTarget, Flags | FL_FROZEN);
-		PrintToChat(client, "[DevMenu] 设置冻结模式: %N", iTarget);
+		Print(client, "[DevMenu] 设置冻结模式: %N", iTarget);
 	}
 }
 */
@@ -1672,3 +1672,14 @@ void AllowSpawn(bool bAllow)
 		L4D2_CanSpawnBoss(BOSS_TYPE_WITCH, bAllow);
 	}
 }
+
+void Print(int client, const char[] msg, any ...)
+{
+	if (!client || !IsClientInGame(client))
+		return;
+
+	char buffer[253];
+	VFormat(buffer, sizeof(buffer), msg, 3);
+	PrintToChat(client, "%s", buffer);
+}
+
