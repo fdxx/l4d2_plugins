@@ -23,7 +23,7 @@ int
 
 public Plugin myinfo = 
 {
-	name = "L4D2 Restore health",
+	name = "L4D2 lifesteal",
 	author = "fdxx",
 	description = "Attack special infected to restore health",
 	version = VERSION,
@@ -31,10 +31,10 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	CreateConVar("l4d2_restore_hp_version", VERSION, "Version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	CreateConVar("l4d2_lifesteal_version", VERSION, "Version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 
-	g_cvHealthLimit = CreateConVar("l4d2_restore_hp_limit", "200", "Max health limit");
-	g_cvAddHealthFlame = CreateConVar("l4d2_restore_hp_flame", "1", "How much does flame damage add health");
+	g_cvHealthLimit = CreateConVar("l4d2_lifesteal_limit", "200", "Max health limit");
+	g_cvAddHealthFlame = CreateConVar("l4d2_lifesteal_flame", "1", "How much does flame damage add health");
 
 	OnConVarChanged(null, "", "");
 
