@@ -2,15 +2,18 @@
 
 Change Log:
 
-3.3
+v3.3
 	- Cvar changed: l4d2_si_spawn_control_radical_spawn ==> l4d2_si_spawn_control_spawn_mode
 	- Optimize performance.
 	- Prioritize spawning SI near real players. (for SpawnMode == 1)
 	- After changing the SI spawn time, immediately spawn SI at the set time.
 	- Fix the number of SI spawn may be abnormal.
 
-3.4
+v3.4
 	- Add more spawn mode.
+
+v3.5
+	- When max SI are being spawned, Allow respawning of killed SI.
 
 =======================================================================================*/
 
@@ -23,7 +26,7 @@ Change Log:
 //#include <profiler>
 #include <sourcescramble> // https://github.com/nosoop/SMExt-SourceScramble
 
-#define VERSION "3.4"
+#define VERSION "3.5"
 #define DEBUG 1
 
 #define	SMOKER	1
@@ -404,7 +407,7 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 			if (iClass != SPITTER)
 				CreateTimer(0.1, KickBot_Timer, userid);
 			
-			if (!g_hSpawnTimer[SPAWN_MAX_PRE] && !g_hSpawnTimer[SPAWN_MAX])
+			if (!g_hSpawnTimer[SPAWN_MAX_PRE])
 			{
 				if (g_bTogetherSpawn)
 					RequestFrame(PlayerDeath_NextFrame);
