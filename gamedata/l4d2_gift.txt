@@ -1,0 +1,15 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Signatures"
+		{
+			"CHolidayGift::Create"
+			{
+				"library"	"server"
+				"linux"		"@_ZN12CHolidayGift6CreateERK6VectorRK6QAngleS5_S2_P20CBaseCombatCharacter"
+				"windows"	"\x53\x8B\xDC\x83\xEC\x08\x83\xE4\xF0\x83\xC4\x04\x55\x8B\x6B\x04\x89\x6C\x24\x04\x8B\xEC\x8B\x43\x18"
+			}
+		}
+	}
+}
