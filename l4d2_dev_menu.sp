@@ -5,7 +5,7 @@
 #include <adminmenu>
 #include <left4dhooks>
 
-#define VERSION "0.8"
+#define VERSION "0.9"
 
 #define	BOSS_TYPE_TANK	0
 #define	BOSS_TYPE_WITCH	1
@@ -1196,6 +1196,9 @@ Action Cmd_GiveHealth(int client, int args)
 
 void RestoreHealth(int client, int iHealth)
 {
+	if (GetClientTeam(client) == 3 && GetEntProp(client, Prop_Send, "m_isIncapacitated")) // Mainly for TANK.
+		return;
+
 	Event event = CreateEvent("heal_success", true);
 	event.SetInt("userid", GetClientUserId(client));
 	event.SetInt("subject", GetClientUserId(client));
