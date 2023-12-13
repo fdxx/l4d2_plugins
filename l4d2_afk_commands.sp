@@ -223,15 +223,9 @@ int GetSurBot()
 	return bot;
 }
 
-// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
 int GetRandomIntEx(int min, int max)
 {
-	int random = GetURandomInt();
-
-	if (random == 0)
-		random++;
-
-	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+	return GetURandomInt() % (max - min + 1) + min;
 }
 
 bool IsPlayerIdle(int player)
