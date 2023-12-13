@@ -6,13 +6,15 @@
 #include <sdktools>
 #include <sourcescramble>	// https://github.com/nosoop/SMExt-SourceScramble
 
-#define PLUGIN_VERSION "0.2"
+#define PLUGIN_VERSION "0.3"
 
 #define SOUND_GIVE		"ui/bigreward.wav"
 #define SOUND_RECEIVE	"ui/littlereward.wav"
 
 #define EF_NODRAW		32
 #define ANIMEVENT_USE	64
+
+#define _MAXPLAYERS		33
 
 #define WEAPON_SLOT			0
 #define WEAPON_NAME			1
@@ -63,8 +65,7 @@ float
 	g_fDelayCheck,
 	g_fDelayTransfer,
 	g_fUseTolerance,
-	g_fLastReceivedTime[MAXPLAYERS],
-	g_fEyePos[MAXPLAYERS][3];
+	g_fLastReceivedTime[_MAXPLAYERS];
 
 StringMap
 	g_smNameToNum,
@@ -120,7 +121,7 @@ public void OnPluginStart()
 	HookEvent("player_left_safe_area", Event_PlayerLeftSafeArea, EventHookMode_PostNoCopy);
 	HookEvent("weapon_given", Event_WeaponGiven);
 
-	AutoExecConfig(true, "l4d2_gear_transfer");
+	//AutoExecConfig(true, "l4d2_gear_transfer");
 }
 
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -207,25 +208,25 @@ public void OnEntityCreated(int entity, const char[] classname)
 
 void NextFrame_EntityCreated(int ref)
 {
-	static char sEntName[64], sModel[PLATFORM_MAX_PATH];
-	static int ent, num;
+	static char clsname[64], model[PLATFORM_MAX_PATH];
+	static int entity, num;
 	static EntData data;
 
-	ent = EntRefToEntIndex(ref);
-	if (ent > MaxClients && IsValidEntity(ent))
+	entity = EntRefToEntIndex(ref);
+	if (!IsValidEntity(entity))
+		return;
+
+	if (!GetEdictClassname(entity, clsname, sizeof(clsname)) || !GetEntPropString(entity, Prop_Data, "m_ModelName", model, sizeof(model)))
+		return;
+
+	if (g_smModelToNum.GetValue(model, num) || g_smNameToNum.GetValue(clsname, num))
 	{
-		if (GetEdictClassname(ent, sEntName, sizeof(sEntName)) && GetEntPropString(ent, Prop_Data, "m_ModelName", sModel, sizeof(sModel)) > 1)
+		if (g_aEntData.FindValue(ref) == -1)
 		{
-			if (g_smModelToNum.GetValue(sModel, num) || g_smNameToNum.GetValue(sEntName, num))
-			{
-				if (g_aEntData.FindValue(ref) == -1)
-				{
-					data.ref = ref;
-					data.slot = StringToInt(g_sWeapons[num][WEAPON_SLOT]);
-					data.num = num;
-					g_aEntData.PushArray(data);
-				}
-			}
+			data.ref = ref;
+			data.slot = StringToInt(g_sWeapons[num][WEAPON_SLOT]);
+			data.num = num;
+			g_aEntData.PushArray(data);
 		}
 	}
 }
@@ -238,14 +239,12 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	if (IsValidSur(client) && !IsFakeClient(client) && IsPlayerAlive(client) && !GetEntProp(client, Prop_Send, "m_isIncapacitated"))
 	{
 		int slot = GetSlotFromEnt(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"));
-		if (2 <= slot <= 4)
-		{
-			int target = SDKCall(g_hFindUseEntity, client, g_fPlayerGiveDist, 0.0, g_fUseTolerance, 0, true);
-			if (IsValidSur(target) && IsPlayerAlive(target) && !GetEntProp(target, Prop_Send, "m_isIncapacitated"))
-			{
-				SDKCall(g_hGiveActiveWeapon, client, target);
-			}
-		}
+		if (slot < 2 || slot > 4)
+			return Plugin_Continue;
+
+		int target = SDKCall(g_hFindUseEntity, client, g_fPlayerGiveDist, 0.0, g_fUseTolerance, 0, true);
+		if (IsValidSur(target) && IsPlayerAlive(target) && !GetEntProp(target, Prop_Send, "m_isIncapacitated"))
+			SDKCall(g_hGiveActiveWeapon, client, target);
 	}
 
 	return Plugin_Continue;
@@ -253,31 +252,32 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 Action AutoTransfer_Timer(Handle timer)
 {
-	bool bCanGive[33][5];
-	bool bCanReceive[33][5];
-	int iBotCount;
+	bool bCanGive[_MAXPLAYERS][5];
+	bool bCanReceive[_MAXPLAYERS][5];
+	float fEyePos[_MAXPLAYERS][3];
+	int i, slot, iBotCount, entity;
 	
-	for (int i = 1; i <= MaxClients; i++)
+	for (i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
+		if (!IsClientInGame(i) || GetClientTeam(i) != 2 || !IsPlayerAlive(i) || GetEntProp(i, Prop_Send, "m_isIncapacitated"))
+			continue;
+
+		if (IsFakeClient(i))
 		{
-			if (IsFakeClient(i))
-			{
-				iBotCount++;
+			iBotCount++;
+			if (IsDoingUseAction(i) || HasIdlePlayer(i) || GetEntPropEnt(i, Prop_Send, "m_reviveTarget") > 0)
+				continue;
+		}
+			
+		GetClientEyePosition(i, fEyePos[i]);
 
-				if (IsDoingUseAction(i) || HasIdlePlayer(i) || GetEntPropEnt(i, Prop_Send, "m_reviveTarget") > 0)
-					continue;
-			}
-				
-			GetClientEyePosition(i, g_fEyePos[i]);
-
-			for (int slot = 2; slot <= 4; slot++)
-			{
-				int ent = GetPlayerWeaponSlot(i, slot);
-				if (ent > MaxClients && IsValidEntity(ent))
-					bCanGive[i][slot] = true;
-				else bCanReceive[i][slot] = true;
-			}
+		for (slot = 2; slot <= 4; slot++)
+		{
+			entity = GetPlayerWeaponSlot(i, slot);
+			if (IsValidEntity(entity))
+				bCanGive[i][slot] = true;
+			else
+				bCanReceive[i][slot] = true;
 		}
 	}
 
@@ -285,17 +285,17 @@ Action AutoTransfer_Timer(Handle timer)
 		return Plugin_Continue;
 
 
-	static EntData data;
+	EntData data;
 	int len = g_aEntData.Length;
 
-	for (int i; i < len; i++)
+	for (i = 0; i < len; i++)
 	{
 		g_aEntData.GetArray(i, data);
-		int ent = EntRefToEntIndex(data.ref);
-		if (ent > MaxClients && IsValidEntity(ent))
+		entity = EntRefToEntIndex(data.ref);
+		if (IsValidEntity(entity))
 		{
-			GetEntPropVector(ent, Prop_Send, "m_vecOrigin", data.fPos);
-			data.bCanGrab = IsCanGrab(ent);
+			GetEntPropVector(entity, Prop_Send, "m_vecOrigin", data.fPos);
+			data.bCanGrab = IsCanGrab(entity);
 			g_aEntData.SetArray(i, data);
 		}
 		else
@@ -310,77 +310,60 @@ Action AutoTransfer_Timer(Handle timer)
 	// ------ Auto Grab ------
 	for (int graber = 1; graber <= MaxClients; graber++)
 	{
-		for (int slot = 2; slot <= 4; slot++)
+		for (slot = 2; slot <= 4; slot++)
 		{
-			if (bCanReceive[graber][slot] && IsFakeClient(graber))
+			if (!bCanReceive[graber][slot] || !IsFakeClient(graber))
+				continue;
+
+			for (i = 0; i < len; i++)
 			{
-				for (int i; i < len; i++)
-				{
-					g_aEntData.GetArray(i, data);
-					if (data.slot == slot && data.bCanGrab && GetVectorDistance(g_fEyePos[graber], data.fPos) < g_fGrabDist)
-					{
-						int ent = EntRefToEntIndex(data.ref);
-						if (ent > MaxClients && IsValidEntity(ent))
-						{
-							data.bCanGrab = false;
-							g_aEntData.SetArray(i, data);
+				g_aEntData.GetArray(i, data);
+				if (data.slot != slot || !data.bCanGrab || GetVectorDistance(fEyePos[graber], data.fPos) > g_fGrabDist)
+					continue;
 
-							bCanReceive[graber][slot] = false;
+				entity = EntRefToEntIndex(data.ref);
+				SDKCall(g_hDoAnimationEvent, graber, ANIMEVENT_USE, 0);
+				SDKCall(g_hUseEntity, entity, graber, graber, Use_On, 0.0);
+				
+				// Items not transferred by this plugin will not be notified.
+				PrintToChatAll("\x05%N \x01拿了 \x04%s", graber, g_sWeapons[data.num][WEAPON_TRANSLATE]);
+				
+				bCanReceive[graber][slot] = false;
+				data.bCanGrab = false;
+				g_aEntData.SetArray(i, data);
 
-							SDKCall(g_hDoAnimationEvent, graber, ANIMEVENT_USE, 0);
-							SDKCall(g_hUseEntity, ent, graber, graber, Use_On, 0.0);
-							
-							// Items not transferred by this plugin will not be notified.
-							PrintToChatAll("\x05%N \x01拿了 \x04%s", graber, g_sWeapons[data.num][WEAPON_TRANSLATE]);
-
-							break;
-						}
-						else
-						{
-							g_aEntData.Erase(i);
-							i--;
-							len--;
-						}
-					}
-				}
+				break;
 			}
 		}
 	}
 
 	float fNow = GetEngineTime();
+	int target;
 
 	// ------ Auto Give ------
 	for (int giver = 1; giver <= MaxClients; giver++)
 	{
-		for (int slot = 2; slot <= 4; slot++)
+		for (slot = 2; slot <= 4; slot++)
 		{
-			if (bCanGive[giver][slot] && IsFakeClient(giver) && fNow - g_fLastReceivedTime[giver] > g_fDelayTransfer)
+			if (!bCanGive[giver][slot] || !IsFakeClient(giver) || fNow - g_fLastReceivedTime[giver] < g_fDelayTransfer)
+				continue;
+
+			for (target = 1; target <= MaxClients; target++)
 			{
-				for (int target = 1; target <= MaxClients; target++)
-				{
-					if (bCanReceive[target][slot] && !IsFakeClient(target))
-					{
-						if (GetVectorDistance(g_fEyePos[giver], g_fEyePos[target]) < g_fBotGiveDist && SDKCall(g_hSDKIsVisibleToPlayer, g_fEyePos[target], giver, 2, 3, 0.0, 0, 0, false))
-						{
-							int ent = GetPlayerWeaponSlot(giver, slot);
-							if (ent > MaxClients && IsValidEntity(ent))
-							{
-								bCanGive[giver][slot] = false;
-								bCanReceive[target][slot] = false;
+				if (!bCanReceive[target][slot] || IsFakeClient(target))
+					continue;
 
-								SetEntPropEnt(giver, Prop_Send, "m_hActiveWeapon", ent);
-								SDKCall(g_hGiveActiveWeapon, giver, target);
+				if (GetVectorDistance(fEyePos[giver], fEyePos[target]) > g_fBotGiveDist || !SDKCall(g_hSDKIsVisibleToPlayer, fEyePos[target], giver, 2, 3, 0.0, 0, 0, false))
+					continue;
 
-								break;
-							}
-							else
-							{
-								bCanGive[giver][slot] = false;
-								break;
-							}
-						}
-					}
-				}
+				entity = GetPlayerWeaponSlot(giver, slot);
+				SetEntPropEnt(giver, Prop_Send, "m_hActiveWeapon", entity);
+				SDKCall(g_hGiveActiveWeapon, giver, target);
+
+				bCanReceive[target][slot] = false;
+				bCanGive[giver][slot] = false;
+
+				break;
 			}
 		}
 	}
@@ -409,9 +392,7 @@ bool IsDoingUseAction(int client)
 		{
 			int target = GetEntPropEnt(client, Prop_Send, "m_useActionTarget");
 			if (target > 0 && target != client) // exclude self healing.
-			{
 				return true;
-			}
 		}
 		case L4D2UseAction_Defibing, L4D2UseAction_GettingDefibed, L4D2UseAction_PouringGas, L4D2UseAction_Cola, L4D2UseAction_Button:
 			return true;
@@ -421,8 +402,8 @@ bool IsDoingUseAction(int client)
 
 bool HasIdlePlayer(int bot) 
 {
-	static char sNetClass[12];
-	static int offset, player;
+	char sNetClass[12];
+	int offset, player;
 
 	GetEntityNetClass(bot, sNetClass, sizeof(sNetClass));
 	offset = FindSendPropInfo(sNetClass, "m_humanSpectatorUserID");
@@ -469,40 +450,35 @@ bool IsCarriedByClient(int entity)
 
 void Event_WeaponGiven(Event event, const char[] name, bool dontBroadcast)
 {
-	static int ent, giver, target, num, slot;
-	static char sEntName[64];
+	int entity, giver, target, num, slot;
+	char clsname[64];
 
-	ent = event.GetInt("weaponentid");
+	entity = event.GetInt("weaponentid");
 	giver = GetClientOfUserId(event.GetInt("giver"));
 	target = GetClientOfUserId(event.GetInt("userid"));
 
-	if (IsValidSur(giver) && IsPlayerAlive(giver))
+	if (!IsValidSur(giver) || !IsValidSur(target))
+		return;
+
+	if (!IsValidEntity(entity) || !GetEdictClassname(entity, clsname, sizeof(clsname)))
+		return;
+
+	if (g_smNameToNum.GetValue(clsname, num))
 	{
-		if (IsValidSur(target) && IsPlayerAlive(target))
+		slot = StringToInt(g_sWeapons[num][WEAPON_SLOT]);
+		if (slot < 2 || slot > 4)
+			return;
+
+		// Items not transferred by this plugin will also be notified.
+		PrintToChatAll("\x05%N \x01给了 \x05%N \x04%s", giver, target, g_sWeapons[num][WEAPON_TRANSLATE]);
+
+		if (IsFakeClient(target))
+			g_fLastReceivedTime[target] = GetEngineTime();
+
+		if (slot != 4)
 		{
-			if (ent > MaxClients && IsValidEntity(ent) && GetEdictClassname(ent, sEntName, sizeof(sEntName)))
-			{
-				if (g_smNameToNum.GetValue(sEntName, num))
-				{
-					slot = StringToInt(g_sWeapons[num][WEAPON_SLOT]);
-					if (2 <= slot <= 4)
-					{
-						// Items not transferred by this plugin will also be notified.
-						PrintToChatAll("\x05%N \x01给了 \x05%N \x04%s", giver, target, g_sWeapons[num][WEAPON_TRANSLATE]);
-
-						if (IsFakeClient(target))
-						{
-							g_fLastReceivedTime[target] = GetEngineTime();
-						}
-
-						if (slot != 4)
-						{
-							EmitSoundToClient(giver, SOUND_GIVE);
-							EmitSoundToClient(target, SOUND_RECEIVE);
-						}
-					}
-				}
-			}
+			EmitSoundToClient(giver, SOUND_GIVE);
+			EmitSoundToClient(target, SOUND_RECEIVE);
 		}
 	}
 }
@@ -516,14 +492,7 @@ int GetSlotFromEnt(int entity)
 
 bool IsValidSur(int client)
 {
-	if (client > 0 && client <= MaxClients)
-	{
-		if (IsClientInGame(client) && GetClientTeam(client) == 2)
-		{
-			return true;
-		}
-	}
-	return false;
+	return (client > 0 && client <= MaxClients && IsClientInGame(client) && GetClientTeam(client) == 2);
 }
 
 void Init()
