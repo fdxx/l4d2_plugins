@@ -469,15 +469,13 @@ void SetWitchSpawnFlow(const char[] sMap)
 
 bool IsValidFlags(int iFlags, bool bFinaleArea)
 {
-	if (iFlags)
-	{
-		if (bFinaleArea)
-		{
-			return (iFlags & TERROR_NAV_FINALE) && (iFlags & (TERROR_NAV_EMPTY|TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE) == 0);
-		}
-		return (iFlags & (TERROR_NAV_EMPTY|TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE) == 0);
-	} 
-	return true;
+	if (!iFlags)
+		return true;
+
+	if (bFinaleArea && (iFlags & TERROR_NAV_FINALE) == 0)
+		return false;
+
+	return (iFlags & (TERROR_NAV_EMPTY|TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE)) == 0;
 }
 
 bool IsValidFlow(float fFlow)
@@ -793,14 +791,8 @@ any Native_GetBossSpawnFlow(Handle plugin, int numParams)
 	return g_fSpawnFlow[iBossType];
 }
 
-// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
 int GetRandomIntEx(int min, int max)
 {
-	int random = GetURandomInt();
-
-	if (random == 0)
-		random++;
-
-	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+	return GetURandomInt() % (max - min + 1) + min;
 }
 

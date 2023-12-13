@@ -479,69 +479,69 @@ void SpawnSpecial()
 	bFound = false;
 	index = -1;
 
-	if (GetAllSpecialsTotal() < g_iMaxSILimit)
+	if (GetAllSpecialsTotal() >= g_iMaxSILimit)
+		return;
+
+	iClass = GetSpawnClass();
+	if (iClass <= 0)
+		return;
+
+	switch (g_iSpawnMode)
 	{
-		iClass = GetSpawnClass();
-		if (iClass > 0)
+		case SpawnMode_Normal:
+			bFound = L4D_GetRandomPZSpawnPosition(GetRandomSur(), iClass, 30, fSpawnPos);
+		
+		case SpawnMode_NormalEnhanced:
 		{
-			switch (g_iSpawnMode)
+			iPanicEventStage = LoadFromAddress(g_pPanicEventStage, NumberType_Int8);
+
+			if (!g_bFinalMap && iPanicEventStage > 0)
 			{
-				case SpawnMode_Normal:
-					bFound = L4D_GetRandomPZSpawnPosition(GetRandomSur(), iClass, 30, fSpawnPos);
-				
-				case SpawnMode_NormalEnhanced:
-				{
-					iPanicEventStage = LoadFromAddress(g_pPanicEventStage, NumberType_Int8);
-
-					if (!g_bFinalMap && iPanicEventStage > 0)
-					{
-						// After the panic event starts,
-						// The GetRandomPZSpawnPosition function spawn SI very far away.
-						// c8m3, c3m2...
-						bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNormalSpawnRange);
-					}
-					else
-					{
-						bFound = L4D_GetRandomPZSpawnPosition(GetRandomSur(), iClass, 7, fSpawnPos);
-						if (!bFound)
-						{
-							// Use GetRandomPZSpawnPosition first, use GetSpawnPosByNavArea when it fails.
-							bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNormalSpawnRange);
-						}
-					}
-				}
-
-				case SpawnMode_NavArea:
-					bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNavAreaSpawnRange);
-
-				case SpawnMode_NavAreaNearest:
-					bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNearestSpawnRange, true);
+				// After the panic event starts,
+				// The GetRandomPZSpawnPosition function spawn SI very far away.
+				// c8m3, c3m2...
+				bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNormalSpawnRange);
 			}
-			
-			if (bFound)
+			else
 			{
-				g_bCanSpawn = true;
-				index = L4D2_SpawnSpecial(iClass, fSpawnPos, NULL_VECTOR);
-				g_bCanSpawn = false;
-
-				if (index > 0)
+				bFound = L4D_GetRandomPZSpawnPosition(GetRandomSur(), iClass, 7, fSpawnPos);
+				if (!bFound)
 				{
-					g_bMark[index] = true;
-					return;
+					// Use GetRandomPZSpawnPosition first, use GetSpawnPosByNavArea when it fails.
+					bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNormalSpawnRange);
 				}
-			}
-
-			if (!bFound || index < 1)
-			{
-				CreateTimer(1.0, SpawnSpecial_Timer, SPAWN_NO_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
-
-				#if DEBUG
-				char sMap[128];
-				GetCurrentMap(sMap, sizeof(sMap));
-				LogMessage("Failed to SpawnSpecial, map = %s, SpawnMode = %i, bFound = %b, index = %i", sMap, g_iSpawnMode, bFound, index);
-				#endif
 			}
 		}
+
+		case SpawnMode_NavArea:
+			bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNavAreaSpawnRange);
+
+		case SpawnMode_NavAreaNearest:
+			bFound = GetSpawnPosByNavArea(fSpawnPos, g_fNearestSpawnRange, true);
+	}
+	
+	if (bFound)
+	{
+		g_bCanSpawn = true;
+		index = L4D2_SpawnSpecial(iClass, fSpawnPos, NULL_VECTOR);
+		g_bCanSpawn = false;
+
+		if (index > 0)
+		{
+			g_bMark[index] = true;
+			return;
+		}
+	}
+
+	if (!bFound || index < 1)
+	{
+		CreateTimer(1.0, SpawnSpecial_Timer, SPAWN_NO_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
+
+		#if DEBUG
+		char sMap[128];
+		GetCurrentMap(sMap, sizeof(sMap));
+		LogMessage("Failed to SpawnSpecial, map = %s, SpawnMode = %i, bFound = %b, index = %i", sMap, g_iSpawnMode, bFound, index);
+		#endif
 	}
 }
 
@@ -566,21 +566,21 @@ bool GetSpawnPosByNavArea(float fPos[3], float fSpawnRange, bool bNearest = fals
 	for (i = 0; i < iAreaCount; i++)
 	{
 		pArea = pTheNavAreas.GetArea(i, false);
-		if (pArea && IsValidFlags(pArea.SpawnAttributes, bFinaleArea))
+		if (!pArea || !IsValidFlags(pArea.SpawnAttributes, bFinaleArea))
+			continue;
+
+		fFlow = pArea.GetFlow();
+		if (fFlow < 0.0 || fFlow > fMapMaxFlowDist)
+			continue;
+
+		pArea.GetSpawnPos(fSpawnPos);
+		if (IsNearTheSur(fSpawnRange, fFlow, fSpawnPos, fDist))
 		{
-			fFlow = pArea.GetFlow();
-			if (fFlow > 0.0 && fFlow < fMapMaxFlowDist)
+			if (!IsVisible(fSpawnPos, pArea) && !WillStuck(fSpawnPos))
 			{
-				pArea.GetSpawnPos(fSpawnPos);
-				if (IsNearTheSur(fSpawnRange, fFlow, fSpawnPos, fDist))
-				{
-					if (!IsVisible(fSpawnPos, pArea) && !WillStuck(fSpawnPos))
-					{
-						data.fDist = fDist;
-						data.fPos = fSpawnPos;
-						array.PushArray(data);
-					}
-				}
+				data.fDist = fDist;
+				data.fPos = fSpawnPos;
+				array.PushArray(data);
 			}
 		}
 	}
@@ -658,15 +658,13 @@ bool GetSurPosData()
 
 bool IsValidFlags(int iFlags, bool bFinaleArea)
 {
-	if (iFlags)
-	{
-		if (bFinaleArea)
-		{
-			return (iFlags & TERROR_NAV_FINALE) && (iFlags & (TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE) == 0);
-		}
-		return (iFlags & (TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE) == 0);
-	} 
-	return true;
+	if (!iFlags)
+		return true;
+
+	if (bFinaleArea && (iFlags & TERROR_NAV_FINALE) == 0)
+		return false;
+
+	return (iFlags & (TERROR_NAV_RESCUE_CLOSET|TERROR_NAV_RESCUE_VEHICLE)) == 0;
 }
 
 bool IsNearTheSur(float fSpawnRange, float fFlow, const float fPos[3], float &fDist)
@@ -681,9 +679,7 @@ bool IsNearTheSur(float fSpawnRange, float fFlow, const float fPos[3], float &fD
 		{
 			fDist = GetVectorDistance(data.fPos, fPos);
 			if (fDist < fSpawnRange)
-			{
 				return true;
-			}
 		}
 	}
 	return false;
@@ -700,9 +696,7 @@ bool IsVisible(const float fPos[3], NavArea pArea)
 	for (i = 0; i < g_iSurCount; i++)
 	{
 		if (SDKCall(g_hSDKIsVisibleToPlayer, fTargetPos, g_iSurvivors[i], 2, 3, 0.0, 0, pArea, true))
-		{
 			return true;
-		}
 	}
 
 	return false;
@@ -727,9 +721,7 @@ bool WillStuck(const float fPos[3])
 bool TraceFilter_Stuck(int entity, int contentsMask)
 {
 	if (entity <= MaxClients || !IsValidEntity(entity))
-	{
 		return false;
-	}
 	return true;
 }
 
@@ -741,15 +733,11 @@ int GetRandomSur()
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !GetEntProp(i, Prop_Send, "m_isIncapacitated"))
-		{
 			array.Push(i);
-		}
 	}
 
 	if (array.Length > 0)
-	{
 		client = array.Get(GetRandomIntEx(0, array.Length-1));
-	}
 
 	delete array;
 	return client;
@@ -763,30 +751,25 @@ int GetSpawnClass()
 
 	for (i = 1; i <= MaxClients; i++)
 	{
-		if (g_bMark[i] && IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
-		{
-			iClass = GetZombieClass(i);
-			if (iClass > 0 && iClass < SI_CLASS_SIZE)
-			{
-				iCount[iClass]++;
-			}
-		}
+		if (!g_bMark[i] || !IsClientInGame(i) || GetClientTeam(i) != 3 || !IsPlayerAlive(i) || !IsFakeClient(i))
+			continue;
+
+		iClass = GetZombieClass(i);
+		if (iClass < 1 || iClass > 6)
+			continue;
+
+		iCount[iClass]++;
 	}
 
 	for (i = 1; i < SI_CLASS_SIZE; i++)
 	{
 		if (iCount[i] < g_iSpecialLimit[i])
-		{
 			array.Push(i);
-		}
 	}
 
 	iClass = -1;
-
 	if (array.Length > 0)
-	{
 		iClass = array.Get(GetRandomIntEx(0, array.Length-1));
-	}
 
 	delete array;
 	return iClass;
@@ -794,33 +777,26 @@ int GetSpawnClass()
 
 int GetAllSpecialsTotal()
 {
-	static int i, iClass, iCount;
-	iCount = 0;
+	int iCount, iClass;
 
-	for (i = 1; i <= MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (g_bMark[i] && IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
-		{
-			iClass = GetZombieClass(i);
-			if (iClass > 0 && iClass < SI_CLASS_SIZE)
-			{
-				iCount++;
-			}
-		}
+		if (!g_bMark[i] || !IsClientInGame(i) || GetClientTeam(i) != 3 || !IsPlayerAlive(i) || !IsFakeClient(i))
+			continue;
+
+		iClass = GetZombieClass(i);
+		if (iClass < 1 || iClass > 6)
+			continue;
+
+		iCount++;
 	}
 
 	return iCount;
 }
 
-// https://github.com/bcserv/smlib/blob/transitional_syntax/scripting/include/smlib/math.inc
 int GetRandomIntEx(int min, int max)
 {
-	int random = GetURandomInt();
-
-	if (random == 0)
-		random++;
-
-	return RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
+	return GetURandomInt() % (max - min + 1) + min;
 }
 
 Action OnTakeDamageAlive(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
@@ -843,29 +819,27 @@ public void L4D_OnSpawnSpecial_Post(int client, int zombieClass, const float vec
 
 Action KillSICheck_Timer(Handle timer)
 {
-	if (g_bLeftSafeArea)
-	{
-		static int iClass, i;
-		static float fEngineTime;
-		fEngineTime = GetEngineTime();
+	if (!g_bLeftSafeArea)
+		return Plugin_Continue;
 
-		for (i = 1; i <= MaxClients; i++)
+	float fEngineTime = GetEngineTime();
+	int class;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || GetClientTeam(i) != 3 || !IsPlayerAlive(i) || !IsFakeClient(i))
+			continue;
+
+		class = GetZombieClass(i);
+		if (class < 1 || class > 6)
+			continue;
+
+		if (fEngineTime - g_fSpecialActionTime[i] > g_fKillSITime)
 		{
-			if (IsClientInGame(i) && GetClientTeam(i) == 3 && IsPlayerAlive(i) && IsFakeClient(i))
-			{
-				iClass = GetZombieClass(i);
-				if (iClass > 0 && iClass < SI_CLASS_SIZE)
-				{
-					if (fEngineTime - g_fSpecialActionTime[i] > g_fKillSITime)
-					{
-						if (!GetEntProp(i, Prop_Send, "m_hasVisibleThreats") && !HasSurVictim(i, iClass))
-						{
-							ForcePlayerSuicide(i);
-						}
-						else g_fSpecialActionTime[i] = fEngineTime;
-					}
-				}
-			}
+			if (!GetEntProp(i, Prop_Send, "m_hasVisibleThreats") && !HasSurVictim(i, class))
+				ForcePlayerSuicide(i);
+			else
+				g_fSpecialActionTime[i] = fEngineTime;
 		}
 	}
 	return Plugin_Continue;
@@ -911,9 +885,7 @@ Action KickBot_Timer(Handle timer, int userid)
 {
 	int client = GetClientOfUserId(userid);
 	if (client > 0 && IsClientInGame(client) && IsFakeClient(client) && !IsClientInKickQueue(client))
-	{
 		KickClient(client);
-	}
 	return Plugin_Continue;
 }
 
