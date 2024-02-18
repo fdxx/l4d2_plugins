@@ -6,7 +6,7 @@
 #include <sdktools>
 #include <sourcescramble>	// https://github.com/nosoop/SMExt-SourceScramble
 
-#define PLUGIN_VERSION "0.3"
+#define PLUGIN_VERSION "0.4"
 
 #define SOUND_GIVE		"ui/bigreward.wav"
 #define SOUND_RECEIVE	"ui/littlereward.wav"
@@ -15,6 +15,7 @@
 #define ANIMEVENT_USE	64
 
 #define _MAXPLAYERS		33
+#define BLOCK_RELOAD_TIME 0.3
 
 #define WEAPON_SLOT			0
 #define WEAPON_NAME			1
@@ -65,7 +66,8 @@ float
 	g_fDelayCheck,
 	g_fDelayTransfer,
 	g_fUseTolerance,
-	g_fLastReceivedTime[_MAXPLAYERS];
+	g_fLastReceivedTime[_MAXPLAYERS],
+	g_fReloadTime[_MAXPLAYERS];
 
 StringMap
 	g_smNameToNum,
@@ -233,18 +235,34 @@ void NextFrame_EntityCreated(int ref)
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
 {
-	if (buttons & IN_RELOAD == 0)
+	if ((buttons & IN_RELOAD) == 0)
 		return Plugin_Continue;
 	
 	if (IsValidSur(client) && !IsFakeClient(client) && IsPlayerAlive(client) && !GetEntProp(client, Prop_Send, "m_isIncapacitated"))
 	{
-		int slot = GetSlotFromEnt(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"));
+		// Since pressing the reload key once will trigger multiple times within 0.1 seconds,
+		// So we block the reload key for a short period of time after the transfer is successful.
+		if (g_fReloadTime[client] + BLOCK_RELOAD_TIME > GetEngineTime())
+		{
+			buttons &= ~IN_RELOAD;
+			return Plugin_Continue;
+		}
+
+		int activeWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		int slot = GetSlotFromEnt(activeWeapon);
 		if (slot < 2 || slot > 4)
 			return Plugin_Continue;
 
 		int target = SDKCall(g_hFindUseEntity, client, g_fPlayerGiveDist, 0.0, g_fUseTolerance, 0, true);
 		if (IsValidSur(target) && IsPlayerAlive(target) && !GetEntProp(target, Prop_Send, "m_isIncapacitated"))
+		{
 			SDKCall(g_hGiveActiveWeapon, client, target);
+			if (SDKCall(g_hGetDropTarget, activeWeapon) == target)
+			{
+				g_fReloadTime[client] = GetEngineTime();
+				buttons &= ~IN_RELOAD;
+			}
+		}
 	}
 
 	return Plugin_Continue;
@@ -498,12 +516,12 @@ bool IsValidSur(int client)
 void Init()
 {
 	GameData hGameData = new GameData("l4d2_gear_transfer");
-	if (hGameData == null)
-		SetFailState("Failed to load \"l4d2_gear_transfer.txt\" gamedata.");
+	char buffer[128];
 
 	// https://github.com/lua9520/source-engine-2018-cstrike15_src/blob/master/game/shared/cstrike15/weapon_baseitem.cpp#L131
+	strcopy(buffer, sizeof(buffer), "FindUseEntity");
 	StartPrepSDKCall(SDKCall_Player);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, "FindUseEntity");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, buffer);
 	PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);				// range
 	PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);				// unknown
 	PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);				// tolerance
@@ -512,66 +530,73 @@ void Init()
 	PrepSDKCall_SetReturnInfo(SDKType_CBaseEntity, SDKPass_Pointer);
 	g_hFindUseEntity = EndPrepSDKCall();
 	if (g_hFindUseEntity == null)
-		SetFailState("Failed to create SDKCall: FindUseEntity");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// void CBaseEntity::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value ) 
+	strcopy(buffer, sizeof(buffer), "UseEntity");
 	StartPrepSDKCall(SDKCall_Entity);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, "UseEntity");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, buffer);
 	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
 	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);	
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain); 
 	PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);	
 	g_hUseEntity = EndPrepSDKCall();
 	if (g_hUseEntity == null)
-		SetFailState("Failed to create SDKCall: UseEntity");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// bool CBaseCombatWeapon::IsBaseCombatWeapon()
 	// CBaseEntity -> CBaseAnimating -> CBaseCombatWeapon -> CWeaponCSBase -> CTerrorWeapon
+	strcopy(buffer, sizeof(buffer), "IsBaseCombatWeapon");
 	StartPrepSDKCall(SDKCall_Entity);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, "IsBaseCombatWeapon");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, buffer);
 	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
 	g_hIsBaseCombatWeapon = EndPrepSDKCall();
 	if (g_hIsBaseCombatWeapon == null)
-		SetFailState("Failed to create SDKCall: IsBaseCombatWeapon");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// int CBaseCombatWeapon::GetSlot()
 	// Only valid for weapons already carried. (CBaseCombatWeapon)
+	strcopy(buffer, sizeof(buffer), "GetSlot");
 	StartPrepSDKCall(SDKCall_Entity);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, "GetSlot");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, buffer);
 	PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
 	g_hGetSlot = EndPrepSDKCall();
 	if (g_hGetSlot == null)
-		SetFailState("Failed to create SDKCall: GetSlot");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// CBaseEntity* CTerrorWeapon::GetDropTarget()
+	strcopy(buffer, sizeof(buffer), "GetDropTarget");
 	StartPrepSDKCall(SDKCall_Entity);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, "GetDropTarget");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Virtual, buffer);
 	PrepSDKCall_SetReturnInfo(SDKType_CBaseEntity, SDKPass_Pointer);
 	g_hGetDropTarget = EndPrepSDKCall();
 	if (g_hGetDropTarget == null)
-		SetFailState("Failed to create SDKCall: GetDropTarget");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// void CTerrorPlayer::DoAnimationEvent(PlayerAnimEvent_t, int)
+	strcopy(buffer, sizeof(buffer), "CTerrorPlayer::DoAnimationEvent");
 	StartPrepSDKCall(SDKCall_Player);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CTerrorPlayer::DoAnimationEvent");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, buffer);
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
 	g_hDoAnimationEvent = EndPrepSDKCall();
 	if (g_hDoAnimationEvent == null)
-		SetFailState("Failed to create SDKCall: CTerrorPlayer::DoAnimationEvent");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// void CTerrorPlayer::GiveActiveWeapon(CTerrorPlayer*)
+	strcopy(buffer, sizeof(buffer), "CTerrorPlayer::GiveActiveWeapon");
 	StartPrepSDKCall(SDKCall_Player);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CTerrorPlayer::GiveActiveWeapon");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, buffer);
 	PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
 	g_hGiveActiveWeapon = EndPrepSDKCall();
 	if (g_hGiveActiveWeapon == null)
-		SetFailState("Failed to create SDKCall: CTerrorPlayer::GiveActiveWeapon");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// bool IsVisibleToPlayer(Vector const&, CBasePlayer *, int, int, float, CBaseEntity const*, TerrorNavArea **, bool *);
 	// SDKCall(g_hSDKIsVisibleToPlayer, g_fEyePos[target], giver, 2, 3, 0.0, 0, 0, false)
+	strcopy(buffer, sizeof(buffer), "IsVisibleToPlayer");
 	StartPrepSDKCall(SDKCall_Static);
-	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "IsVisibleToPlayer");
+	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, buffer);
 	PrepSDKCall_AddParameter(SDKType_Vector, SDKPass_ByRef);
 	PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
 	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
@@ -583,21 +608,23 @@ void Init()
 	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
 	g_hSDKIsVisibleToPlayer = EndPrepSDKCall();
 	if (g_hSDKIsVisibleToPlayer == null)
-		SetFailState("Failed to create SDKCall: IsVisibleToPlayer");
+		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	// Cancel slot limit. (game only supports slot 4)
-	MemoryPatch mPatch = MemoryPatch.CreateFromConf(hGameData, "CTerrorPlayer::GiveActiveWeapon");
+	strcopy(buffer, sizeof(buffer), "CTerrorPlayer::GiveActiveWeapon");
+	MemoryPatch mPatch = MemoryPatch.CreateFromConf(hGameData, buffer);
 	if (!mPatch.Validate())
-		SetFailState("Verify patch failed.");
+		SetFailState("Failed to validate patch: %s", buffer);
 	if (!mPatch.Enable())
-		SetFailState("Enable patch failed.");
+		SetFailState("Failed to enable patch: %s", buffer);
 	
 	// NOP Weapon_Switch function.
-	mPatch = MemoryPatch.CreateFromConf(hGameData, "CTerrorPlayer::OnGivenWeapon");
+	strcopy(buffer, sizeof(buffer), "CTerrorPlayer::OnGivenWeapon");
+	mPatch = MemoryPatch.CreateFromConf(hGameData, buffer);
 	if (!mPatch.Validate())
-		SetFailState("Verify patch failed.");
+		SetFailState("Failed to validate patch: %s", buffer);
 	if (!mPatch.Enable())
-		SetFailState("Enable patch failed.");
+		SetFailState("Failed to enable patch: %s", buffer);
 	
 	delete hGameData;
 
