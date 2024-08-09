@@ -6,7 +6,7 @@
 #include <sourcescramble>			// https://github.com/nosoop/SMExt-SourceScramble
 #include <l4d2_source_keyvalues>	// https://github.com/fdxx/l4d2_source_keyvalues
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 #define CFG_PATH "data/server_info.cfg"
 
 enum struct ServerInfo
@@ -40,7 +40,8 @@ ConVar
 	g_cvGameDescription,
 	g_cvModeDisplaytitle,
 	g_cvMaxSpecial,
-	g_cvSpawnTime;
+	g_cvSpawnTime,
+	g_cvCfgPath;
 
 public Plugin myinfo = 
 {
@@ -59,6 +60,7 @@ public void OnPluginStart()
 	g_cvDynamicName = CreateConVar("l4d2_server_info_dynamic_hostname", "1", "Add special infected configure to host name.");
 	g_cvGameDescription = CreateConVar("l4d2_server_info_gamedescription", "1", "Set a custom game description.");
 	g_cvModeDisplaytitle = CreateConVar("l4d2_server_info_modedisplaytitle", "1", "Set a custom mode displaytitle.");
+	g_cvCfgPath = CreateConVar("l4d2_server_info_cfg", CFG_PATH, "config file path");
 }
 
 public void OnConfigsExecuted()
@@ -83,6 +85,7 @@ public void OnConfigsExecuted()
 	g_cvDynamicName.AddChangeHook(OnConVarChanged);
 	g_cvGameDescription.AddChangeHook(OnConVarChanged);
 	g_cvModeDisplaytitle.AddChangeHook(OnConVarChanged);
+	g_cvCfgPath.AddChangeHook(OnConVarChanged);
 
 	if (g_cvSetHostName.BoolValue && g_cvDynamicName.BoolValue)
 	{
@@ -105,7 +108,8 @@ void SetServerInfo()
 {
 	// ------- Load config -------
 	char sBuffer[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), CFG_PATH);
+	g_cvCfgPath.GetString(sBuffer, sizeof(sBuffer));
+	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), sBuffer);
 
 	KeyValues kv = new KeyValues("");
 	if (!kv.ImportFromFile(sBuffer))

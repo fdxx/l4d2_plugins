@@ -5,7 +5,7 @@
 #include <sdktools>
 #include <multicolors>  
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 #define SOUND "ui/helpful_event_1.wav"
 #define CFG_FILE "data/l4d2_gift.cfg"
@@ -19,7 +19,8 @@
 ConVar
 	g_cvChance,
 	g_cvNotify,
-	g_cvGiftTime;
+	g_cvGiftTime,
+	g_cvCfgPath;
 
 Handle
 	g_hSDK_CreateGift,
@@ -36,6 +37,9 @@ int
 float
 	g_fChance,
 	g_fGiftTime;
+
+
+char g_sCfgPath[PLATFORM_MAX_PATH];
 
 enum struct award_t
 {
@@ -61,18 +65,18 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	Init();
-
 	CreateConVar("l4d2_gift_version", VERSION, "version", FCVAR_NONE | FCVAR_DONTRECORD);
 	g_cvChance = CreateConVar("l4d2_gift_chance", "0.03", "Probability of a gift box appearing (0.0-1.0).", FCVAR_NONE, true, 0.0, true, 1.0);
 	g_cvNotify = CreateConVar("l4d2_gift_notify", "3", "Notify award info. 0=None, 1=Chat message, 2=Play sound, 3=Both.", FCVAR_NONE, true, 0.0, true, 3.0);
 	g_cvGiftTime = CreateConVar("l4d2_gift_time", "75", "Time for the gift to disappear automatically (in seconds), 0=permanent.");
+	g_cvCfgPath = CreateConVar("l4d2_gift_cfg", CFG_FILE, "config file path");
 
 	OnConVarChanged(null, "", "");
 
 	g_cvChance.AddChangeHook(OnConVarChanged);
 	g_cvNotify.AddChangeHook(OnConVarChanged);
 	g_cvGiftTime.AddChangeHook(OnConVarChanged);
+	g_cvCfgPath.AddChangeHook(OnConVarChanged);
 
 	HookEvent("christmas_gift_grab", Event_GiftGrab);
 	HookEvent("player_death", Event_PlayerDeath, EventHookMode_Pre);
@@ -83,6 +87,14 @@ public void OnPluginStart()
 
 	RegAdminCmd("sm_award_list", Cmd_List, ADMFLAG_ROOT);
 	RegAdminCmd("sm_award_test", Cmd_Test, ADMFLAG_ROOT);
+
+	CreateTimer(2.0, Init_Timer);
+}
+
+Action Init_Timer(Handle timer)
+{
+	Init();
+	return Plugin_Continue;
 }
 
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -90,6 +102,10 @@ void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue
 	g_fChance = g_cvChance.FloatValue;
 	g_iNotify = g_cvNotify.IntValue;
 	g_fGiftTime = g_cvGiftTime.FloatValue;
+	g_cvCfgPath.GetString(g_sCfgPath, sizeof(g_sCfgPath));
+
+	if (convar == g_cvCfgPath)
+		Init();
 
 	delete g_hGiftTimer;
 	if (g_fGiftTime > 0.0)
@@ -105,11 +121,15 @@ public void OnMapStart()
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	g_aGift.Clear();
+	if (g_aGift)
+		g_aGift.Clear();
 }
 
 Action GiftRemoveCheck_Timer(Handle timer)
 {
+	if (!g_aGift)
+		return Plugin_Continue;
+		
 	int len = g_aGift.Length;
 	if (!len)
 		return Plugin_Continue;
@@ -291,6 +311,11 @@ Action Cmd_Test(int client, int args)
 
 void Init()
 {
+	delete g_aAward;
+	delete g_aGift;
+	g_aAward = new ArrayList(sizeof(award_t));
+	g_aGift = new ArrayList(sizeof(gift_t));
+
 	GameData hGameData = new GameData("l4d2_gift");
 	char buffer[COMMAND_MAX_LENGTH];
 
@@ -305,6 +330,7 @@ void Init()
 	PrepSDKCall_AddParameter(SDKType_Vector, SDKPass_ByRef);
 	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
 	PrepSDKCall_SetReturnInfo(SDKType_CBaseEntity, SDKPass_Pointer);
+	delete g_hSDK_CreateGift;
 	g_hSDK_CreateGift = EndPrepSDKCall();
 	if (g_hSDK_CreateGift == null)
 		SetFailState("Failed to create SDKCall: %s", buffer);
@@ -312,17 +338,10 @@ void Init()
 	delete hGameData;
 
 	// --------------------------------
-
-	BuildPath(Path_SM, buffer, sizeof(buffer), CFG_FILE);
+	BuildPath(Path_SM, buffer, sizeof(buffer), "%s", g_sCfgPath);
 	KeyValues kv = new KeyValues("");
 	if (!kv.ImportFromFile(buffer))
 		SetFailState("Failed to load %s", buffer);
-
-	delete g_aAward;
-	delete g_aGift;
-
-	g_aAward = new ArrayList(sizeof(award_t));
-	g_aGift = new ArrayList(sizeof(gift_t));
 
 	for (bool iter = kv.GotoFirstSubKey(); iter; iter = kv.GotoNextKey())
 	{

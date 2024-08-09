@@ -4,17 +4,18 @@
 #include <sourcemod>
 #include <multicolors>  
 
-#define VERSION "0.3"
+#define VERSION "0.4"
 #define CFG_PATH "data/server_info.cfg"
 
 #define AD_SEQUENTIAL	0
 #define AD_RANDOM		1
 
-ConVar g_cvPrintType, g_cvTime;
+ConVar g_cvPrintType, g_cvTime, g_cvCfgPath;
 ArrayList g_aAdList;
 Handle g_hTimer;
 int g_iPrintType;
 float g_fTime;
+char g_sCfgPath[PLATFORM_MAX_PATH];
 
 public Plugin myinfo = 
 {
@@ -25,25 +26,37 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	LoadAdvertisements();
-
 	CreateConVar("l4d2_advertisements_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
-	g_cvPrintType = CreateConVar("l4d2_advertisements_type", "0", "Print type. 0=Sequential，1=Random");
+	g_cvPrintType = CreateConVar("l4d2_advertisements_type", "0", "Print type. 0=Sequential, 1=Random");
 	g_cvTime = CreateConVar("l4d2_advertisements_time", "360.0", "Print interval time");
+	g_cvCfgPath = CreateConVar("l4d2_advertisements_cfg", CFG_PATH, "config file path");
 
 	OnConVarChanged(null, "", "");
 
 	g_cvPrintType.AddChangeHook(OnConVarChanged);
 	g_cvTime.AddChangeHook(OnConVarChanged);
+	g_cvCfgPath.AddChangeHook(OnConVarChanged);
 
 	RegConsoleCmd("sm_adlist", Cmd_CheckAdList);
 	RegAdminCmd("sm_adreload", Cmd_AdReload, ADMFLAG_ROOT);
+
+	CreateTimer(2.0, Init_Timer);
+}
+
+Action Init_Timer(Handle timer)
+{
+	LoadAdvertisements();
+	return Plugin_Continue;
 }
 
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	g_iPrintType = g_cvPrintType.IntValue;
 	g_fTime = g_cvTime.FloatValue;
+	g_cvCfgPath.GetString(g_sCfgPath, sizeof(g_sCfgPath));
+
+	if (convar == g_cvCfgPath)
+		LoadAdvertisements();
 
 	delete g_hTimer;
 	if (g_fTime >= 0.1)
@@ -53,7 +66,7 @@ void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue
 void LoadAdvertisements()
 {
 	char sBuffer[MAX_MESSAGE_LENGTH];
-	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), CFG_PATH);
+	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), "%s", g_sCfgPath);
 
 	KeyValues kv = new KeyValues("");
 	kv.SetEscapeSequences(true); // Allow newline characters to be read.
@@ -85,10 +98,13 @@ Action PrintAd_Timer(Handle timer)
 	if (!g_aAdList || !g_aAdList.Length)
 		return Plugin_Continue;
 
-	static char sBuffer[MAX_MESSAGE_LENGTH];
-	g_aAdList.GetString(GetIndex(), sBuffer, sizeof(sBuffer));
-	ReplaceString(sBuffer, sizeof(sBuffer), "{time}", GetCurTime());
-	CPrintToChatAll("%s", sBuffer);
+	char buffer[MAX_MESSAGE_LENGTH];
+	char time[128];
+	FormatTime(time, sizeof(time), "%F %T");
+
+	g_aAdList.GetString(GetIndex(), buffer, sizeof(buffer));
+	ReplaceString(buffer, sizeof(buffer), "{time}", time);
+	CPrintToChatAll("%s", buffer);
 
 	return Plugin_Continue;
 }
@@ -109,13 +125,6 @@ int GetIndex()
 	return -1;
 }
 
-char[] GetCurTime()
-{
-	static char sTime[64];
-	FormatTime(sTime, sizeof(sTime), "%F %T");
-	return sTime;
-}
-
 int GetRandomIntEx(int min, int max)
 {
 	return GetURandomInt() % (max - min + 1) + min;
@@ -126,12 +135,15 @@ Action Cmd_CheckAdList(int client, int args)
 	if (!g_aAdList || !g_aAdList.Length)
 		return Plugin_Handled;
 
-	static char sBuffer[MAX_MESSAGE_LENGTH];
+	char buffer[MAX_MESSAGE_LENGTH];
+	char time[128];
+	FormatTime(time, sizeof(time), "%F %T");
+
 	for (int i = 0; i < g_aAdList.Length; i++)
 	{
-		g_aAdList.GetString(i, sBuffer, sizeof(sBuffer));
-		ReplaceString(sBuffer, sizeof(sBuffer), "{time}", GetCurTime());
-		CPrintToChatAll("%s", sBuffer);
+		g_aAdList.GetString(i, buffer, sizeof(buffer));
+		ReplaceString(buffer, sizeof(buffer), "{time}", time);
+		CPrintToChatAll("%s", buffer);
 	}
 
 	return Plugin_Handled;

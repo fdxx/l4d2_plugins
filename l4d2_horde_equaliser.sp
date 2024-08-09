@@ -1,7 +1,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define VERSION	"0.2"
+#define VERSION	"0.3"
 
 #include <sourcemod>
 #include <sdkhooks>
@@ -12,10 +12,12 @@
 #define MIN_TIME 0.0
 #define MAX_TIME 10.0
 #define HORDE_END_SOUND "level/bell_normal.wav"
+#define CFG_PATH "data/mapinfo.txt"
 
 ConVar
 	g_cvNotifyNum,
-	g_cvPauseWhenTankAlive;
+	g_cvPauseWhenTankAlive,
+	g_cvCfgPath;
 
 int g_iNotifyNum,
 	g_iCommInfCount, 
@@ -26,6 +28,8 @@ bool
 	g_bNotifyStart,
 	g_bNotifyRemain,
 	g_bNotifyEnd;
+
+char g_sCfgPath[PLATFORM_MAX_PATH];
 
 public Plugin myinfo = 
 {
@@ -41,11 +45,13 @@ public void OnPluginStart()
 	CreateConVar("l4d2_horde_equaliser_version", VERSION, "version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	g_cvNotifyNum = CreateConVar("l4d2_horde_equaliser_notify_num", "30", "剩余多少尸潮时公告");
 	g_cvPauseWhenTankAlive  = CreateConVar("l4d2_horde_equaliser_pause_when_tank_alive", "1", "Tank活着时暂停事件尸潮", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_cvCfgPath = CreateConVar("l4d2_horde_equaliser_cfg", CFG_PATH, "config file path");
 
 	OnConVarChange(null, "", "");
 
 	g_cvNotifyNum.AddChangeHook(OnConVarChange);
 	g_cvPauseWhenTankAlive.AddChangeHook(OnConVarChange);
+	g_cvCfgPath.AddChangeHook(OnConVarChange);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("round_end", Event_RoundEnd, EventHookMode_PostNoCopy);
@@ -55,6 +61,7 @@ void OnConVarChange(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	g_iNotifyNum = g_cvNotifyNum.IntValue;
 	g_bPauseWhenTankAlive = g_cvPauseWhenTankAlive.BoolValue;
+	g_cvCfgPath.GetString(g_sCfgPath, sizeof(g_sCfgPath));
 }
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -66,7 +73,7 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 Action GetHordeLimit_Timer(Handle timer)
 {
 	char sBuffer[256];
-	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), "data/mapinfo.txt");
+	BuildPath(Path_SM, sBuffer, sizeof(sBuffer), "%s", g_sCfgPath);
 
 	KeyValues kv = new KeyValues("");
 	if (!kv.ImportFromFile(sBuffer))

@@ -7,7 +7,7 @@
 #include <multicolors>  
 #include <dhooks>
 
-#define VERSION "2.9"
+#define VERSION "3.0"
 
 #define SPAWN_SOUND "ui/pickup_secret01.wav"
 
@@ -31,7 +31,8 @@
 ConVar
 	director_no_bosses,
 	g_cvEnable[2],
-	g_cvBlockSpawn[2];
+	g_cvBlockSpawn[2],
+	g_cvMapInfoPath;
 
 bool
 	g_bEnable[2],
@@ -65,6 +66,8 @@ ArrayList
 StringMap
 	g_smSpawnMap[2],
 	g_smStaticMap[2];
+
+char g_sMapInfoPath[PLATFORM_MAX_PATH];
 
 enum struct SpawnData
 {
@@ -177,13 +180,15 @@ public void OnPluginStart()
 	g_cvEnable[WITCH] = CreateConVar("l4d2_boss_spawn_control_witch_enable", "1", "Enables witch spawn on a given map.", FCVAR_NONE, true, 0.0, true, 1.0);
 	g_cvBlockSpawn[TANK] = CreateConVar("l4d2_boss_spawn_control_block_other_tank_spawn", "1", "Block other tank spawn (by L4D_OnSpawnTank).", FCVAR_NONE, true, 0.0, true, 1.0);
 	g_cvBlockSpawn[WITCH] = CreateConVar("l4d2_boss_spawn_control_block_other_witch_spawn", "1", "Block other witch spawn (by L4D_OnSpawnWitch).", FCVAR_NONE, true, 0.0, true, 1.0);
-	
+	g_cvMapInfoPath = CreateConVar("l4d2_boss_spawn_control_mapinfo_path", "data/mapinfo.txt");
+
 	OnConVarChange(null, "", "");
 
 	g_cvEnable[TANK].AddChangeHook(OnConVarChange);
 	g_cvEnable[WITCH].AddChangeHook(OnConVarChange);
 	g_cvBlockSpawn[TANK].AddChangeHook(OnConVarChange);
 	g_cvBlockSpawn[WITCH].AddChangeHook(OnConVarChange);
+	g_cvMapInfoPath.AddChangeHook(OnConVarChange);
 
 	RegConsoleCmd("sm_boss", Cmd_PrintFlow);
 	RegConsoleCmd("sm_tank", Cmd_PrintFlow);
@@ -277,6 +282,7 @@ void OnConVarChange(ConVar convar, const char[] oldValue, const char[] newValue)
 	g_bEnable[WITCH] = g_cvEnable[WITCH].BoolValue;
 	g_bBlockSpawn[TANK] = g_cvBlockSpawn[TANK].BoolValue;
 	g_bBlockSpawn[WITCH] = g_cvBlockSpawn[WITCH].BoolValue;
+	g_cvMapInfoPath.GetString(g_sMapInfoPath, sizeof(g_sMapInfoPath));
 }
 
 public void OnMapStart()
@@ -327,7 +333,7 @@ void GetBanFlow(const char[] sMap)
 	float fBanFlow[2];
 	char key[256];
 
-	BuildPath(Path_SM, sFile, sizeof(sFile), "data/mapinfo.txt");
+	BuildPath(Path_SM, sFile, sizeof(sFile), "%s", g_sMapInfoPath);
 	KeyValues kv = new KeyValues("");
 	if (!kv.ImportFromFile(sFile))
 	{

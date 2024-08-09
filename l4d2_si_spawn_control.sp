@@ -15,6 +15,8 @@ v3.4
 v3.5
 	- When max SI are being spawned, Allow respawning of killed SI.
 
+v3.6
+	- Restore official cvar to default value when unload plugin.
 =======================================================================================*/
 
 #pragma semicolon 1
@@ -26,7 +28,7 @@ v3.5
 //#include <profiler>
 #include <sourcescramble> // https://github.com/nosoop/SMExt-SourceScramble
 
-#define VERSION "3.5"
+#define VERSION "3.6"
 #define DEBUG 1
 
 #define	SMOKER	1
@@ -212,6 +214,7 @@ public Plugin myinfo =
 	version = VERSION,
 };
 
+
 public void OnPluginStart()
 {
 	Init();
@@ -320,6 +323,20 @@ void GetCvars()
 	g_bTogetherSpawn = g_cvTogetherSpawn.BoolValue;
 
 	z_spawn_range.IntValue = RoundToNearest(g_fNormalSpawnRange);
+}
+
+public void OnPluginEnd()
+{
+	for (int i = 1; i < SI_CLASS_SIZE; i++)
+		z_special_limit[i].RestoreDefault();
+
+	z_attack_flow_range.RestoreDefault();
+	z_spawn_flow_limit.RestoreDefault();
+	director_spectate_specials.RestoreDefault();
+	z_spawn_safety_range.RestoreDefault();
+	z_finale_spawn_safety_range.RestoreDefault();
+	z_spawn_range.RestoreDefault();
+	z_discard_range.RestoreDefault();
 }
 
 public void OnConfigsExecuted()

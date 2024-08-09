@@ -219,6 +219,7 @@ void Init()
 	StartPrepSDKCall(SDKCall_Static);
 	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, buffer);
 	PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
+	delete g_hSDK_GetMissionInfo;
 	g_hSDK_GetMissionInfo = EndPrepSDKCall();
 	if (g_hSDK_GetMissionInfo == null)
 		SetFailState("Failed to create SDKCall: %s", buffer);
@@ -227,6 +228,7 @@ void Init()
 	strcopy(buffer, sizeof(buffer), "MeleeDumpWeapons_f");
 	StartPrepSDKCall(SDKCall_Static);
 	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, buffer);
+	delete g_hSDK_MeleeDump;
 	g_hSDK_MeleeDump = EndPrepSDKCall();
 	if (g_hSDK_MeleeDump == null)
 		LogError("Failed to create SDKCall: %s", buffer);
