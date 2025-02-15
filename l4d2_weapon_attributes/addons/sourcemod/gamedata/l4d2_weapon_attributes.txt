@@ -1,0 +1,223 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Addresses"
+		{
+			"MeleeWeaponInfoStore"
+			{
+				"windows"
+				{
+					"signature" "CTerrorPlayer::GiveNamedItem"
+					"read"		"340"
+				}
+				
+				"linux"
+				{
+					"signature" "CTerrorPlayer::GiveNamedItem"
+					"read"		"143"
+				}
+			}
+		}
+
+		"Offsets"
+		{
+			// l4d2intweapon
+			"CCSWeaponInfo::damage"
+			{
+				"windows"	"2508"
+				"linux"		"2508"
+			}
+			"CCSWeaponInfo::bullets"
+			{
+				"windows"	"2520"
+				"linux"		"2520"
+			}
+			"CCSWeaponInfo::clipsize"
+			{
+				"windows"	"352"
+				"linux"		"352"
+			}
+			"CCSWeaponInfo::bucket"
+			{
+				"windows"	"344"
+				"linux"		"344"
+			}
+			"CCSWeaponInfo::tier"
+			{
+				"windows"	"3048"
+				"linux"		"3048"
+			}
+
+			// l4d2floatweapon
+			"CCSWeaponInfo::speed"
+			{
+				"windows"	"2192"
+				"linux"		"2192"
+			}
+			"CCSWeaponInfo::spreadpershot"
+			{
+				"windows"	"3088"
+				"linux"		"3088"
+			}
+			"CCSWeaponInfo::maxspread"
+			{
+				"windows"	"3092"
+				"linux"		"3092"
+			}
+			"CCSWeaponInfo::spreaddecay"
+			{
+				"windows"	"3096"
+				"linux"		"3096"
+			}
+			"CCSWeaponInfo::minduckspread"
+			{
+				"windows"	"3100"
+				"linux"		"3100"
+			}
+			"CCSWeaponInfo::minstandspread"
+			{
+				"windows"	"3104"
+				"linux"		"3104"
+			}
+			"CCSWeaponInfo::minairspread"
+			{
+				"windows"	"3108"
+				"linux"		"3108"
+			}
+			"CCSWeaponInfo::maxmovespread"
+			{
+				"windows"	"3112"
+				"linux"		"3112"
+			}
+			"CCSWeaponInfo::penlayers"
+			{
+				"windows"	"3144"
+				"linux"		"3144"
+			}
+			"CCSWeaponInfo::penpower"
+			{
+				"windows"	"3148"
+				"linux"		"3148"
+			}
+			"CCSWeaponInfo::penmaxdist"
+			{
+				"windows"	"3152"
+				"linux"		"3152"
+			}
+			"CCSWeaponInfo::charpenmaxdist"
+			{
+				"windows"	"3156"
+				"linux"		"3156"
+			}
+			"CCSWeaponInfo::gainrange"
+			{
+				"windows"	"3160"
+				"linux"		"3160"
+			}
+			"CCSWeaponInfo::range"
+			{
+				"windows"	"2512"
+				"linux"		"2512"
+			}
+			"CCSWeaponInfo::rangemod"
+			{
+				"windows"	"2516"
+				"linux"		"2516"
+			}
+			"CCSWeaponInfo::cycletime"
+			{
+				"windows"	"2524"
+				"linux"		"2524"
+			}
+			"CCSWeaponInfo::scatterpitch"
+			{
+				"windows"	"3116"
+				"linux"		"3116"
+			}
+			"CCSWeaponInfo::scatteryaw"
+			{
+				"windows"	"3120"
+				"linux"		"3120"
+			}
+			"CCSWeaponInfo::verticalpunch"
+			{
+				"windows"	"3076"
+				"linux"		"3076"
+			}
+			"CCSWeaponInfo::horizpunch"
+			{
+				"windows"	"3080"
+				"linux"		"3080"
+			}
+			"CCSWeaponInfo::reloadduration"
+			{
+				"windows"	"3128"
+				"linux"		"3128"
+			}
+
+			// l4d2boolmeleeweapon
+			"CMeleeWeaponInfo::decapitates"
+			{
+				"windows"	"300"
+				"linux"		"300"
+			}
+
+			// l4d2intmeleeweapon
+			"CMeleeWeaponInfo::damageflags"
+			{
+				"windows"	"292"
+				"linux"		"292"
+			}
+			"CMeleeWeaponInfo::rumbleeffect"
+			{
+				"windows"	"296"
+				"linux"		"296"
+			}
+
+			// l4d2floatmeleeweapon
+			"CMeleeWeaponInfo::damage"
+			{
+				"windows"	"288"
+				"linux"		"288"
+			}
+			"CMeleeWeaponInfo::refiredelay"
+			{
+				"windows"	"4"
+				"linux"		"4"
+			}
+			"CMeleeWeaponInfo::weaponidletime"
+			{
+				"windows"	"3148"
+				"linux"		"3148"
+			}
+		}
+
+		"Signatures"
+		{
+			"CTerrorPlayer::GiveNamedItem"
+			{
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer13GiveNamedItemEPKcibP11CBaseEntity"
+				"windows"	"\x55\x8B\xEC\x81\xEC\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\x33\xC5\x89\x45\xFC\x8B\x45\x14\x53\x8B\x5D\x08"
+				// 55 8B EC 81 EC ? ? ? ? A1 ? ? ? ? 33 C5 89 45 FC 8B 45 14 53 8B 5D 08
+			}
+
+			"GetWeaponInfo"
+			{
+				"library"		"server"
+				"linux"			"@_Z13GetWeaponInfo10CSWeaponID"
+				"windows"		"\x55\x8B\x2A\x53\x8B\x2A\x2A\x85\x2A\x75\x2A\x33\x2A\x5B\x5D\xC3\x80"
+				// 55 8B ? 53 8B ? ? 85 ? 75 ? 33 ? 5B 5D C3 80
+			}
+
+			"CMeleeWeaponInfoStore::GetMeleeWeaponInfo"
+			{
+				"library"		"server"
+				"linux"			"@_ZN21CMeleeWeaponInfoStore18GetMeleeWeaponInfoEi"
+				"windows"		"\x55\x8B\x2A\x83\x2A\x2A\x8B\x2A\x2A\x56\x8B\x2A\x8D\x2A\x2A\x51\x8D\x2A\x2A\x89\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x83\x2A\x2A\x75"
+				// 55 8B ? 83 ? ? 8B ? ? 56 8B ? 8D ? ? 51 8D ? ? 89 ? ? E8 ? ? ? ? 83 ? ? 75
+			}
+		}
+	}
+}

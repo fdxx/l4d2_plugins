@@ -1,0 +1,43 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"MemPatches"
+		{
+			"Charger::OnTakeDamage::DamageMultiples"
+			{
+				"signature"	"Charger::OnTakeDamage"
+				
+				// This patch doesn't actually modify the bytes.
+				// Just for provide the address, And auto restore the bytes when the plugin is unload.
+
+				"linux"
+				{
+					"offset"	"B8h"
+					"verify"	"\xF3\x0F\x10\x05"
+					"patch"		"\x00\x00\x00\x00\x00\x00\x00\x00"
+					"preserve"	"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+				}
+
+				"windows"
+				{
+					"offset"	"25h"
+					"verify"	"\xF3\x0F\x59\x05"
+					"patch"		"\x00\x00\x00\x00\x00\x00\x00\x00"
+					"preserve"	"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+				}
+			}
+		}
+
+		"Signatures" 
+		{
+			"Charger::OnTakeDamage"
+			{
+				"library"	"server"
+				"linux"		"@_ZN7Charger12OnTakeDamageERK15CTakeDamageInfo"
+				"windows"	"\x55\x8B\xEC\x8B\x45\x08\x83\xEC\x60\x56"
+				/* 55 8B EC 8B 45 08 83 EC 60 56 */
+			}
+		}
+	}
+}

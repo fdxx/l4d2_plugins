@@ -1,0 +1,44 @@
+"Phrases"
+{
+	"RespawnFailed"
+	{
+		"en"    "Respawn failed, please try again after switching teams."
+		"chi"	"{lightgreen}重生失败, 请尝试重新切换团队后再试试."
+	}
+
+	"Respawn after X seconds"
+	{
+		"en"    "Respawn after %i seconds"
+		"chi"	"%i 秒后重生"
+	}
+
+	"Maximum limit reached"
+	{
+		"en"    "Maximum limit reached"
+		"chi"	"已达到感染玩家最大限制"
+	}
+
+	"AddTank"
+	{
+		"en"    "You've been added to takeover Tank list. re-enter remove"
+		"chi"	"{lightgreen}你已加入接管Tank列表, 再次输入退出."
+	}
+
+	"RemoveTank"
+	{
+		"en"    "You've been removed to takeover Tank list"
+		"chi"	"{lightgreen}你已退出接管Tank列表."
+	}
+
+	"taketank msg"
+	{
+		"en"    "!taketank or !tk can added to takeover tank list. Need to be entered in advance before TANK is spawned"
+		"chi"	"{blue}[提示] {olive}!taketank 或 !tk 可加入接管Tank列表(需在克产生之前提前输入)."
+	}
+
+	"taketank"
+	{
+		"en"    "Tank has been taken over by %N"
+		"chi"	"{blue}[提示] {olive}Tank {default}已被 {olive}%N {default}接管."
+	}
+}

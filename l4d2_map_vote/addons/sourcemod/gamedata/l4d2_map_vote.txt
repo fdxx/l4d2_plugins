@@ -1,0 +1,83 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Offsets"
+		{
+			"MatchExtL4D::GetAllMissions"
+			{
+				"linux"		"0"
+				"windows"	"0"
+			}
+		}
+		
+		"Addresses"
+		{
+			"g_pMatchExtL4D"
+			{
+				"linux"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"44"
+				}
+				"windows"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"42"
+				}
+				"read"	"0"
+			}
+
+			"TheDirector"
+			{
+				"linux"
+				{
+					"signature"	"CDirectorMusicBanks::OnRoundStart"
+					"read"		"10"
+				}
+				"windows"
+				{
+					"signature"	"CDirectorMusicBanks::OnRoundStart"
+					"read"		"12"
+				}
+				"read"	"0"
+			}
+		}
+
+		"Signatures"
+		{
+			/* CTerrorGameRules::GetMissionInfo(CTerrorGameRules *__hidden this) */
+			"CTerrorGameRules::GetMissionInfo"
+			{
+				"library"	"server"
+				"linux"		"@_ZN16CTerrorGameRules14GetMissionInfoEv"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x8B\x2A\x8B\x2A\x2A\x56\xFF\x2A\x8B\x2A\x8B\x2A\x8B\x2A\x2A\x6A\x2A\xFF\x2A\x8B\x2A\x85\x2A\x75\x2A\x5E"
+				/* ? ? ? ? ? ? ? ? ? ? 8B ? 8B ? ? 56 FF ? 8B ? 8B ? 8B ? ? 6A ? FF ? 8B ? 85 ? 75 ? 5E */
+			}
+
+			"CDirectorMusicBanks::OnRoundStart"
+			{
+				"library"	"server"
+				"linux"		"@_ZN19CDirectorMusicBanks12OnRoundStartEv"
+				"windows"	"\x55\x8B\xEC\x83\xEC\x2A\x56\x57\x8B\xF9\x8B\x0D\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x84\xC0\x0F"
+				/* 55 8B EC 83 EC ? 56 57 8B F9 8B 0D ? ? ? ? E8 ? ? ? ? 84 C0 0F */
+			}
+
+			"CDirector::OnChangeMissionVote"
+			{
+				"library"	"server"
+				"linux"		"@_ZN9CDirector19OnChangeMissionVoteEPKc"
+				"windows"	"\x55\x8B\xEC\x53\x56\x8B\xF1\x8B\x0D\x2A\x2A\x2A\x2A\x8B\x01\x8B\x50\x28"
+				/* 55 8B EC 53 56 8B F1 8B 0D ? ? ? ? 8B 01 8B 50 28 */
+			}
+
+			"CDirector::ClearTeamScores"
+			{
+				"library"	"server"
+				"linux"		"@_ZN9CDirector15ClearTeamScoresEb"
+				"windows"	"\x55\x8B\xEC\x56\x8B\x75\x08\x57\x8B\xF9\x8B\x0D\x2A\x2A\x2A\x2A\x85\xC9"
+				/* 55 8B EC 56 8B 75 08 57 8B F9 8B 0D ? ? ? ? 85 C9 */
+			}
+		}
+	}
+}

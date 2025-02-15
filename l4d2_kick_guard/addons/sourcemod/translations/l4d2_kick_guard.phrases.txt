@@ -1,0 +1,8 @@
+"Phrases"
+{
+	"kickmsg"
+	{
+		"en"	"attempt to kick the admin was auto kicked out by the system"
+		"chi"	"尝试踢管理员被系统自动踢出"
+	}
+}

@@ -1,0 +1,32 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Addresses"
+		{
+			"Sys_Error_Internal::Plat_ExitProcess"
+			{
+				"linux"
+				{
+					"signature"	"Sys_Error_Internal"
+					"offset"	"0xD1"
+				}
+				"windows"
+				{
+					"signature"	"Sys_Error_Internal"
+					"offset"	"0x1BA"
+				}
+			}
+		}
+
+		"Signatures"
+		{
+			"Sys_Error_Internal"
+			{
+				"library"	"engine"
+				"linux"		"@_Z18Sys_Error_InternalbPKcPc"
+				"windows"	"\x55\x8B\xEC\x6A\xFE\x68\x2A\x2A\x2A\x2A\x68\x2A\x2A\x2A\x2A\x64\xA1\x00\x00\x00\x00\x50\x81\xEC\x0C\x04\x00\x00"
+			}
+		}
+	}
+}

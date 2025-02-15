@@ -1,0 +1,72 @@
+"Phrases"
+{
+	"weapon_molotov"
+	{
+		"en"    "molotov"
+		"chi"	"燃烧瓶"
+	}
+
+	"weapon_pipe_bomb"
+	{
+		"en"    "pipe bomb"
+		"chi"	"土制炸弹"
+	}
+
+	"weapon_vomitjar"
+	{
+		"en"    "vomitjar"
+		"chi"	"胆汁瓶"
+	}
+
+	"weapon_first_aid_kit"
+	{
+		"en"    "medkit"
+		"chi"	"急救包"
+	}
+
+	"weapon_defibrillator"
+	{
+		"en"    "defibrillator"
+		"chi"	"电击除颤器"
+	}
+
+	"weapon_upgradepack_incendiary"
+	{
+		"en"    "incendiary ammo"
+		"chi"	"燃烧弹升级包"
+	}
+
+	"weapon_upgradepack_explosive"
+	{
+		"en"    "explosive ammo"
+		"chi"	"高爆弹升级包"
+	}
+
+	"weapon_pain_pills"
+	{
+		"en"    "pills"
+		"chi"	"止痛药"
+	}
+
+	"weapon_adrenaline"
+	{
+		"en"    "adrenaline"
+		"chi"	"肾上腺素"
+	}
+
+	"grabbed"
+	{
+		// {1}=graber, {2}=item
+		"#format"	"{1:N},{2:t}"
+		"en"		"{1} grabbed {2}"
+		"chi"		"{olive}{1} {default}拿了 {orange}{2}"
+	}
+
+	"gave"
+	{
+		// {1}=giver, {2}=target, {3}=item
+		"#format"	"{1:N},{2:N},{3:t}"
+		"en"		"{1} gave {2} {3}"
+		"chi"		"{olive}{1} {default}给了 {olive}{2} {orange}{3}"
+	}
+}

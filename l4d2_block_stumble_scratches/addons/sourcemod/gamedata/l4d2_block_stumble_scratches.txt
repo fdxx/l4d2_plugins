@@ -1,0 +1,60 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"Functions"
+		{
+			"CClaw::OnHit"
+			{
+				"signature"		"CClaw::OnHit"
+				"callconv"		"thiscall"
+				"return"		"int"
+				"this"			"entity"
+				"arguments"
+				{
+					"a1"
+					{
+						"type"	"objectptr"
+					}
+					"a2"
+					{
+						"type"	"vectorptr"
+					}
+					"a3"
+					{
+						"type"	"bool"
+					}
+				}
+			}
+		}
+
+		"Offsets"
+		{
+			// From CGameTrace::GetEntityIndex(CGameTrace *this)
+			"CGameTrace::m_pEnt"
+			{
+				"windows"	"76"
+				"linux"		"76"
+			}
+		}
+
+		"Signatures"
+		{
+			"CTerrorPlayer::IsStaggering"
+			{
+				"library"	"server"
+				"linux"		"@_ZNK13CTerrorPlayer12IsStaggeringEv"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x74\x2A\xB0\x2A\xC3\xE8"
+				/* ? ? ? ? ? ? ? 74 ? B0 ? C3 E8 */
+			}
+
+			"CClaw::OnHit"
+			{
+				"library"	"server"
+				"linux"		"@_ZN5CClaw5OnHitER10CGameTraceRK6Vectorb"
+				"windows"	"\x55\x8B\xEC\x81\xEC\x20\x01\x00\x00\x53\x56\x57"
+				/* 55 8B EC 81 EC 20 01 00 00 53 56 57 */
+			}
+		}
+	}
+}

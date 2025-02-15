@@ -1,0 +1,78 @@
+"Games"
+{
+    "left4dead2"
+    {
+		"Functions"
+		{
+			"CMeleeWeaponInfoStore::LoadScripts"
+			{
+				"signature"	"CMeleeWeaponInfoStore::LoadScripts"
+				"callconv"	"thiscall"
+				"return"	"void"
+				"this"		"address"
+				"arguments"
+				{
+					"a1"
+					{
+						"type"	"bool"
+					}
+				}
+			}
+		}
+
+		"MemPatches"
+		{
+			"CDirectorItemManager::IsMeleeWeaponAllowedToExist"
+			{
+				"signature"	"CDirectorItemManager::IsMeleeWeaponAllowedToExist"
+
+				// return 1
+
+				"linux"
+				{
+					"offset"	"0"
+					"verify"	"\x55"
+					"patch"		"\xB0\x01\xC3"
+				}
+
+				"windows"
+				{
+					"offset"	"0"
+					"verify"	"\x55"
+					"patch"		"\xB0\x01\xC2\04\x00"
+				}
+			}
+		}
+
+		"Signatures"
+		{
+			"MeleeDumpWeapons_f"
+			{
+				"library"	"server"
+				"linux"		"@_ZL18MeleeDumpWeapons_fv"
+				"windows"	"\xB9\x2A\x2A\x2A\x2A\xE9\x2A\x2A\x2A\x2A\xCC\xCC\xCC\xCC\xCC\xCC\x55\x8B\xEC\x33\xC0\x56\x8B\xF1\xC7\x06\x2A\x2A\x2A\x2A\x89\x86\x20\x0C\x00\x00"
+			}
+
+			"CMeleeWeaponInfoStore::LoadScripts"
+			{
+				"library"	"server"
+				"linux"		"@_ZN21CMeleeWeaponInfoStore11LoadScriptsEb"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x53\x56\x57\x89\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x33"
+			}
+	
+			"CDirectorItemManager::IsMeleeWeaponAllowedToExist"
+			{
+				"library"	"server"
+				"linux"		"@_ZN20CDirectorItemManager27IsMeleeWeaponAllowedToExistEPKc"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x8B\x2A\x8B\x90\x2A\x2A\x2A\x2A\xFF\x2A\x84\x2A\x75\x2A\x8B\x2A\x2A\x6A"
+			}
+
+			"CTerrorGameRules::GetMissionInfo"
+			{
+				"library"	"server"
+				"linux"		"@_ZN16CTerrorGameRules14GetMissionInfoEv"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x8B\x2A\x8B\x2A\x2A\x56\xFF\x2A\x8B\x2A\x8B\x2A\x8B\x2A\x2A\x6A\x2A\xFF\x2A\x8B\x2A\x85\x2A\x75\x2A\x5E"
+			}
+		}
+	}
+}

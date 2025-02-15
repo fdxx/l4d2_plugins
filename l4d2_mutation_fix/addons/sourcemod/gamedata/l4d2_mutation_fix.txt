@@ -1,0 +1,43 @@
+"Games"
+{
+	"left4dead2"
+	{
+		
+		"Addresses"
+		{
+			"g_pMatchExtL4D"
+			{
+				"linux"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"44"
+				}
+				"windows"
+				{
+					"signature"	"CTerrorGameRules::GetMissionInfo"
+					"read"		"42"
+				}
+				"read"	"0"
+			}
+		}
+
+		"Offsets"
+		{
+			"CMatchExtL4D::GetGameModeInfo"
+			{
+				"linux"		"4"
+				"windows"	"4"
+			}
+		}
+
+		"Signatures" 
+		{
+			"CTerrorGameRules::GetMissionInfo"
+			{
+				"library"	"server"
+				"linux"		"@_ZN16CTerrorGameRules14GetMissionInfoEv"
+				"windows"	"\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x8B\x2A\x8B\x2A\x2A\x56\xFF\x2A\x8B\x2A\x8B\x2A\x8B\x2A\x2A\x6A\x2A\xFF\x2A\x8B\x2A\x85\x2A\x75\x2A\x5E"
+			}
+		}
+	}
+}

@@ -1,0 +1,138 @@
+"Phrases"
+{
+	"_SelectMapType"
+	{
+		"en"    "Select map type:"
+		"chi"	"选择地图类型:"
+	}
+
+	"_OfficialMap"
+	{
+		"en"    "Official Map"
+		"chi"	"官方地图"
+	}
+
+	"_CustomMap"
+	{
+		"en"    "Custom Map"
+		"chi"	"第三方地图"
+	}
+
+	"_SelectMap"
+	{
+		"en"    "Select map:"
+		"chi"	"选择地图:"
+	}
+
+	"_NotAllowNewVote"
+	{
+		"en"    "Voting is in progress. New voting cannot be initiated at this time."
+		"chi"	"{lightgreen}投票正在进行中, 暂不能发起新的投票."
+	}
+
+	"_VoteDisplayTitle"
+	{
+		// {1}=chapter
+		"#format" "{1:s}"
+		"en"    "Change map to {1}"
+		"chi"	"更换地图到 {1}"
+	}
+
+	"_InitiatedVoting"
+	{
+		// {1}=client, {2}=VoteDisplayTitle
+		"#format" "{1:N},{2:s}"
+		"en"    "{1} initiated a vote: {2}"
+		"chi"	"{blue}[Vote] {olive}{1} {default}发起了一个投票: {2}"
+	}
+
+	"_PlayerVoted"
+	{
+		"en"    "A player has voted."
+		"chi"	"{lightgreen}玩家已投票"
+	}
+	
+	"#L4D360UI_CampaignName_C1"
+	{
+		"en"	"C1 Dead Center"
+		"chi"	"C1 死亡中心"
+	}
+
+	"#L4D360UI_CampaignName_C2"
+	{
+		"en"	"C2 Dark Carnival"
+		"chi"	"C2 黑色嘉年华"
+	}
+
+	"#L4D360UI_CampaignName_C3"
+	{
+		"en"	"C3 Swamp Fever"
+		"chi"	"C3 沼泽激战"
+	}
+
+	"#L4D360UI_CampaignName_C4"
+	{
+		"en"	"C4 Hard Rain"
+		"chi"	"C4 暴风骤雨"
+	}
+
+	"#L4D360UI_CampaignName_C5"
+	{
+		"en"	"C5 The Parish"
+		"chi"	"C5 教区"
+	}
+
+	"#L4D360UI_CampaignName_C6"
+	{
+		"en"	"C6 The Passing"
+		"chi"	"C6 短暂时刻"
+	}
+
+	"#L4D360UI_CampaignName_C7"
+	{
+		"en"	"C7 The Sacrifice"
+		"chi"	"C7 牺牲"
+	}
+
+	"#L4D360UI_CampaignName_C8"
+	{
+		"en"	"C8 No Mercy"
+		"chi"	"C8 毫不留情"
+	}
+
+	"#L4D360UI_CampaignName_C9"
+	{
+		"en"	"C9 Crash Course"
+		"chi"	"C9 坠机险途"
+	}
+
+	"#L4D360UI_CampaignName_C10"
+	{
+		"en"	"C10 Death Toll"
+		"chi"	"C10 死亡丧钟"
+	}
+
+	"#L4D360UI_CampaignName_C11"
+	{
+		"en"	"C11 Dead Air"
+		"chi"	"C11 寂静时分"
+	}
+
+	"#L4D360UI_CampaignName_C12"
+	{
+		"en"	"C12 Blood Harvest"
+		"chi"	"C12 血腥收获"
+	}
+
+	"#L4D360UI_CampaignName_C13"
+	{
+		"en"	"C13 Cold Stream"
+		"chi"	"C13 刺骨寒溪"
+	}
+
+	"#L4D360UI_CampaignName_C14"
+	{
+		"en"	"C14 The Last Stand"
+		"chi"	"C14 临死一搏"
+	}
+}
