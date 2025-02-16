@@ -1,0 +1,8 @@
+"Phrases"
+{
+	"wait"
+	{
+		"en"	"Please wait %.1f seconds before using this command."
+		"chi"	"{lightgreen}请等待 %.1f 秒后在使用本命令"
+	}
+}

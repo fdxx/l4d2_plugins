@@ -1,0 +1,8 @@
+"Phrases"
+{
+	"KillMsg"
+	{
+		"en"    "%N was auto killed for playing door."
+		"chi"	"{blue}[提示] {olive}%N {default}因为玩门被系统自动处死."
+	}
+}

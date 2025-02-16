@@ -1,7 +1,7 @@
-中文 | [English](./README_EN.md)
+[中文](./README.md) | English
 
 ## About
-一些 [SourceMod](https://github.com/alliedmodders/sourcemod) 插件，主要支持 L4D2，SourceMod 1.12+
+Some [SourceMod](https://github.com/alliedmodders/sourcemod) plugins. Mainly supports L4D2, SourceMod 1.12+.
 
 ## Other
 - [l4d2_source_keyvalues](https://github.com/fdxx/l4d2_source_keyvalues) 

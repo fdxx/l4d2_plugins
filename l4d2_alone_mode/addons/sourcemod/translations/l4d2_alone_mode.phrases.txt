@@ -1,0 +1,40 @@
+"Phrases"
+{
+	"ManuallyDisabled"
+	{
+		"en"    "%N Manually disabled alone mode, enter this command again to enable it."
+		"chi"	"{blue}[Alone] {olive}%N {default}已手动关闭单人模式, 再次输入本命令开启"
+	}
+
+	"ManuallyEnabled"
+	{
+		"en"    "%N Manually enabled alone mode, enter this command again to disable it."
+		"chi"	"{blue}[Alone] {olive}%N {default}已手动开启单人模式, 再次输入本命令关闭"
+	}
+
+	"UnavailableInMultiplayer"
+	{
+		"en"    "Unavailable in multiplayer."
+		"chi"	"{lightgreen}多人下无法使用本命令."
+	}
+
+	"AutoDisabled"
+	{
+		"en"    "Auto disabled alone mode."
+		"chi"	"{blue}[Alone] {olive}已自动关闭单人模式"
+	}
+
+	"AutoEnabled"
+	{
+		"en"    "Auto enabled alone mode."
+		"chi"	"{blue}[Alone] {olive}已自动开启单人模式"
+	}
+
+	"RemainingHealth"
+	{
+		"en"    "%N has %i health remaining."
+		"chi"	"{blue}[Alone] {olive}%N {default}还剩余 {yellow}%i {default}血量."
+	}
+
+	
+}

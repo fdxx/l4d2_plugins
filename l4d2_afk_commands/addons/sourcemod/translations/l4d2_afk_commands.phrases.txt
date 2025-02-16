@@ -1,0 +1,26 @@
+"Phrases"
+{
+	"IdleUseAway"
+	{
+		"en"    "Use !away command to idle"
+		"chi"	"闲置请用 !away 命令"
+	}
+
+	"Xseconds2spec"
+	{
+		"en"    "Enter spectator after %.1f seconds."
+		"chi"	"%.1f 秒后进入旁观状态"
+	}
+
+	"EnterSpectator"
+	{
+		"en"    "%N has entered spectator."
+		"chi"	"{blue}[提示] {olive}%N {default}进入了旁观状态."
+	}
+
+	"NoBotTakeOver"
+	{
+		"en"    "No survivor BOT to take over"
+		"chi"	"暂无幸存者BOT供接管"
+	}
+}
