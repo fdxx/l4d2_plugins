@@ -2,6 +2,15 @@
 {
 	"left4dead2"
 	{
+		"Offsets"
+		{
+			"os"
+			{
+				"linux"		"1"
+				"windows"	"2"
+			}
+		}
+
 		"Addresses"
 		{
 			"Sys_Error_Internal::Plat_ExitProcess"

@@ -8,7 +8,7 @@ Differences from the original plugin:
 - No longer depends on left4dhooks.
 - Removed the stuff that modifies tank damage.
 - Added some functions for other plugins to use.
-- Support for custom melee weapons for unofficial maps.
+- Support for custom melee weapons for unofficial maps (Need [unlock](https://github.com/fdxx/l4d2_plugins/tree/main/l4d2_melee_spawn_control)).
 
 ## Command
 ```c

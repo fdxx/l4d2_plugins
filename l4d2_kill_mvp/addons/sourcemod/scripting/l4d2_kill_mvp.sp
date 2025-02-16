@@ -432,7 +432,7 @@ void ShowTankDamageRank(int tank)
 		return;
 
 	killData data;
-	ArrayList list = new ArrayList(sizeof(killData));
+	ArrayList array = new ArrayList(sizeof(killData));
 	int iTotalDmg;
 
 	for (int i = 1; i <= MaxClients; i++)
@@ -442,14 +442,14 @@ void ShowTankDamageRank(int tank)
 			data.player = i;
 			data.damage = g_iTankDmg[tank][i];
 			iTotalDmg += g_iTankDmg[tank][i];
-			list.PushArray(data);
+			array.PushArray(data);
 		}
 	}
 
-	int len = list.Length;
+	int len = array.Length;
 	if (len > 0)
 	{
-		list.SortCustom(SortByDescending, view_as<Handle>(SORT_DAMAGE));
+		array.SortCustom(SortByDescending, view_as<Handle>(SORT_DAMAGE));
 
 		if (!IsFakeClient(tank))
 			CPrintToChatAll("{blue}[Tank {olive}(%N) {blue}Damage]{default}:", tank);
@@ -458,12 +458,12 @@ void ShowTankDamageRank(int tank)
 
 		for (int i = 0; i < len; i++)
 		{
-			list.GetArray(i, data);
+			array.GetArray(i, data);
 			CPrintToChatAll("{blue}[{yellow}%i{blue}] ({yellow}%i{default}%%{blue})  {olive}%N", data.damage, RoundToNearest(float(data.damage)/iTotalDmg*100), data.player);
 		}
 	}
 
-	delete list;
+	delete array;
 }
 
 void ShowWitchDamageRank(int witch)

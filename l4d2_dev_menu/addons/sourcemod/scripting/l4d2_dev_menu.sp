@@ -72,8 +72,6 @@ static const char g_sMelees[][][] =
 	{"knife",				"小刀",			"models/w_models/weapons/w_knife_t.mdl"},
 	{"pitchfork",			"草叉",			"models/weapons/melee/w_pitchfork.mdl"},
 	{"shovel",				"铁铲",			"models/weapons/melee/w_shovel.mdl"},
-	{"weapon_pistol_magnum","马格南",		"models/w_models/weapons/w_desert_eagle.mdl"},
-	{"weapon_chainsaw",		"电锯",			"models/weapons/melee/w_chainsaw.mdl"},
 };
 
 static const char g_sMedicalAndThrowItem[][][] = 
@@ -108,6 +106,7 @@ enum
 };
 
 TopMenu g_TopMenu;
+StringMap g_smMeleeTranslate;
 
 TopMenuObject 
 	g_TopObj_Kill,
@@ -182,6 +181,11 @@ public void OnConfigsExecuted()
 		g_TopObj_Deprive = g_TopMenu.AddItem("l4d2_dev_menu_deprive", Item_TopMenuHandler, TopObj_DevMenu, "l4d2_dev_menu_deprive", ADMFLAG_ROOT, "装备剥夺");
 		g_TopObj_Freeze = g_TopMenu.AddItem("l4d2_dev_menu_freeze", Item_TopMenuHandler, TopObj_DevMenu, "l4d2_dev_menu_freeze", ADMFLAG_ROOT, "冻结");
 	}
+
+	delete g_smMeleeTranslate;
+	g_smMeleeTranslate = new StringMap();
+	for (int i = 0; i < sizeof(g_sMelees); i++)
+		g_smMeleeTranslate.SetString(g_sMelees[i][ITEM_NAME], g_sMelees[i][ITEM_DISPLAY]);
 }
 
 void Category_TopMenuHandler(TopMenu topmenu, TopMenuAction action, TopMenuObject topobj_id, int param, char[] buffer, int maxlength)
@@ -952,9 +956,19 @@ void GiveItem_Select(int client)
 		case 1:
 		{
 			menu.SetTitle("产生近战:");
-			for (int i = 0; i < sizeof(g_sMelees); i++)
+
+			int table = FindStringTable("meleeweapons");
+			if (table != INVALID_STRING_TABLE)
 			{
-				menu.AddItem(g_sMelees[i][ITEM_NAME], g_sMelees[i][ITEM_DISPLAY]);
+				char name[256], display[256];
+				int num = GetStringTableNumStrings(table);
+				for (int i = 0; i < num; i++ )
+				{
+					ReadStringTable(table, i, name, sizeof(name));
+					strcopy(display, sizeof(display), name);
+					g_smMeleeTranslate.GetString(name, display, sizeof(display));
+					menu.AddItem(name, display);
+				}
 			}
 		}
 		case 2:

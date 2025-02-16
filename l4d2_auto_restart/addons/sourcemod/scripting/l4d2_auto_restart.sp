@@ -9,6 +9,9 @@
 #define RM_CRASH_CMD 1
 #define RM_EXIT 2
 
+#define OS_LINUX 1
+#define OS_WINDOWS 2
+
 ConVar
 	sv_hibernate_when_empty,
 	sb_all_bot_game,
@@ -159,13 +162,30 @@ void Init()
 	if (hGameData == null)
 		SetFailState("Failed to load \"%s.txt\" gamedata.", buffer);
 
+	strcopy(buffer, sizeof(buffer), "os");
+	int os = hGameData.GetOffset(buffer);
+	if (os == -1)
+		SetFailState("Failed to GetOffset: %s", buffer);
+		
 	strcopy(buffer, sizeof(buffer), "Sys_Error_Internal::Plat_ExitProcess");
 	Address	addr = hGameData.GetAddress(buffer);
-	if (addr == Address_Null || LoadFromAddress(addr, NumberType_Int8) != 0xE8)
+	if (addr == Address_Null)
 		SetFailState("Failed to GetAddress: %s", buffer);
 
-	Address pRelativeOffset = LoadFromAddress(addr + view_as<Address>(1), NumberType_Int32);
-	addr = addr + view_as<Address>(5) + pRelativeOffset;
+	if (os == OS_LINUX)
+	{
+		if (LoadFromAddress(addr, NumberType_Int8) != 0xE8)
+			SetFailState("Failed to GetAddress: %s", buffer);
+		Address pRelativeOffset = LoadFromAddress(addr + view_as<Address>(1), NumberType_Int32);
+		addr = addr + view_as<Address>(5) + pRelativeOffset;
+	}
+	else if (os == OS_WINDOWS)
+	{
+		if (LoadFromAddress(addr, NumberType_Int8) != 0xFF)
+			SetFailState("Failed to GetAddress: %s", buffer);
+		addr = LoadFromAddress(addr + view_as<Address>(2), NumberType_Int32);
+		addr = LoadFromAddress(addr, NumberType_Int32);
+	}
 
 	StartPrepSDKCall(SDKCall_Static);
 	PrepSDKCall_SetAddress(addr);

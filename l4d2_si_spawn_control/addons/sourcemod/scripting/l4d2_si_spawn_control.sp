@@ -246,11 +246,13 @@ public void OnPluginStart()
 	g_cvSpawnTime.AddChangeHook(ConVarChanged);
 	g_cvFirstSpawnTime.AddChangeHook(ConVarChanged);
 	g_cvKillSITime.AddChangeHook(ConVarChanged);
-	g_cvBlockSpawn.AddChangeHook(ConVarChanged);
 	g_cvSpawnMode.AddChangeHook(ConVarChanged);
 	g_cvNormalSpawnRange.AddChangeHook(ConVarChanged);
 	g_cvNavAreaSpawnRange.AddChangeHook(ConVarChanged);
 	g_cvTogetherSpawn.AddChangeHook(ConVarChanged);
+
+	g_bBlockSpawn = g_cvBlockSpawn.BoolValue;
+	g_cvBlockSpawn.AddChangeHook(ConVarChanged_BlockSpawn);
 
 	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("round_end", Event_RoundEnd, EventHookMode_PostNoCopy);
@@ -262,6 +264,11 @@ public void OnPluginStart()
 	HookEvent("player_left_safe_area", Event_PlayerLeftSafeArea, EventHookMode_PostNoCopy);
 
 	CreateTimer(1.0, KillSICheck_Timer, _, TIMER_REPEAT);
+}
+
+void ConVarChanged_BlockSpawn(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	g_bBlockSpawn = g_cvBlockSpawn.BoolValue;
 }
 
 void ConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -300,7 +307,6 @@ void GetCvars()
 	g_fSpawnTime = g_cvSpawnTime.FloatValue;
 	g_fFirstSpawnTime = g_cvFirstSpawnTime.FloatValue;
 	g_fKillSITime = g_cvKillSITime.FloatValue;
-	g_bBlockSpawn = g_cvBlockSpawn.BoolValue;
 	g_iSpawnMode = g_cvSpawnMode.IntValue;
 	g_fNormalSpawnRange = g_cvNormalSpawnRange.FloatValue;
 	g_fNavAreaSpawnRange = g_cvNavAreaSpawnRange.FloatValue;

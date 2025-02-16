@@ -53,7 +53,7 @@ Action Cmd_NetStatus(int client, int args)
 		if (!IsClientInGame(i) || IsFakeClient(i))
 			continue;
 
-		info.fPing = GetClientAvgLatency(client, NetFlow_Outgoing) * 1000;
+		info.fPing = GetClientAvgLatency(i, NetFlow_Outgoing) * 1000;
 		info.fLoss = GetClientAvgLoss(i, NetFlow_Incoming) * 100;
 		info.fChoke = GetClientAvgChoke(i, NetFlow_Incoming) * 100;
 		GetClientInfo(i, "rate", info.sRate, sizeof(info.sRate));

@@ -8,7 +8,7 @@
 - 不再依赖 left4dhooks
 - 删除了修改 Tank 伤害的东西。
 - 添加了一些函数供其他插件使用。
-- 支持三方图的自定义近战武器。
+- 支持三方图的自定义近战武器（需要[解锁](https://github.com/fdxx/l4d2_plugins/tree/main/l4d2_melee_spawn_control)）。
 
 ## Command
 ```c
