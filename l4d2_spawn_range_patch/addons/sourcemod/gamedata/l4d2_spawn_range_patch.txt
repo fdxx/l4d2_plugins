@@ -1,0 +1,49 @@
+"Games"
+{
+	"left4dead2"
+	{
+		"MemPatches"
+		{
+			"ZombieManager::GetZombieSpawnRange"
+			{
+				"signature"	"ZombieManager::GetZombieSpawnRange"
+
+				"linux"
+				{
+					"offset"	"10h"
+					"verify"	"\xC7\x44\x24\x04"
+					"patch"		"\x00\x00\x00\x00\x00\x00\x00\x00"
+					"preserve"	"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+				}
+
+				"windows"
+				{
+					"offset"	"12h"
+					"verify"	"\x68"
+					"patch"		"\x00\x00\x00\x00\x00"
+					"preserve"	"\xFF\xFF\xFF\xFF\xFF"
+				}
+			}
+		}
+
+		"Offsets"
+		{
+			"OpcodeBytes"
+			{
+				"linux"		"4"
+				"windows"	"1"
+			}
+		}
+
+		"Signatures" 
+		{
+			"ZombieManager::GetZombieSpawnRange"
+			{
+				"library"	"server"
+				"linux"		"@_ZNK13ZombieManager19GetZombieSpawnRangeEv"
+				"windows"	"\xA1\x2A\x2A\x2A\x2A\xD9\x40\x2C\x51\x8B\x0D\x2A\x2A\x2A\x2A\xD9\x1C\x24\x68\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xC3"
+				// A1 ? ? ? ? D9 40 2C 51 8B 0D ? ? ? ? D9 1C 24 68 ? ? ? ? E8 ? ? ? ? C3 
+			}
+		}
+	}
+}
