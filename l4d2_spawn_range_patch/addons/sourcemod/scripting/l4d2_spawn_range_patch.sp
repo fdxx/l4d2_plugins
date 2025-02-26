@@ -2,15 +2,15 @@
 #pragma newdecls required
 
 #include <sourcemod>
+#include <sdktools>
 #include <sourcescramble>
-#include <left4dhooks>
 
-#define VERSION	"0.2"
+#define VERSION	"0.3"
 
 ConVar g_cvFinalMapExclude, g_cvEnable;
 MemoryPatch g_mPatch;
 StringMap g_smExcludeMap;
-Handle g_hGetZombieSpawnRange;
+Handle g_hIsMissionFinalMap;
 char g_key[128];
 
 public Plugin myinfo =
@@ -34,7 +34,6 @@ public void OnPluginStart()
 	g_cvEnable.AddChangeHook(OnConVarChanged);
 
 	RegAdminCmd("sm_spawn_range_patch_exclude", Cmd_AddExcludeMap, ADMFLAG_ROOT);
-	RegAdminCmd("sm_spawn_range_test", Cmd_Test, ADMFLAG_ROOT); // debug
 }
 
 void OnConVarChanged(ConVar convar, char[] oldValue, char[] newValue)
@@ -64,19 +63,11 @@ Action Cmd_AddExcludeMap(int client, int args)
 	return Plugin_Handled;
 }
 
-Action Cmd_Test(int client, int args)
-{
-	ReplyToCommand(client, "GetZombieSpawnRangeFunc = %f", SDKCall(g_hGetZombieSpawnRange));
-	ReplyToCommand(client, "ZombieSpawnRangeScript = %f", L4D2_GetScriptValueFloat("ZombieSpawnRange", -1.0));
-	ReplyToCommand(client, "z_spawn_range = %f", FindConVar("z_spawn_range").FloatValue);
-	return Plugin_Handled;
-}
-
 public void OnMapInit(const char[] mapName)
 {
 	strcopy(g_key, sizeof(g_key), "shit");
 
-	if ((L4D_IsMissionFinalMap() && g_cvFinalMapExclude.BoolValue) || g_smExcludeMap.ContainsKey(mapName))
+	if ((SDKCall(g_hIsMissionFinalMap) && g_cvFinalMapExclude.BoolValue) || g_smExcludeMap.ContainsKey(mapName))
 		strcopy(g_key, sizeof(g_key), "ZombieSpawnRange");
 }
 
@@ -96,12 +87,13 @@ void Init()
 		SetFailState("Failed to EnablePatch: %s", buffer);
 	StoreToAddress(g_mPatch.Address + view_as<Address>(offset), GetAddressOfString(g_key), NumberType_Int32);
 
+	strcopy(buffer, sizeof(buffer), "CTerrorGameRules::IsMissionFinalMap");
 	StartPrepSDKCall(SDKCall_Static);
 	PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, buffer);
-	PrepSDKCall_SetReturnInfo(SDKType_Float, SDKPass_Plain);
-	delete g_hGetZombieSpawnRange;
-	g_hGetZombieSpawnRange = EndPrepSDKCall();
-	if (!g_hGetZombieSpawnRange)
+	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
+	delete g_hIsMissionFinalMap;
+	g_hIsMissionFinalMap = EndPrepSDKCall();
+	if (!g_hIsMissionFinalMap)
 		SetFailState("Failed to create SDKCall: %s", buffer);
 
 	delete hGameData;

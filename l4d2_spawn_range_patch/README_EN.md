@@ -5,7 +5,6 @@ Make the `z_spawn_range` value have a higher priority than the VScript.
 
 ## Dependencies
 - [SourceScramble](https://github.com/nosoop/SMExt-SourceScramble)
-- left4dhooks
 
 ## ConVar
 ```c
