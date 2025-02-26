@@ -4,7 +4,7 @@
 使用命令执行一次指定的配置文件。
 
 ## Notes
-由于`AutoExecConfig/server.cfg`每次地图更换后都会执行，并对游戏中动态修改的 cvar 值进行覆盖，本插件的目的是为其他插件的 cvar 值进行初始设置。例如在`server.cfg`中添加：
+`AutoExecConfig/server.cfg`每次地图更换后都会执行，并覆盖游戏中动态修改的 cvar 值。对于没有启用`AutoExecConfig`功能的插件，本插件的目的是为其他插件的 cvar 值进行初始设置。例如在`server.cfg`中添加：
 ```c
 sm_cfgexec_once "addons/file.cfg"
 ```
