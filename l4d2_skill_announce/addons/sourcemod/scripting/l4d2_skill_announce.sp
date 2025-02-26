@@ -284,7 +284,7 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 		{
 			if (type & DMG_SLASH || type & DMG_CLUB)
 				CPrintToChatAll("{orange}★★ {olive}%N {default}was {blue}melee-skeeted {default}by {olive}%N", victim, attacker);
-			else if (type & DMG_BURN == 0)
+			else if ((type & DMG_BURN) == 0)
 				CPrintToChatAll("{orange}★★ {olive}%N {blue}skeeted {olive}%N", attacker, victim);
 		}
 		case HUNTER:
@@ -292,7 +292,7 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 			if (type & DMG_SLASH || type & DMG_CLUB)
 				CPrintToChatAll("{orange}★★ {olive}%N {default}was {blue}melee-skeeted {default}by {olive}%N", victim, attacker);
 
-			else if (type & DMG_BURN == 0)
+			else if ((type & DMG_BURN) == 0)
 			{
 				int[][] assist = new int[MaxClients][3];
 				int iCount;
